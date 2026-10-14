@@ -1136,6 +1136,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <label class="btn btn-outline" style="cursor:pointer;margin:0;">📥 Importar planilha<input type="file" accept=".xlsx" style="display:none;" onchange="ferImportarArquivo(this)"></label>
         <button class="btn btn-outline" onclick="ferExportar()">📤 Exportar Excel</button>
+        <button class="btn btn-outline" onclick="ferLimparDuplicados()" title="Remove linhas e funcionários repetidos">🧹 Corrigir duplicados</button>
         <button class="btn btn-primary" onclick="ferNovo()">+ Programar</button>
       </div>
     </div>
@@ -16097,7 +16098,7 @@ function rhPodeEnviar() {
   function novoRegistro(f, ano, base) {
     var p = periodoDoAno(f, ano);
     base = base || {};
-    return { id: uid(), fid: f.id, auto: true, per: p.per, ai: p.ai, af: p.af, lim: p.lim, saldoAnt: 0, mes: '', ini: '', fim: '', ret: '',
+    return { id: 'fauto_' + f.id + '_' + ano, fid: f.id, auto: true, per: p.per, ai: p.ai, af: p.af, lim: p.lim, saldoAnt: 0, mes: '', ini: '', fim: '', ret: '',
              dias: '30', saldo: '', obs: '', st: 'A programar', uTrab: base.uTrab || '', uReg: base.uReg || '', car: base.car || f.car || '' };
   }
   function ultimoDoFunc(lista, fid) {
@@ -16110,12 +16111,76 @@ function rhPodeEnviar() {
     var doPer = lista.filter(function (r) { return r.fid === fid && perInicioAno(r) === ano; });
     if (!doPer.length || doPer.some(function (r) { return r.st !== 'Concluída'; })) return false;
     if (lista.some(function (r) { return r.fid === fid && perInicioAno(r) > ano; })) return false;
-    lista.push(novoRegistro(f, ano + 1, ultimoDoFunc(lista, fid)));
+    var nr = novoRegistro(f, ano + 1, ultimoDoFunc(lista, fid));
+    if (excluido(nr.id) || lista.some(function (x) { return x.id === nr.id; })) return false;
+    lista.push(nr);
     return true;
   }
 
   // Garante que todo funcionário ativo tenha o período aquisitivo atual na programação
+  function hashTxt(t) { var h1 = 5381, h2 = 52711; t = String(t); for (var i = 0; i < t.length; i++) { var c = t.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 33) ^ c; } return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36); }
+  function excluido(id) { try { var t = JSON.parse(localStorage.getItem('eq_rt_tomb') || '{}'); return !!(t.ferias && t.ferias[id]); } catch (e) { return false; } }
+
+  // Remove duplicados (ex.: planilha importada duas vezes ou em dois computadores).
+  // A escolha de quem fica é sempre a mesma em qualquer computador, para não apagar os dois.
+  function limparDuplicados() {
+    var funcs = DB.g('funcionarios'), lista = DB.g('ferias'), remap = {}, fRem = 0, rRem = 0;
+    // 1) funcionários cadastrados pela importação com o mesmo nome
+    var porNome = {};
+    funcs.forEach(function (f) { var k = norm(f.n); if (k) (porNome[k] = porNome[k] || []).push(f); });
+    Object.keys(porNome).forEach(function (k) {
+      var g = porNome[k]; if (g.length < 2) return;
+      var importados = g.filter(function (f) { return f.obsImport && !f.cpf; });
+      if (!importados.length) return;
+      var manuais = g.filter(function (f) { return importados.indexOf(f) === -1; });
+      var fica = manuais.length ? manuais.slice().sort(function (a, b) { return (b.cpf ? 1 : 0) - (a.cpf ? 1 : 0) || String(a.id).localeCompare(String(b.id)); })[0]
+                                : importados.slice().sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); })[0];
+      importados.forEach(function (f) { if (f !== fica) { remap[f.id] = fica.id; fRem++; } });
+    });
+    if (fRem) {
+      funcs = funcs.filter(function (f) { return !remap[f.id]; });
+      lista.forEach(function (r) { if (remap[r.fid]) r.fid = remap[r.fid]; });
+    }
+    // 2) linhas da planilha repetidas e períodos automáticos repetidos
+    var grupos = {};
+    lista.forEach(function (r) {
+      var k = r.impKey ? 'i|' + r.impKey.replace(/\|\d+$/, '') + '|' + r.fid
+            : (r.auto && !r.ini && r.st === 'A programar') ? 'a|' + r.fid + '|' + perInicioAno(r) : null;
+      if (k) (grupos[k] = grupos[k] || []).push(r);
+    });
+    var sai = {};
+    Object.keys(grupos).forEach(function (k) {
+      var g = grupos[k]; if (g.length < 2) return;
+      if (k.charAt(0) === 'i') {
+        // a mesma linha da planilha: fica a de menor id
+        var porLinha = {};
+        g.forEach(function (r) { var ln = (r.impKey.match(/\|(\d+)$/) || [])[1] || ''; (porLinha[ln] = porLinha[ln] || []).push(r); });
+        Object.keys(porLinha).forEach(function (ln) {
+          var gg = porLinha[ln].sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
+          gg.slice(1).forEach(function (r) { sai[r.id] = 1; });
+        });
+      } else {
+        g.sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); }).slice(1).forEach(function (r) { sai[r.id] = 1; });
+      }
+    });
+    // período automático vazio quando a planilha já tem o mesmo período
+    lista.forEach(function (r) {
+      if (!r.auto || r.imp || r.ini || r.st !== 'A programar' || sai[r.id]) return;
+      if (lista.some(function (x) { return x.imp && !sai[x.id] && x.fid === r.fid && perInicioAno(x) === perInicioAno(r); })) sai[r.id] = 1;
+    });
+    rRem = Object.keys(sai).length;
+    if (rRem) lista = lista.filter(function (r) { return !sai[r.id]; });
+    if (fRem) DB.s('funcionarios', funcs);
+    if (fRem || rRem) DB.s('ferias', lista);
+    return { func: fRem, fer: rRem };
+  }
+  window.ferLimparDuplicados = function () {
+    var r = limparDuplicados(); rdFer();
+    toast(r.func || r.fer ? '🧹 Removidos ' + r.fer + ' registro(s) de férias e ' + r.func + ' funcionário(s) repetidos' : 'Nenhum duplicado encontrado ✅');
+  };
+
   function garantirPeriodos() {
+    try { limparDuplicados(); } catch (e) { console.warn(e); }
     var funcs = DB.g('funcionarios'), lista = DB.g('ferias'), mudou = false;
     funcs.forEach(function (f) {
       if (f.st === 'Desligado') return;
@@ -16123,7 +16188,8 @@ function rhPodeEnviar() {
       var tem = lista.some(function (r) { return r.fid === f.id && perInicioAno(r) >= ano; });
       if (!tem) {
         // se o último período foi todo realizado, cria o seguinte; senão cria o atual
-        lista.push(novoRegistro(f, ano, ultimoDoFunc(lista, f.id))); mudou = true;
+        var nr = novoRegistro(f, ano, ultimoDoFunc(lista, f.id));
+        if (!excluido(nr.id) && !lista.some(function (x) { return x.id === nr.id; })) { lista.push(nr); mudou = true; }
       }
     });
     // períodos 100% realizados geram o próximo
@@ -16415,7 +16481,7 @@ function rhPodeEnviar() {
     throw new Error('Não encontrei na planilha uma tabela com as colunas "Funcionário" e "Início gozo".');
   }
 
-  var _imp = null;
+  var _imp = null, importando = false;
   function acharFunc(funcs, nome) {
     var n = norm(nome), f = funcs.find(function (x) { return norm(x.n) === n; });
     if (f) return f;
@@ -16457,7 +16523,7 @@ function rhPodeEnviar() {
     _imp.linhas.forEach(function (l) {
       var f = l.func ? funcs.find(function (x) { return x.id === l.func.id; }) : acharFunc(funcs, l.nome);
       if (!f && criar) {
-        f = { id: uid(), n: l.nome.trim(), cpf: '', car: l.car, adm: l.adm, st: 'Ativo', docs: [], obsImport: 'Cadastrado pela importação do Controle de Férias' };
+        f = { id: 'fimp_' + hashTxt(norm(l.nome)), n: l.nome.trim(), cpf: '', car: l.car, adm: l.adm, st: 'Ativo', docs: [], obsImport: 'Cadastrado pela importação do Controle de Férias' };
         funcs.push(f); novosFunc.push(f); criados++;
       }
       if (!f) { semFunc++; return; }
@@ -16471,11 +16537,10 @@ function rhPodeEnviar() {
       var st = l.cor === 'verde' ? 'Concluída' : l.cor === 'amarelo' ? 'A programar' : (l.ini ? 'Agendada' : 'A programar');
       var dias = l.dias && l.dias !== '-' ? l.dias : '';
       if (!l.ini && !l.fim && dias === '1') dias = '';
-      lista.push({ id: uid(), fid: f.id, impKey: key, imp: true, per: p.per, ai: p.ai, af: p.af, lim: l.lim || p.lim, saldoAnt: l.sant, mes: l.mes,
+      lista.push({ id: 'ferimp_' + hashTxt(key), fid: f.id, impKey: key, imp: true, per: p.per, ai: p.ai, af: p.af, lim: l.lim || p.lim, saldoAnt: l.sant, mes: l.mes,
         ini: l.ini, fim: l.fim, ret: l.fim ? addDias(l.fim, 1) : '', dias: dias, saldo: l.saldo, obs: l.obs, st: st, uTrab: l.ut, uReg: l.ur, car: l.car });
       importados++;
     });
-    if (novosFunc.length) DB.s('funcionarios', funcs); else if (funcs.length) DB.s('funcionarios', funcs);
     // remove os períodos em branco criados automaticamente que a planilha já cobre
     lista = lista.filter(function (r) {
       if (!r.auto || r.imp || r.ini || r.st !== 'A programar') return true;
@@ -16487,7 +16552,8 @@ function rhPodeEnviar() {
       var k = r.fid + '|' + perInicioAno(r); if (vistos[k] || r.st !== 'Concluída') return; vistos[k] = 1;
       if (gerarProximo(lista, funcs, r.fid, perInicioAno(r))) proximos++;
     });
-    DB.s('ferias', lista);
+    importando = true;
+    try { DB.s('ferias', lista); DB.s('funcionarios', funcs); } finally { importando = false; }
     closeModal('modal-fer-imp'); _imp = null;
     rdFer(); if (typeof updDash === 'function') updDash();
     alert('Importação concluída!\n\n• ' + importados + ' linhas importadas' + (pulados ? '\n• ' + pulados + ' já existiam (não duplicadas)' : '') +
@@ -16498,7 +16564,7 @@ function rhPodeEnviar() {
 
   // Quando um funcionário é desligado ou reativado, a programação se atualiza sozinha
   var _s = DB.s;
-  DB.s = function (k, v) { _s(k, v); if (k === 'funcionarios') { try { if (el('sec-ferias') && el('sec-ferias').classList.contains('active')) rdFer(); } catch (e) {} } };
+  DB.s = function (k, v) { _s(k, v); if (k === 'funcionarios' && !importando) { try { if (el('sec-ferias') && el('sec-ferias').classList.contains('active')) rdFer(); } catch (e) {} } };
 })();
 </script>
 
