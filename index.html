@@ -15658,7 +15658,7 @@ function rhPodeEnviar() {
       toast('✅ Sincronização automática ativada neste computador');
       iniciar();
     }).catch(function (e) {
-      if (e.message !== 'senha') { document.getElementById('rhb-senha-erro').textContent = 'Não foi possível falar com o servidor. Verifique a internet e tente de novo.'; document.getElementById('rhb-senha-erro').style.display = 'block'; }
+      if (e.message !== 'senha') { document.getElementById('rhb-senha-erro').textContent = /SENHA/.test(e.message) ? 'O servidor ainda está sem senha. No Apps Script, troque TROQUE-ESTA-SENHA pela sua senha, salve e publique uma nova versão (Implantar → Gerenciar implantações → ✏️ → Nova versão).' : 'Não foi possível falar com o servidor. Verifique a internet e tente de novo.'; document.getElementById('rhb-senha-erro').style.display = 'block'; }
     }).then(function () { btn.disabled = false; btn.textContent = 'Entrar'; });
   };
 
