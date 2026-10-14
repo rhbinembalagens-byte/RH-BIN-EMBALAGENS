@@ -1084,6 +1084,12 @@ document.addEventListener('DOMContentLoaded', function () {
     <select id="vaga-filter-emp" onchange="rdVagas()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;min-width:160px;">
       <option value="">Todas as empresas</option>
     </select>
+    <select id="vaga-filter-forma" onchange="rdVagas()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;min-width:170px;">
+      <option value="">Toda forma de contratação</option>
+      <option value="interna">🏠 Contratação interna</option>
+      <option value="agencia">🤝 Por agência de emprego</option>
+    </select>
+    <button class="btn btn-outline" onclick="agAbrirLista()" style="white-space:nowrap;">🤝 Agências de emprego</button>
     <button class="btn btn-primary" onclick="openModal(&#39;modal-vaga&#39;)" style="white-space:nowrap;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px;height:15px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       Nova Vaga
@@ -1554,6 +1560,42 @@ document.addEventListener('DOMContentLoaded', function () {
 </button>
 
 <!-- ===== MODAIS ===== -->
+
+<!-- Agências de emprego: lista -->
+<div class="modal-bg" id="modal-ag-lista">
+  <div class="modal" style="max-width:860px;">
+    <div class="modal-header"><span class="modal-title">🤝 Agências de emprego</span><button class="modal-close" onclick="closeModal('modal-ag-lista')">×</button></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <input type="search" id="ag-busca" placeholder="🔍 Buscar agência…" oninput="agRenderLista()" style="flex:1;min-width:200px;padding:9px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;">
+      <button class="btn btn-primary" onclick="agNova(false)">+ Cadastrar agência</button>
+    </div>
+    <div id="ag-lista"></div>
+  </div>
+</div>
+<!-- Agência de emprego: cadastro -->
+<div class="modal-bg" id="modal-ag" style="z-index:10010;">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header"><span class="modal-title" id="ag-titulo">🤝 Nova agência de emprego</span><button class="modal-close" onclick="closeModal('modal-ag')">×</button></div>
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Nome da agência *</label><input id="ag-nome" type="text" placeholder="Ex.: Agência Talentos RH"></div>
+      <div class="form-group"><label>CNPJ</label><input id="ag-cnpj" type="text" placeholder="00.000.000/0000-00" oninput="mCNPJ(this)"></div>
+      <div class="form-group"><label>Pessoa de contato</label><input id="ag-contato" type="text" placeholder="Nome do responsável"></div>
+      <div class="form-group"><label>Telefone / WhatsApp</label><input id="ag-tel" type="text" placeholder="(11) 90000-0000" oninput="mFone(this)"></div>
+      <div class="form-group"><label>E-mail</label><input id="ag-email" type="email" placeholder="contato@agencia.com.br"></div>
+      <div class="form-group form-full"><label>Endereço</label><input id="ag-end" type="text" placeholder="Rua, nº, bairro, cidade/UF"></div>
+      <div class="form-group"><label>Valor / taxa padrão</label><input id="ag-taxa" type="text" placeholder="Ex.: 1 salário do contratado"></div>
+      <div class="form-group"><label>Garantia de reposição</label><input id="ag-garantia" type="text" placeholder="Ex.: 90 dias"></div>
+      <div class="form-group"><label>Situação</label><select id="ag-ativa"><option value="1">Ativa</option><option value="0">Inativa</option></select></div>
+      <div class="form-group form-full"><label>Observações</label><textarea id="ag-obs" rows="2" placeholder="Condições do contrato, forma de pagamento, especialidades…"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-ag')">Cancelar</button>
+      <button class="btn btn-primary" onclick="agSalvar()">💾 Salvar agência</button>
+    </div>
+  </div>
+</div>
+
+
 
 <!-- Senha da sincronização automática -->
 <div class="modal-bg" id="modal-rhb-senha" style="z-index:10050;">
@@ -2650,6 +2692,19 @@ document.addEventListener('DOMContentLoaded', function () {
             <option value="Intermitente">Intermitente</option>
           </select>
         </div>
+        <div class="form-group form-full"><label>Forma de contratação</label>
+          <div class="ag-forma">
+            <label class="ag-op"><input type="radio" name="vg-forma" value="interna" checked onchange="agFormaChange()"> <span>🏠 Contratação interna<small>O RH da empresa faz a seleção e contrata direto</small></span></label>
+            <label class="ag-op"><input type="radio" name="vg-forma" value="agencia" onchange="agFormaChange()"> <span>🤝 Agência de emprego<small>A vaga é preenchida por uma agência parceira</small></span></label>
+          </div>
+        </div>
+        <div class="form-group ag-campo" style="display:none;"><label>Agência de emprego *</label>
+          <div class="est-inline"><select id="vg-agencia" onchange="agMostrarResumo()"><option value="">Selecione a agência</option></select><button type="button" class="est-plus" title="Cadastrar nova agência" onclick="agNova(true)">＋</button></div>
+        </div>
+        <div class="form-group ag-campo" style="display:none;"><label>Valor / taxa combinada</label>
+          <input id="vg-ag-taxa" type="text" placeholder="Ex.: 1 salário, 50% do salário, R$ 800,00">
+        </div>
+        <div class="form-full ag-campo" id="vg-ag-resumo" style="display:none;"></div>
         <div class="form-group"><label>Vagas Disponíveis</label>
           <input id="vg-qtd" type="number" min="1" value="1" placeholder="1">
         </div>
@@ -3383,7 +3438,7 @@ async function loadDriveJSON(filename) {
 }
 
 async function syncFromDrive() {
-  const keys = ['doc-modelos','docs-ocultos','funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','vagas','pagamentos','treinamentos','campanhas','politicas','benef-atrib','benef-compras','integracoes','material-apoio'];
+  const keys = ['agencias','doc-modelos','docs-ocultos','funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','vagas','pagamentos','treinamentos','campanhas','politicas','benef-atrib','benef-compras','integracoes','material-apoio'];
   let synced = 0;
   for (const k of keys) {
     try {
@@ -3490,6 +3545,7 @@ function openModal(id) {
     if (isNewVaga) {
       vagaCandidatos = []; vagaAprovados = [];
       document.getElementById('vaga-modal-title').textContent = '💼 Nova Vaga';
+      if (typeof agPreencherForm === 'function') agPreencherForm(null);
     }
     // Reset tab sempre
     vagaTab('vt-dados', document.querySelector('#vaga-modal-tabs .tab'));
@@ -9315,6 +9371,8 @@ function rdVagas() {
   var list = all.slice();
   if (stF)   list = list.filter(function(v){return v.status===stF;});
   if (empF)  list = list.filter(function(v){return v.emp===empF;});
+  var fmF = (document.getElementById('vaga-filter-forma')||{value:''}).value||'';
+  if (fmF)   list = list.filter(function(v){return (v.contratacao||'interna')===fmF;});
   if (busca) list = list.filter(function(v){
     var t = (v.titulo+' '+(v.unidade||'')+'  '+(v.desc||'')).toLowerCase();
     return t.includes(busca);
@@ -9380,6 +9438,7 @@ function rdVagas() {
               '<span style="background:'+st.bg+';color:'+st.color+';border-radius:14px;padding:3px 12px;font-size:12px;font-weight:700;border:1px solid '+st.color+'30;">'+st.dot+' '+vaga.status+'</span>' +
               '<span style="background:#f5f5f5;color:#555;border-radius:14px;padding:3px 10px;font-size:12px;">💼 '+qtd+' vaga'+(qtd>1?'s':'')+'</span>' +
               (vaga.tipo?'<span style="background:#f5f5f5;color:#555;border-radius:14px;padding:3px 10px;font-size:12px;">'+vaga.tipo+'</span>':'') +
+              agBadge(vaga) +
             '</div>' +
           '</div>' +
           '<div style="display:flex;gap:6px;align-items:flex-start;">' +
@@ -9660,6 +9719,7 @@ async function savVaga() {
     benef.push(c.value);
   });
 
+  if (agFormaAtual() === 'agencia' && !v('vg-agencia')) { alert('Escolha a agência de emprego (ou cadastre uma no botão ＋).'); return; }
   var list = DB.g('vagas');
   var rec = {
     id:          editingVagaId || uid(),
@@ -9679,6 +9739,9 @@ async function savVaga() {
     benefOutros: v('vg-benef-outros'),
     desc:        v('vg-desc'),
     obs:         v('vg-obs'),
+    contratacao: agFormaAtual(),
+    agencia:     agFormaAtual() === 'agencia' ? v('vg-agencia') : '',
+    agTaxa:      agFormaAtual() === 'agencia' ? v('vg-ag-taxa') : '',
     candidatos:  vagaCandidatos,
     aprovados:   vagaAprovados
   };
@@ -9722,6 +9785,7 @@ function editVaga(id) {
       document.getElementById('vg-qtd').value = vaga.qtd||1;
       document.getElementById('vg-dep').value  = vaga.dep||'';
       document.getElementById('vg-benef-outros').value = vaga.benefOutros||'';
+      agPreencherForm(vaga);
       document.querySelectorAll('#vg-benef-checks input[type=checkbox]').forEach(function(c){
         c.checked = (vaga.beneficios||[]).includes(c.value);
       });
@@ -14737,7 +14801,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
    ════════════════════════════════════════════════════════════ */
 (function () {
   var RT = window.RT = {
-    LIST: ['funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','uniformes','vagas',
+    LIST: ['agencias','funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','uniformes','vagas',
            'pagamentos','treinamentos','campanhas','politicas','benef-atrib','benef-compras','flash-hist','pendencias',
            'mat-trein','cronograma-trein','integracoes','cargos','escalas','material-apoio'],
     OBJ: ['uni-est','perfil_empresa','assinaturas','fotos_func'],
@@ -15645,6 +15709,7 @@ function rhPodeEnviar() {
     document.getElementById('rhb-senha-erro').style.display = errada ? 'block' : 'none';
     document.getElementById('rhb-senha').value = '';
     var ov = document.getElementById('sync-overlay'); if (ov) ov.classList.remove('open');
+    ['setup-wizard', 'token-wizard'].forEach(function (id) { var w = document.getElementById(id); if (w) w.style.display = 'none'; });
     m.classList.add('open');
     setTimeout(function () { document.getElementById('rhb-senha').focus(); }, 60);
   };
@@ -15777,6 +15842,152 @@ function rhPodeEnviar() {
   Storage.prototype.setItem = function (k, v) {
     _set.call(this, k, v);
     if (this === localStorage && k === 'eq_fotos_func') { try { _fotoStore = JSON.parse(v) || {}; } catch (e) {} }
+  };
+})();
+</script>
+
+<style>
+.ag-forma{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;}
+.ag-op{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);padding:11px 13px;cursor:pointer;background:#fff;text-transform:none!important;letter-spacing:0!important;font-size:13.5px!important;color:var(--gray-800)!important;font-weight:600!important;}
+.ag-op input{margin-top:3px;accent-color:#a51c1f;width:auto!important;}
+.ag-op small{display:block;font-weight:400;color:var(--gray-500);font-size:12px;margin-top:2px;}
+.ag-op:has(input:checked){border-color:#a51c1f;background:#fbf1e4;}
+.ag-resumo{background:#fbf1e4;border:1px solid rgba(212,175,55,.5);border-radius:var(--radius-sm);padding:10px 13px;font-size:12.5px;color:#4a0e10;line-height:1.7;}
+.ag-item{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;border:1.5px solid var(--gray-200);border-left:4px solid #d4af37;border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:10px;background:#fff;}
+.ag-item.inativa{opacity:.6;border-left-color:#999;}
+.ag-item .ag-nome{font-weight:700;color:#7a1215;font-size:14.5px;}
+.ag-item .ag-info{font-size:12.5px;color:var(--gray-600);margin-top:4px;line-height:1.7;}
+.ag-tag{display:inline-block;border-radius:12px;padding:2px 9px;font-size:11.5px;font-weight:600;margin-left:6px;}
+</style>
+<script>
+/* ════════════════ VAGAS: contratação interna × agência de emprego ════════════════ */
+(function () {
+  var editId = null, voltarParaVaga = false;
+  function esc(x) { return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function ags() { return DB.g('agencias'); }
+  function el(id) { return document.getElementById(id); }
+
+  window.agFormaAtual = function () { var r = document.querySelector('input[name="vg-forma"]:checked'); return r ? r.value : 'interna'; };
+
+  function encherSelect(sel) {
+    var s = el('vg-agencia'); if (!s) return;
+    var lista = ags().slice().sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || ''); });
+    s.innerHTML = '<option value="">Selecione a agência</option>' + lista.filter(function (a) { return a.ativa !== false || a.id === sel; })
+      .map(function (a) { return '<option value="' + esc(a.id) + '">' + esc(a.nome) + (a.ativa === false ? ' (inativa)' : '') + '</option>'; }).join('');
+    s.value = sel || '';
+  }
+
+  window.agFormaChange = function () {
+    var ag = agFormaAtual() === 'agencia';
+    document.querySelectorAll('#modal-vaga .ag-campo').forEach(function (c) { c.style.display = ag ? '' : 'none'; });
+    if (ag) { encherSelect(el('vg-agencia').value); agMostrarResumo(); }
+  };
+
+  window.agMostrarResumo = function () {
+    var box = el('vg-ag-resumo'); if (!box) return;
+    var a = ags().find(function (x) { return x.id === el('vg-agencia').value; });
+    if (!a || agFormaAtual() !== 'agencia') { box.style.display = 'none'; return; }
+    var taxa = el('vg-ag-taxa');
+    if (taxa && !taxa.value && a.taxa) taxa.value = a.taxa;
+    box.innerHTML = '<div class="ag-resumo">' +
+      [a.contato ? '👤 ' + esc(a.contato) : '', a.tel ? '📞 ' + esc(a.tel) : '', a.email ? '✉️ ' + esc(a.email) : '',
+       a.garantia ? '🛡️ Garantia: ' + esc(a.garantia) : '', a.taxa ? '💰 Taxa padrão: ' + esc(a.taxa) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ') +
+      '</div>';
+    box.style.display = '';
+  };
+
+  window.agPreencherForm = function (vaga) {
+    var forma = (vaga && vaga.contratacao) || 'interna';
+    document.querySelectorAll('input[name="vg-forma"]').forEach(function (r) { r.checked = r.value === forma; });
+    encherSelect(vaga ? vaga.agencia : '');
+    var t = el('vg-ag-taxa'); if (t) t.value = (vaga && vaga.agTaxa) || '';
+    agFormaChange();
+  };
+
+  window.agBadge = function (vaga) {
+    if ((vaga.contratacao || 'interna') !== 'agencia')
+      return '<span style="background:#e8f5e9;color:#2e7d32;border-radius:14px;padding:3px 10px;font-size:12px;font-weight:600;">🏠 Contratação interna</span>';
+    var a = ags().find(function (x) { return x.id === vaga.agencia; });
+    return '<span style="background:#fbf1e4;color:#7a1215;border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:3px 10px;font-size:12px;font-weight:600;" title="' +
+      esc(a ? [a.contato, a.tel, a.email].filter(Boolean).join(' · ') : '') + '">🤝 Agência: ' + esc(a ? a.nome : 'não informada') + (vaga.agTaxa ? ' · ' + esc(vaga.agTaxa) : '') + '</span>';
+  };
+
+  // ── Cadastro de agências ──
+  window.agAbrirLista = function () { el('ag-busca').value = ''; agRenderLista(); el('modal-ag-lista').classList.add('open'); };
+
+  window.agRenderLista = function () {
+    var box = el('ag-lista'); if (!box) return;
+    var q = (el('ag-busca').value || '').toLowerCase();
+    var vagas = DB.g('vagas');
+    var lista = ags().filter(function (a) { return !q || [a.nome, a.cnpj, a.contato, a.email, a.tel].join(' ').toLowerCase().indexOf(q) !== -1; })
+      .sort(function (a, b) { return (a.ativa === false) - (b.ativa === false) || (a.nome || '').localeCompare(b.nome || ''); });
+    if (!lista.length) {
+      box.innerHTML = '<div style="text-align:center;padding:34px 16px;color:var(--gray-500);border:1.5px dashed var(--gray-200);border-radius:var(--radius);">' +
+        (q ? 'Nenhuma agência encontrada.' : 'Nenhuma agência cadastrada ainda.<br>Clique em <strong>+ Cadastrar agência</strong>.') + '</div>';
+      return;
+    }
+    box.innerHTML = lista.map(function (a) {
+      var vs = vagas.filter(function (v) { return v.contratacao === 'agencia' && v.agencia === a.id; });
+      var abertas = vs.filter(function (v) { return v.status === 'Aberta' || v.status === 'Em Seleção'; }).length;
+      return '<div class="ag-item' + (a.ativa === false ? ' inativa' : '') + '">' +
+        '<div style="flex:1;min-width:220px;">' +
+          '<div class="ag-nome">' + esc(a.nome) +
+            (a.ativa === false ? '<span class="ag-tag" style="background:#eee;color:#666;">Inativa</span>' : '') +
+            '<span class="ag-tag" style="background:#e3f2fd;color:#1565c0;">' + vs.length + ' vaga' + (vs.length === 1 ? '' : 's') + (abertas ? ' · ' + abertas + ' em andamento' : '') + '</span></div>' +
+          '<div class="ag-info">' +
+            [a.cnpj ? 'CNPJ ' + esc(a.cnpj) : '', a.contato ? '👤 ' + esc(a.contato) : '', a.tel ? '📞 ' + esc(a.tel) : '', a.email ? '✉️ ' + esc(a.email) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ') +
+            (a.end ? '<br>📍 ' + esc(a.end) : '') +
+            ((a.taxa || a.garantia) ? '<br>' + [a.taxa ? '💰 ' + esc(a.taxa) : '', a.garantia ? '🛡️ Garantia ' + esc(a.garantia) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ') : '') +
+            (a.obs ? '<br><em>' + esc(a.obs) + '</em>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+          (a.tel ? '<button class="btn btn-whatsapp btn-sm" onclick="wha(\'' + esc(a.tel) + '\',\'Olá! Aqui é do RH da BIN Embalagens.\')">WhatsApp</button>' : '') +
+          '<button class="btn btn-outline btn-sm" onclick="agEditar(\'' + a.id + '\')">✏️ Editar</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="agExcluir(\'' + a.id + '\')" title="Excluir">🗑️</button>' +
+        '</div></div>';
+    }).join('');
+  };
+
+  function abrirForm(a) {
+    editId = a ? a.id : null;
+    el('ag-titulo').textContent = a ? '✏️ Editar agência de emprego' : '🤝 Nova agência de emprego';
+    ['nome','cnpj','contato','tel','email','end','taxa','garantia','obs'].forEach(function (k) { el('ag-' + k).value = (a && a[k]) || ''; });
+    el('ag-ativa').value = a && a.ativa === false ? '0' : '1';
+    el('modal-ag').classList.add('open');
+    setTimeout(function () { el('ag-nome').focus(); }, 60);
+  }
+  window.agNova = function (daVaga) { voltarParaVaga = !!daVaga; abrirForm(null); };
+  window.agEditar = function (id) { voltarParaVaga = false; var a = ags().find(function (x) { return x.id === id; }); if (a) abrirForm(a); };
+
+  window.agSalvar = function () {
+    var nome = el('ag-nome').value.trim();
+    if (!nome) { alert('Informe o nome da agência.'); el('ag-nome').focus(); return; }
+    var dados = { nome: nome, ativa: el('ag-ativa').value !== '0' };
+    ['cnpj','contato','tel','email','end','taxa','garantia','obs'].forEach(function (k) { dados[k] = el('ag-' + k).value.trim(); });
+    var l = ags(), id = editId;
+    if (id) { var i = l.findIndex(function (x) { return x.id === id; }); if (i !== -1) l[i] = Object.assign({}, l[i], dados); }
+    else { id = uid(); l.push(Object.assign({ id: id, criado: td() }, dados)); }
+    DB.s('agencias', l);
+    closeModal('modal-ag');
+    toast(editId ? 'Agência atualizada ✅' : 'Agência cadastrada ✅');
+    editId = null;
+    agRenderLista();
+    if (voltarParaVaga) {
+      document.querySelectorAll('input[name="vg-forma"]').forEach(function (r) { r.checked = r.value === 'agencia'; });
+      encherSelect(id); agFormaChange();
+    }
+    voltarParaVaga = false;
+    if (typeof rdVagas === 'function' && document.getElementById('sec-vagas').classList.contains('active')) rdVagas();
+  };
+
+  window.agExcluir = function (id) {
+    var a = ags().find(function (x) { return x.id === id; }); if (!a) return;
+    var n = DB.g('vagas').filter(function (v) { return v.agencia === id; }).length;
+    if (!confirm('Excluir a agência "' + a.nome + '"?' + (n ? '\n\nEla está ligada a ' + n + ' vaga(s). As vagas continuam, mas ficam sem agência — se preferir, marque a agência como Inativa em vez de excluir.' : ''))) return;
+    DB.s('agencias', ags().filter(function (x) { return x.id !== id; }));
+    agRenderLista(); toast('Agência excluída.');
+    if (typeof rdVagas === 'function') rdVagas();
   };
 })();
 </script>
