@@ -635,7 +635,12 @@ thead th{background:#fbf1e4;color:#7a1215;border-bottom:2px solid var(--gold);}
 #sidebar-toggle{position:fixed;top:16px;left:231px;right:auto;z-index:120;transition:left .3s;}
 body.sidebar-collapsed #sidebar-toggle{left:42px;}
 #sidebar.collapsed{width:56px;}
-#main{min-width:0;}
+#main{min-width:0;max-width:100%;}
+body>div{min-width:0;}
+#content{min-width:0;max-width:100%;}
+.section-page{min-width:0;max-width:100%;}
+.card{max-width:100%;overflow-x:auto;}
+html,body{max-width:100%;overflow-x:hidden;}
 @media(min-width:761px){body.sidebar-collapsed #main,#sidebar.collapsed ~ #main{margin-left:56px!important;}body:not(.sidebar-collapsed) #main{margin-left:245px!important;}}
 #sidebar.collapsed .sidebar-logo{padding:0!important;min-height:60px!important;border-bottom:1px solid rgba(212,175,55,.45);}
 #sidebar.collapsed .nav-item{padding:12px 0;justify-content:center;gap:0;}
@@ -652,7 +657,10 @@ body.sidebar-collapsed #sidebar-toggle{left:42px;}
 #drive-badge{white-space:nowrap;}
 #mob-menu{display:none;width:38px;height:38px;border-radius:10px;border:1.5px solid var(--gold);background:#7a1215;color:var(--gold-light);font-size:18px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;}
 #mob-backdrop{display:none;position:fixed;inset:0;background:rgba(40,8,10,.45);z-index:99;}
-@media(max-width:1250px){.tb-lbl{display:none;}.rh-tenant-chip strong{display:none;}.topbar-actions{gap:6px;}}
+#topbar>div:first-child{flex:1 1 auto;min-width:0;}
+#topbar .page-title{min-width:0;}
+.topbar-actions{flex:0 0 auto;}
+@media(max-width:1440px){.tb-lbl{display:none;}.rh-tenant-chip strong{display:none;}.topbar-actions{gap:6px;}}
 @media(max-width:760px){
   #sidebar{transform:translateX(-100%);width:265px!important;box-shadow:4px 0 24px rgba(0,0,0,.35);}
   #sidebar.open{transform:translateX(0);}
@@ -692,7 +700,7 @@ body.sidebar-collapsed #sidebar-toggle{left:42px;}
       <div class="form-group"><label>E-mail</label><input id="rhp-email" type="text"></div>
       <div class="form-group"><label>Site</label><input id="rhp-site" type="text"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-rh-perfil')">Cancelar</button><button class="btn btn-primary" onclick="rhSalvarPerfil()">💾 Salvar</button></div>
+    <div class="modal-footer"><button class="btn btn-outline" style="margin-right:auto;" onclick="closeModal('modal-rh-perfil');rhAbrirConfigSync()">☁️ Sincronização automática</button><button class="btn btn-outline" onclick="closeModal('modal-rh-perfil')">Cancelar</button><button class="btn btn-primary" onclick="rhSalvarPerfil()">💾 Salvar</button></div>
   </div>
 </div>
 
@@ -886,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function () {
       </span>
       <button class="btn btn-outline btn-sm" id="btn-clear-sig" onclick="clearSavedSignature()" title="Apagar assinatura salva" style="font-size:12px;display:none;">✍️ Limpar Assinatura</button>
       <button class="btn btn-outline btn-sm" id="btn-sync" onclick="syncManual()" title="Buscar dados mais recentes do Drive" style="font-size:12px;">🔄<span class="tb-lbl"> Sincronizar / Iniciar</span></button>
-      <button class="btn btn-whatsapp btn-sm" onclick="openModal(&#39;modal-wha&#39;)">
+      <button class="btn btn-whatsapp btn-sm" title="WhatsApp" onclick="openModal(&#39;modal-wha&#39;)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"></path></svg>
         <span class="tb-lbl">WhatsApp</span>
       </button>
@@ -1546,6 +1554,33 @@ document.addEventListener('DOMContentLoaded', function () {
 </button>
 
 <!-- ===== MODAIS ===== -->
+
+<!-- Senha da sincronização automática -->
+<div class="modal-bg" id="modal-rhb-senha" style="z-index:10050;">
+  <div class="modal" style="max-width:420px;text-align:center;">
+    <img src="" id="rhb-logo" alt="" style="width:110px;border-radius:10px;margin:0 auto 12px;display:block;">
+    <div style="font-size:18px;font-weight:700;color:#7a1215;margin-bottom:6px;">Sistema de RH</div>
+    <div style="font-size:13px;color:var(--gray-600);margin-bottom:16px;">Digite a senha do sistema. Ela é pedida <strong>só uma vez</strong> neste computador — depois tudo sincroniza sozinho.</div>
+    <input id="rhb-senha" type="password" placeholder="Senha do sistema" onkeydown="if(event.key==='Enter')rhConfirmarSenha()" style="width:100%;padding:11px 13px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:15px;font-family:inherit;margin-bottom:8px;">
+    <div id="rhb-senha-erro" style="display:none;color:#c62828;font-size:12.5px;margin-bottom:8px;">Senha incorreta. Tente novamente.</div>
+    <button class="btn btn-primary" id="rhb-senha-btn" style="width:100%;justify-content:center;padding:11px;" onclick="rhConfirmarSenha()">Entrar</button>
+  </div>
+</div>
+<!-- Configuração do servidor de sincronização -->
+<div class="modal-bg" id="modal-rhb-cfg">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header"><span class="modal-title">☁️ Sincronização automática</span><button class="modal-close" onclick="closeModal('modal-rhb-cfg')">×</button></div>
+    <div class="alert alert-info" style="font-size:13px;margin-bottom:14px;"><div>Com o servidor de sincronização configurado, todos os computadores ficam sempre iguais, sem login do Google e sem botão de sincronizar.</div></div>
+    <div class="form-group" style="margin-bottom:12px;"><label>Endereço do servidor (Apps Script)</label><input id="rhb-url" type="text" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="form-group"><label>Senha do sistema</label><input id="rhb-cfg-senha" type="password" placeholder="Deixe em branco para manter a atual"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-rhb-cfg')">Cancelar</button>
+      <button class="btn btn-primary" onclick="rhSalvarConfigSync()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+
 
 <!-- Novo / editar modelo de documento -->
 <div class="modal-bg" id="modal-dmx">
@@ -3495,7 +3530,7 @@ function closeModal(id) {
 function checkDriveDocs() {
   const ok = document.getElementById('drive-docs-info');
   const warn = document.getElementById('drive-docs-warn');
-  if (driveReady) { ok.style.display='flex'; warn.style.display='none'; }
+  if (rhPodeEnviar()) { ok.style.display='flex'; warn.style.display='none'; }
   else { ok.style.display='none'; warn.style.display='flex'; }
 }
 function fillSel(selId, dbKey, field) {
@@ -3800,7 +3835,7 @@ async function savFunc() {
           try { localStorage.setItem('eq_doc_preview_' + updated.id + '_' + df.file.name, df.dataUrl); } catch(e) {}
         }
       });
-      if (driveReady) {
+      if (rhPodeEnviar()) {
         try {
           for (var di = 0; di < allCatFiles.length; di++) {
             var df = allCatFiles[di];
@@ -3818,7 +3853,7 @@ async function savFunc() {
     }
     // Legacy pendingFiles support
     if (pendingFiles.length > 0) {
-      if (driveReady) {
+      if (rhPodeEnviar()) {
         try {
           for (const file of pendingFiles) {
             const uploaded = await uploadFileToDrive(file, nome);
@@ -3875,7 +3910,7 @@ async function savFunc() {
           try { localStorage.setItem('eq_doc_preview_' + f.id + '_' + df2.file.name, df2.dataUrl); } catch(e) {}
         }
       });
-      if (driveReady) {
+      if (rhPodeEnviar()) {
         try {
           for (var di2 = 0; di2 < allCatFiles2.length; di2++) {
             var df2 = allCatFiles2[di2];
@@ -3893,7 +3928,7 @@ async function savFunc() {
     }
     // Legacy pendingFiles support
     if (pendingFiles.length > 0) {
-      if (driveReady) {
+      if (rhPodeEnviar()) {
         try {
           for (const file of pendingFiles) {
             const uploaded = await uploadFileToDrive(file, nome);
@@ -5919,7 +5954,7 @@ async function savBenefComp(){
   var tipoFinal=tipo==='Outros'?(v('bcomp-outros')||'Outros'):tipo;
   var parts=Array.from(document.getElementById('bcomp-funcs').selectedOptions).map(function(o){return o.value;});
   var file=null;
-  if(driveReady&&benefFile){
+  if(rhPodeEnviar()&&benefFile){
     try{var up=await uploadFileToDrive(benefFile,'Beneficios');file={name:benefFile.name,id:up.id,url:up.webViewLink};}
     catch(e){file={name:benefFile?benefFile.name:''};}
   } else if(benefFile){file={name:benefFile.name};}
@@ -6418,7 +6453,7 @@ async function savTrein(){
   var titulo=document.getElementById('tr-titulo').value.trim();if(!titulo){alert('Título obrigatório.');return;}
   var parts=Array.from(document.getElementById('tr-parts').selectedOptions).map(function(o){return o.value;});
   var list=DB.g('treinamentos');var files=[];
-  if(driveReady&&treinFiles.length>0){for(var file of treinFiles){try{var up=await uploadFileToDrive(file,'Treinamentos');files.push({name:file.name,matNome:file._matNome||'',matRev:file._matRev||'',matData:file._matData||'',id:up.id,url:up.webViewLink});toast('📎 '+(file._matNome||file.name)+' enviado!');}catch(e){files.push({name:file.name,matNome:file._matNome||'',matRev:file._matRev||'',matData:file._matData||''});}}}
+  if(rhPodeEnviar()&&treinFiles.length>0){for(var file of treinFiles){try{var up=await uploadFileToDrive(file,'Treinamentos');files.push({name:file.name,matNome:file._matNome||'',matRev:file._matRev||'',matData:file._matData||'',id:up.id,url:up.webViewLink});toast('📎 '+(file._matNome||file.name)+' enviado!');}catch(e){files.push({name:file.name,matNome:file._matNome||'',matRev:file._matRev||'',matData:file._matData||''});}}}
   else{files=treinFiles.map(function(f){return {name:f.name,matNome:f._matNome||'',matRev:f._matRev||'',matData:f._matData||''};});}
   treinFiles=[];
   // Upload fotos
@@ -6438,7 +6473,7 @@ async function savTrein(){
       var listaAssinadaUpload = window._treinListaAssinada || null;
       var listaAssinadaSaved = existing.listaAssinada || null;
       if (listaAssinadaUpload) {
-        if (driveReady) {
+        if (rhPodeEnviar()) {
           try { var lu = await uploadFileToDrive(listaAssinadaUpload,'Treinamentos/ListasAssinadas'); listaAssinadaSaved = {name:listaAssinadaUpload.name,id:lu.id,url:lu.webViewLink}; } catch(e) { listaAssinadaSaved = {name:listaAssinadaUpload.name}; }
         } else { listaAssinadaSaved = {name:listaAssinadaUpload.name}; }
       }
@@ -6451,7 +6486,7 @@ async function savTrein(){
   } else {
     var listaAssinadaNew = null;
     if (window._treinListaAssinada) {
-      if (driveReady) {
+      if (rhPodeEnviar()) {
         try { var lu2 = await uploadFileToDrive(window._treinListaAssinada,'Treinamentos/ListasAssinadas'); listaAssinadaNew = {name:window._treinListaAssinada.name,id:lu2.id,url:lu2.webViewLink}; } catch(e) { listaAssinadaNew = {name:window._treinListaAssinada.name}; }
       } else { listaAssinadaNew = {name:window._treinListaAssinada.name}; }
       window._treinListaAssinada = null;
@@ -6566,7 +6601,7 @@ function handleCampFile(inp){campFiles=Array.from(inp.files);var el=document.get
 async function savCamp(){
   var titulo=document.getElementById('ca-titulo').value.trim();if(!titulo){alert('Título obrigatório.');return;}
   var list=DB.g('campanhas');var files=[];
-  if(driveReady&&campFiles.length>0){for(var file of campFiles){try{var up=await uploadFileToDrive(file,'Campanhas');files.push({name:file.name,id:up.id,url:up.webViewLink});}catch(e){files.push({name:file.name});}}}
+  if(rhPodeEnviar()&&campFiles.length>0){for(var file of campFiles){try{var up=await uploadFileToDrive(file,'Campanhas');files.push({name:file.name,id:up.id,url:up.webViewLink});}catch(e){files.push({name:file.name});}}}
   else{files=campFiles.map(function(f){return {name:f.name};});}
   campFiles=[];
   // Upload fotos
@@ -6618,7 +6653,7 @@ function handlePolFile(inp){polFiles=Array.from(inp.files);var el=document.getEl
 async function savPol(){
   var titulo=document.getElementById('po-titulo').value.trim();if(!titulo){alert('Título obrigatório.');return;}
   var list=DB.g('politicas');var files=[];
-  if(driveReady&&polFiles.length>0){for(var file of polFiles){try{var up=await uploadFileToDrive(file,'Politicas e Normas');files.push({name:file.name,id:up.id,url:up.webViewLink});}catch(e){files.push({name:file.name});}}}
+  if(rhPodeEnviar()&&polFiles.length>0){for(var file of polFiles){try{var up=await uploadFileToDrive(file,'Politicas e Normas');files.push({name:file.name,id:up.id,url:up.webViewLink});}catch(e){files.push({name:file.name});}}}
   else{files=polFiles.map(function(f){return {name:f.name};});}
   polFiles=[];
   if(editingPolId){var idx=list.findIndex(function(x){return x.id===editingPolId;});if(idx!==-1)list[idx]={...list[idx],titulo,cat:v('po-cat'),ver:v('po-ver'),data:v('po-data'),desc:v('po-desc')};editingPolId=null;}
@@ -7287,7 +7322,7 @@ async function _abrirDocFinal(docHTML, filename, f, sigMonica, sigBruno) {
     setTimeout(function(){ win.focus(); win.print(); }, 700);
   }
 
-  if (driveReady && f) {
+  if (rhPodeEnviar() && f) {
     try {
       var blob = new Blob([window.rhTenantize ? rhTenantize(finalHTML) : finalHTML], { type: 'text/html;charset=utf-8' });
       var file = new File([blob], filename + '_assinado.html', { type: 'text/html' });
@@ -7677,7 +7712,7 @@ async function handleCampPhotos(inp) {
 
 // ── Upload fotos para Drive ───────────────────────────────────
 async function uploadPhotos(photos, pasta) {
-  if (!driveReady || !photos.length) return [];
+  if (!rhPodeEnviar() || !photos.length) return [];
   var uploaded = [];
   for (var p of photos) {
     try {
@@ -8704,7 +8739,7 @@ async function gerarFlashXLSX() {
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nomeArq; a.click();
 
-  if (driveReady) {
+  if (rhPodeEnviar()) {
     try {
       var file = new File([blob], nomeArq, {type:'text/csv'});
       await uploadFileToDrive(file, 'Beneficios/Flash');
@@ -9430,7 +9465,7 @@ async function handleCurriculoUpload(inp, idx) {
   if (!file) return;
   var el = document.getElementById('curr-status-'+idx);
   if (el) el.textContent = '⏳ Enviando...';
-  if (driveReady) {
+  if (rhPodeEnviar()) {
     try {
       var up = await uploadFileToDrive(file, 'Vagas/Curriculos');
       vagaCandidatos[idx].curriculo = { name: file.name, id: up.id, url: up.webViewLink };
@@ -10651,6 +10686,7 @@ function fotoStoreSet(funcId, base64) {
   if (base64) _fotoStore[funcId] = base64;
   else delete _fotoStore[funcId];
   fotoStoreSave();
+  try { if (typeof DB !== 'undefined') DB.so('fotos_func', _fotoStore); } catch (e) {}
 }
 
 async function syncFotoStoreToDrive() {
@@ -11351,7 +11387,7 @@ function uploadMaterial(inp) {
       driveId: '',
       driveUrl: ''
     };
-    if (driveReady) {
+    if (rhPodeEnviar()) {
       uploadFileToDrive(file, 'Treinamentos/Materiais').then(function(up){
         rec.driveId  = up.id;
         rec.driveUrl = up.webViewLink;
@@ -13638,7 +13674,7 @@ async function _mtGuardarArquivo(kind, rec, file) {
   var pid = mat.id;
   _mtProg(pid, file.name, 0);
   try {
-    if (typeof driveReady !== 'undefined' && driveReady && rhFolderId) {
+    if (rhPodeEnviar()) {
       var pasta = await _mtDrivePasta([K.folder, rec.titulo]);
       var up = await _mtDriveUpload(file, pasta, function (f) { _mtProg(pid, file.name, f); });
       mat.src = 'drive'; mat.driveId = up.id; mat.url = up.webViewLink;
@@ -14704,7 +14740,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
     LIST: ['funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','uniformes','vagas',
            'pagamentos','treinamentos','campanhas','politicas','benef-atrib','benef-compras','flash-hist','pendencias',
            'mat-trein','cronograma-trein','integracoes','cargos','escalas','material-apoio'],
-    OBJ: ['uni-est','perfil_empresa','assinaturas'],
+    OBJ: ['uni-est','perfil_empresa','assinaturas','fotos_func'],
     ids: {}, mtime: {}, base: {}, busy: false, again: false, timer: null, poll: null, started: false,
     lastOk: 0, erro: '', renewArmed: false, folderCache: {}
   };
@@ -14812,6 +14848,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
   }
   function q(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
   async function listar() {
+    if (window.RHB && RHB.ativo()) { var jb = await RHB.call({ acao: 'listar' }); return jb.files || {}; }
     var url = 'https://www.googleapis.com/drive/v3/files?pageSize=500&fields=files(id,name,modifiedTime)&q=' +
       encodeURIComponent("'" + rhFolderId + "' in parents and trashed=false and name contains 'eq_' and mimeType='application/json'");
     var r = await authFetch(url); var j = await r.json(); var map = {};
@@ -14822,9 +14859,10 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
     });
     return map;
   }
-  async function baixar(id) { var r = await authFetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media'); return r.json(); }
+  async function baixar(id) { if (window.RHB && RHB.ativo()) return (await RHB.call({ acao: 'baixar', id: id })).data; var r = await authFetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media'); return r.json(); }
   async function enviar(k, data) {
     var id = RT.ids[k];
+    if (window.RHB && RHB.ativo()) { var je = await RHB.call({ acao: 'enviar', nome: 'eq_' + k + '.json', id: id || '', data: data }); RT.ids[k] = je.id; RT.mtime[k] = je.modifiedTime; return; }
     var meta = { name: 'eq_' + k + '.json', mimeType: 'application/json' };
     if (!id) meta.parents = [rhFolderId];
     var form = new FormData();
@@ -14838,7 +14876,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
 
   // ── ciclo: envia pendências e busca alterações ──
   function schedule(ms) { clearTimeout(RT.timer); RT.timer = setTimeout(run, ms || 0); status(); }
-  function pronto() { return typeof driveReady !== 'undefined' && driveReady && driveToken && rhFolderId; }
+  function pronto() { if (window.RHB && RHB.ativo()) return true; return typeof driveReady !== 'undefined' && driveReady && driveToken && rhFolderId; }
   async function run() {
     if (!pronto()) { status(); return; }
     if (RT.busy) { RT.again = true; return RT.busyPromise; }
@@ -14893,7 +14931,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
         try { localStorage.setItem('eq_rt_v2', '1'); } catch (e) {}
         RT.lastOk = Date.now(); RT.erro = '';
       } catch (e) {
-        RT.erro = (e && e.message === '401') ? 'token' : 'rede';
+        RT.erro = (e && e.message === '401') ? 'token' : (e && e.message === 'senha') ? 'senha' : 'rede';
       }
       RT.busy = false;
       if (mudou.length) refresh(mudou);
@@ -14936,7 +14974,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
     if (pend) { dot.style.background = '#ffca28'; tx.textContent = '☁️ Salvando…'; return; }
     dot.style.background = '#69f0ae';
     tx.textContent = '☁️ Sincronizado' + (RT.lastOk ? ' ' + hora(RT.lastOk) : '');
-    b.title = 'Sincronização automática com o Google Drive (pasta ' + ((window.RH_TENANT && RH_TENANT.drive) || 'RH') + ').';
+    b.title = (window.RHB && RHB.ativo() ? 'Sincronização automática (sem login). ' : '') + 'Sincronização automática com o Google Drive (pasta ' + ((window.RH_TENANT && RH_TENANT.drive) || 'RH') + ').';
   }
   RT.status = status;
 
@@ -15567,5 +15605,181 @@ document.addEventListener('DOMContentLoaded', function () {
   } catch (e) {}
 })();
 </script>
+<script>
+/* ════════════════════════════════════════════════════════════
+   SINCRONIZAÇÃO AUTOMÁTICA SEM LOGIN (servidor Google Apps Script)
+   Uma senha por computador, digitada uma única vez. Depois disso o
+   sistema sincroniza sozinho, sem janelas do Google.
+   ════════════════════════════════════════════════════════════ */
+var RH_SYNC_URL_PADRAO = 'https://script.google.com/macros/s/AKfycbzBAi1H1L8PvyD8iMZSabjdxnGpDwYnkZEc6AOZc-TNQxEEHEvecwzN0rNUky58xmE/exec';   // endereço do servidor de sincronização (Apps Script)
+
+function rhPodeEnviar() {
+  return (window.RHB && RHB.ativo()) || (typeof driveReady !== 'undefined' && driveReady && (typeof rhFolderId === 'undefined' || rhFolderId));
+}
+
+(function () {
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return ''; } }
+  var RHB = window.RHB = {
+    url: function () { return ls('eq_sync_url') || RH_SYNC_URL_PADRAO; },
+    senha: function () { return ls('eq_sync_senha'); },
+    bloqueado: false,
+    ativo: function () { return !!(RHB.url() && RHB.senha() && !RHB.bloqueado); },
+    call: function (obj) {
+      var body = JSON.stringify(Object.assign({ senha: RHB.senha() }, obj));
+      return fetch(RHB.url(), { method: 'POST', body: body, redirect: 'follow' })
+        .then(function (r) { if (!r.ok) throw new Error('rede'); return r.json(); })
+        .then(function (j) {
+          if (j && j.erro === 'senha') { RHB.bloqueado = true; rhPedirSenha(true); throw new Error('senha'); }
+          if (!j || j.erro) throw new Error((j && j.erro) || 'servidor');
+          return j;
+        });
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', function () { var im = document.getElementById('rhb-logo'); if (im && typeof LOGO_EMP_B64 !== 'undefined') im.src = LOGO_EMP_B64; });
+
+  // ── Tela de senha (uma vez por computador) ──
+  window.rhPedirSenha = function (errada) {
+    var m = document.getElementById('modal-rhb-senha');
+    if (!m) return;
+    document.getElementById('rhb-senha-erro').style.display = errada ? 'block' : 'none';
+    document.getElementById('rhb-senha').value = '';
+    var ov = document.getElementById('sync-overlay'); if (ov) ov.classList.remove('open');
+    m.classList.add('open');
+    setTimeout(function () { document.getElementById('rhb-senha').focus(); }, 60);
+  };
+  window.rhConfirmarSenha = function () {
+    var v = document.getElementById('rhb-senha').value.trim();
+    if (!v) return;
+    var btn = document.getElementById('rhb-senha-btn'); btn.disabled = true; btn.textContent = 'Verificando…';
+    ls('eq_sync_senha', v); RHB.bloqueado = false;
+    RHB.call({ acao: 'listar' }).then(function () {
+      document.getElementById('modal-rhb-senha').classList.remove('open');
+      toast('✅ Sincronização automática ativada neste computador');
+      iniciar();
+    }).catch(function (e) {
+      if (e.message !== 'senha') { document.getElementById('rhb-senha-erro').textContent = 'Não foi possível falar com o servidor. Verifique a internet e tente de novo.'; document.getElementById('rhb-senha-erro').style.display = 'block'; }
+    }).then(function () { btn.disabled = false; btn.textContent = 'Entrar'; });
+  };
+
+  // ── Configuração (endereço do servidor) ──
+  window.rhAbrirConfigSync = function () {
+    document.getElementById('rhb-url').value = RHB.url();
+    document.getElementById('rhb-cfg-senha').value = '';
+    document.getElementById('modal-rhb-cfg').classList.add('open');
+  };
+  window.rhSalvarConfigSync = function () {
+    var u = document.getElementById('rhb-url').value.trim(), sn = document.getElementById('rhb-cfg-senha').value.trim();
+    if (u && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(u)) { alert('O endereço deve começar com https://script.google.com/macros/s/ e terminar com /exec'); return; }
+    ls('eq_sync_url', u || null);
+    if (sn) ls('eq_sync_senha', sn);
+    RHB.bloqueado = false;
+    document.getElementById('modal-rhb-cfg').classList.remove('open');
+    if (!u && !RH_SYNC_URL_PADRAO) { toast('Sincronização automática desligada neste computador.'); return; }
+    if (!RHB.senha()) { rhPedirSenha(false); return; }
+    RHB.call({ acao: 'listar' }).then(function () { toast('✅ Conectado ao servidor de sincronização'); iniciar(); }).catch(function (e) { if (e.message !== 'senha') alert('Não foi possível conectar: ' + e.message); });
+  };
+
+  function iniciar() {
+    if (!RHB.ativo()) return;
+    ['setup-wizard', 'token-wizard'].forEach(function (id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    var ov = document.getElementById('sync-overlay'); if (ov) ov.classList.remove('open');
+    try { if (typeof init === 'function') init(); } catch (e) {}
+    if (window.RT) { RT.mtime = {}; }
+    if (typeof syncFromDrive === 'function') syncFromDrive().catch(function () {});
+  }
+  RHB.iniciar = iniciar;
+
+  // ── Entrada: com servidor configurado, não mostra tela de login ──
+  var _auto = window.rhAutoStart;
+  window.rhAutoStart = async function () {
+    if (RHB.url()) {
+      if (!RHB.senha()) { try { if (typeof init === 'function') init(); } catch (e) {} rhPedirSenha(false); return; }
+      iniciar(); return;
+    }
+    if (typeof _auto === 'function') return _auto.apply(this, arguments);
+  };
+  var _syncManual = window.syncManual;
+  window.syncManual = async function () {
+    if (RHB.url()) {
+      if (!RHB.ativo()) { rhPedirSenha(false); return; }
+      if (window.RT) { RT.mtime = {}; await RT.run(); }
+      toast(window.RT && RT.erro ? '⚠️ Sem conexão — tentando de novo automaticamente' : '✅ Tudo sincronizado!');
+      return;
+    }
+    return _syncManual.apply(this, arguments);
+  };
+
+  // ── JSON avulsos (fotos, etc.) ──
+  var _save = window.saveDriveJSON, _load = window.loadDriveJSON;
+  window.saveDriveJSON = async function (nome, data) {
+    if (RHB.ativo()) { try { await RHB.call({ acao: 'enviar', nome: nome, data: data }); } catch (e) {} return; }
+    return _save.apply(this, arguments);
+  };
+  window.loadDriveJSON = async function (nome) {
+    if (RHB.ativo()) { try { return (await RHB.call({ acao: 'baixar', nome: nome })).data; } catch (e) { return null; } }
+    return _load.apply(this, arguments);
+  };
+
+  // ── Arquivos anexados ──
+  function b64(file) {
+    return new Promise(function (ok, err) {
+      var r = new FileReader();
+      r.onload = function () { ok(String(r.result).split(',')[1] || ''); };
+      r.onerror = function () { err(new Error('Falha ao ler o arquivo')); };
+      r.readAsDataURL(file);
+    });
+  }
+  var CATEG = ['Funcionários', 'Empresas', 'Integração', 'Treinamentos', 'Material de Apoio', 'Políticas e Normas', 'Benefícios', 'Vagas', 'Campanhas'];
+  var ALIAS = { 'Politicas e Normas': 'Políticas e Normas', 'Beneficios': 'Benefícios' };
+  function caminho(c) {
+    var partes = String(c || 'Sem nome').split('/').map(function (x) { return x.trim(); }).filter(Boolean);
+    partes[0] = ALIAS[partes[0]] || partes[0];
+    if (CATEG.indexOf(partes[0]) !== -1) return partes;
+    return ['Funcionários', partes.join(' - ')];
+  }
+  async function enviarArquivo(file, partes) {
+    if (file.size > 35 * 1024 * 1024) throw new Error('Arquivo maior que 35 MB');
+    var j = await RHB.call({ acao: 'upload', partes: partes, nomeArq: file.name, mime: file.type || 'application/octet-stream', b64: await b64(file) });
+    return { id: j.id, name: j.name || file.name, webViewLink: j.url, mimeType: file.type, size: file.size };
+  }
+  var _up = window.uploadFileToDrive;
+  window.uploadFileToDrive = async function (file, funcNome) {
+    if (RHB.ativo() && !(typeof driveReady !== 'undefined' && driveReady)) return enviarArquivo(file, caminho(funcNome));
+    return _up.apply(this, arguments);
+  };
+  var _mtPasta = window._mtDrivePasta, _mtUp = window._mtDriveUpload;
+  window._mtDrivePasta = async function (parts) {
+    if (RHB.ativo() && !(typeof driveReady !== 'undefined' && driveReady)) return { rhbPartes: parts.map(function (p) { return String(p || 'Sem título').replace(/[\/]/g, '-').trim().slice(0, 80) || 'Sem título'; }) };
+    return _mtPasta.apply(this, arguments);
+  };
+  window._mtDriveUpload = function (file, parent, onProg) {
+    if (parent && parent.rhbPartes) { if (onProg) onProg(0.3); return enviarArquivo(file, parent.rhbPartes).then(function (r) { if (onProg) onProg(1); return r; }); }
+    return _mtUp.apply(this, arguments);
+  };
+  var _getFolder = window.getOrCreateFuncFolder;
+  window.getOrCreateFuncFolder = async function (c) {
+    if (RHB.ativo() && !(typeof driveReady !== 'undefined' && driveReady)) { try { return (await RHB.call({ acao: 'pasta', partes: caminho(c) })).id; } catch (e) { return null; } }
+    return _getFolder.apply(this, arguments);
+  };
+  var _abrirPasta = window.rhAbrirPastaDrive;
+  window.rhAbrirPastaDrive = function () {
+    if (RHB.ativo() && !(typeof driveReady !== 'undefined' && driveReady)) {
+      var w = window.open('about:blank', '_blank');
+      RHB.call({ acao: 'pasta', partes: [] }).then(function (j) { if (w) w.location = j.url; }).catch(function () { if (w) w.close(); toast('Não foi possível abrir a pasta.', 'warn'); });
+      return;
+    }
+    return _abrirPasta.apply(this, arguments);
+  };
+
+  // Fotos recebidas de outro computador entram na hora
+  var _set = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    _set.call(this, k, v);
+    if (this === localStorage && k === 'eq_fotos_func') { try { _fotoStore = JSON.parse(v) || {}; } catch (e) {} }
+  };
+})();
+</script>
+
 </body>
 </html>
