@@ -2867,9 +2867,9 @@ document.addEventListener('DOMContentLoaded', function () {
 // CONFIGURAÇÃO GOOGLE
 // ============================================================
 // Código de acesso (Client ID do Google Cloud) já embutido: ninguém precisa digitar
-const CLIENT_ID_PADRAO = '704641874797-9birlc4pvanm92458apvlbj3g7lrkiv7.apps.googleusercontent.com';
+const CLIENT_ID_PADRAO = '959359968321-6v5gabc1tarbkr560ser07h261di89vp.apps.googleusercontent.com';
 let CLIENT_ID = CLIENT_ID_PADRAO;
-try { if (!localStorage.getItem('eq_client_id')) localStorage.setItem('eq_client_id', CLIENT_ID_PADRAO); } catch (e) {}
+try { localStorage.setItem('eq_client_id', CLIENT_ID_PADRAO); } catch (e) {}
 const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets.readonly';
 let driveReady = false;
 let driveToken = null;
