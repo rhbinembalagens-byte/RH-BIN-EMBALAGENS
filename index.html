@@ -629,6 +629,55 @@ thead th{background:#fbf1e4;color:#7a1215;border-bottom:2px solid var(--gold);}
 .dmx-editor p{margin:0 0 10px;}
 .dmx-acoes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
 </style>
+<style id="rh-layout-css">
+/* ── Layout: menu lateral sem cortes + telas menores ── */
+#sidebar{overflow-x:hidden;}
+#sidebar-toggle{position:fixed;top:16px;left:231px;right:auto;z-index:120;transition:left .3s;}
+body.sidebar-collapsed #sidebar-toggle{left:42px;}
+#sidebar.collapsed{width:56px;}
+#main{min-width:0;}
+@media(min-width:761px){body.sidebar-collapsed #main,#sidebar.collapsed ~ #main{margin-left:56px!important;}body:not(.sidebar-collapsed) #main{margin-left:245px!important;}}
+#sidebar.collapsed .sidebar-logo{padding:0!important;min-height:60px!important;border-bottom:1px solid rgba(212,175,55,.45);}
+#sidebar.collapsed .nav-item{padding:12px 0;justify-content:center;gap:0;}
+#sidebar.collapsed .nav-item span{display:none!important;}
+#sidebar.collapsed .nav-item:hover span{display:none!important;}
+#sidebar.collapsed .nav-item svg{width:20px;height:20px;}
+#sidebar.collapsed{scrollbar-width:none;}
+#sidebar.collapsed::-webkit-scrollbar{display:none;}
+.tb-lbl{white-space:nowrap;}
+#topbar{gap:12px;}
+.topbar-actions{flex-wrap:nowrap;min-width:0;}
+.topbar-actions .btn{white-space:nowrap;}
+.page-title{overflow:hidden;text-overflow:ellipsis;}
+#drive-badge{white-space:nowrap;}
+#mob-menu{display:none;width:38px;height:38px;border-radius:10px;border:1.5px solid var(--gold);background:#7a1215;color:var(--gold-light);font-size:18px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;}
+#mob-backdrop{display:none;position:fixed;inset:0;background:rgba(40,8,10,.45);z-index:99;}
+@media(max-width:1250px){.tb-lbl{display:none;}.rh-tenant-chip strong{display:none;}.topbar-actions{gap:6px;}}
+@media(max-width:760px){
+  #sidebar{transform:translateX(-100%);width:265px!important;box-shadow:4px 0 24px rgba(0,0,0,.35);}
+  #sidebar.open{transform:translateX(0);}
+  #sidebar.collapsed .nav-item span,#sidebar.collapsed .nav-section,#sidebar.collapsed .tagline,#sidebar.collapsed .sidebar-footer,#sidebar.collapsed .sidebar-logo img{display:revert!important;}
+  #sidebar.collapsed .nav-item{padding:10px 18px;justify-content:flex-start;gap:10px;}
+  #main{margin-left:0!important;}
+  #sidebar-toggle{display:none;}
+  #mob-menu{display:inline-flex;}
+  body.menu-aberto #mob-backdrop{display:block;}
+  #topbar{padding:0 10px;}
+  #content{padding:14px 12px;}
+  .card{padding:16px;}
+  #drive-badge-txt{display:none;}
+  .rh-tenant-chip{padding:3px;}
+  .rh-tenant-chip .rh-tc-dot{display:none;}
+  .modal{padding:18px;}
+  .card{overflow-x:auto;}
+  #main{max-width:100vw;overflow-x:hidden;}
+  .topbar-actions{overflow-x:auto;scrollbar-width:none;flex-shrink:1;}
+  .topbar-actions::-webkit-scrollbar{display:none;}
+  #drive-badge{padding:4px 6px!important;}
+  .section-header,.card-header{flex-wrap:wrap;gap:8px;}
+}
+@media(max-width:420px){#btn-sync,.btn-whatsapp{display:none!important;}}
+</style>
 </head>
 <body>
 <!-- ════════ DADOS DA EMPRESA ════════ -->
@@ -676,8 +725,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var chip = document.createElement('div');
     chip.className = 'rh-tenant-chip';
     chip.innerHTML = '<span class="rh-tc-dot"></span><strong>' + T.nome + '</strong>' +
-      '<button class="btn btn-outline btn-sm" onclick="rhAbrirPerfil()" title="Razão social, CNPJ e contatos usados nos documentos">⚙️ Dados da empresa</button>' +
-      '<button class="btn btn-outline btn-sm" onclick="rhAbrirPastaDrive()" title="Abrir a pasta da empresa no Google Drive">📂 Pasta</button>';
+      '<button class="btn btn-outline btn-sm" onclick="rhAbrirPerfil()" title="Razão social, CNPJ e contatos usados nos documentos">⚙️<span class="tb-lbl"> Dados da empresa</span></button>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhAbrirPastaDrive()" title="Abrir a pasta da empresa no Google Drive">📂<span class="tb-lbl"> Pasta</span></button>';
     actions.insertBefore(chip, actions.firstChild);
   }
   // Mostra a empresa na tela de conexão com o Drive
@@ -771,6 +820,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
 <div style="display:flex;flex:1;">
+<div id="mob-backdrop" onclick="rhMenuMobile(false)"></div>
 <aside id="sidebar">
   <button id="sidebar-toggle" onclick="toggleSidebar()" title="Recolher/Expandir menu">&#9776;</button>
   <div class="sidebar-logo">
@@ -828,17 +878,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <div id="main">
   <div id="topbar">
-    <span class="page-title" id="topbar-title">Dashboard</span>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;"><button id="mob-menu" onclick="rhMenuMobile()" title="Menu" aria-label="Abrir menu">&#9776;</button><span class="page-title" id="topbar-title">Dashboard</span></div>
     <div class="topbar-actions">
-      <span id="drive-badge" style="font-size:12px;padding:4px 10px;border-radius:20px;background:var(--gray-100);color:var(--gray-600);display:none;align-items:center;gap:5px;">
+      <span id="drive-badge" onclick="if(!(window.driveReady)){syncManual()}else if(window.RT){RT.run()}" style="cursor:pointer;font-size:12px;padding:4px 10px;border-radius:20px;background:var(--gray-100);color:var(--gray-600);display:none;align-items:center;gap:5px;">
         <span id="drive-badge-dot" style="width:7px;height:7px;border-radius:50%;background:#ccc;display:inline-block;"></span>
         <span id="drive-badge-txt">Drive</span>
       </span>
       <button class="btn btn-outline btn-sm" id="btn-clear-sig" onclick="clearSavedSignature()" title="Apagar assinatura salva" style="font-size:12px;display:none;">✍️ Limpar Assinatura</button>
-      <button class="btn btn-outline btn-sm" id="btn-sync" onclick="syncManual()" title="Buscar dados mais recentes do Drive" style="font-size:12px;">🔄 Sincronizar / Iniciar</button>
+      <button class="btn btn-outline btn-sm" id="btn-sync" onclick="syncManual()" title="Buscar dados mais recentes do Drive" style="font-size:12px;">🔄<span class="tb-lbl"> Sincronizar / Iniciar</span></button>
       <button class="btn btn-whatsapp btn-sm" onclick="openModal(&#39;modal-wha&#39;)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"></path></svg>
-        WhatsApp
+        <span class="tb-lbl">WhatsApp</span>
       </button>
       <div style="width:36px;height:36px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;cursor:pointer;" id="user-avatar" title="Conta Google">A</div>
     </div>
@@ -2654,8 +2704,8 @@ document.addEventListener('DOMContentLoaded', function () {
       <button class="btn btn-primary" style="width:100%;padding:12px;font-size:14px;" onclick="syncOverlayAction()">
         ☁️ Conectar ao Google Drive e Sincronizar
       </button>
-      <button class="btn btn-outline" style="width:100%;padding:10px;font-size:13px;" onclick="closeSyncOverlay()">
-        Continuar com dados locais
+      <button class="btn btn-outline" style="width:100%;padding:8px;font-size:12px;" onclick="if(confirm('Sem entrar com o Google, o que você fizer agora fica salvo só neste computador e não aparece nas outras máquinas até você conectar.\n\nContinuar mesmo assim?'))closeSyncOverlay()">
+        Continuar sem sincronizar (só neste computador)
       </button>
     </div>
 
@@ -3334,7 +3384,7 @@ async function syncManual() {
   const btn = document.getElementById('btn-sync');
   if (btn) { btn.innerHTML = '<span class="spinner" style="border-top-color:#fff"></span>'; btn.disabled = true; }
   await syncFromDrive();
-  if (btn) { btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false; }
+  if (btn) { btn.innerHTML = '🔄<span class="tb-lbl"> Sincronizar</span>'; btn.disabled = false; }
 }
 
 // Save any DB key to Drive
@@ -6664,7 +6714,7 @@ function hideReconnectButton() {
   if (btn) {
     btn.className = 'btn btn-outline btn-sm';
     btn.style.cssText = 'font-size:12px;';
-    btn.innerHTML = '🔄 Sincronizar / Iniciar';
+    btn.innerHTML = '🔄<span class="tb-lbl"> Sincronizar / Iniciar</span>';
   }
 }
 
@@ -9746,7 +9796,7 @@ async function syncManual() {
   var btn = document.getElementById('btn-sync');
   if (btn) { btn.innerHTML = '<span class="spinner" style="border-top-color:#fff;width:14px;height:14px;border-width:2px;"></span>'; btn.disabled = true; }
   await syncFromDrive();
-  if (btn) { btn.innerHTML = '🔄 Sincronizar'; btn.disabled = false; }
+  if (btn) { btn.innerHTML = '🔄<span class="tb-lbl"> Sincronizar</span>'; btn.disabled = false; }
   toast('✅ Dados sincronizados do Drive!');
 }
 
@@ -11961,7 +12011,7 @@ function toggleSidebar() {
   var btn      = document.getElementById('sidebar-toggle');
   var collapsed = sidebar.classList.toggle('collapsed');
   document.body.classList.toggle('sidebar-collapsed', collapsed);
-  if (main)  main.style.marginLeft = collapsed ? '52px' : '245px';
+  if (main)  main.style.marginLeft = '';
   if (btn)   btn.innerHTML = collapsed ? '&#9776;' : '&#10005;';
   btn.title = collapsed ? 'Expandir menu' : 'Recolher menu';
   // Save preference
@@ -11975,7 +12025,7 @@ function initSidebarState() {
       var main    = document.getElementById('main');
       var btn     = document.getElementById('sidebar-toggle');
       if (sidebar) sidebar.classList.add('collapsed');
-      if (main)    main.style.marginLeft = '52px';
+      if (main)    main.style.marginLeft = '';
       if (btn)     { btn.innerHTML = '&#9776;'; btn.title = 'Expandir menu'; }
       document.body.classList.add('sidebar-collapsed');
     }
@@ -14654,7 +14704,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
     LIST: ['funcionarios','departamentos','empresas','usuarios','ferias','exames','epi','uni-mov','uni-itens','uniformes','vagas',
            'pagamentos','treinamentos','campanhas','politicas','benef-atrib','benef-compras','flash-hist','pendencias',
            'mat-trein','cronograma-trein','integracoes','cargos','escalas','material-apoio'],
-    OBJ: ['uni-est','perfil_empresa'],
+    OBJ: ['uni-est','perfil_empresa','assinaturas'],
     ids: {}, mtime: {}, base: {}, busy: false, again: false, timer: null, poll: null, started: false,
     lastOk: 0, erro: '', renewArmed: false, folderCache: {}
   };
@@ -14862,7 +14912,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
     var modalAberto = document.querySelector('.modal-bg.open');
     var rd = { funcionarios: 'rdFuncAtual', empresas: 'rdEmp', vagas: 'rdVagas', experiencia: 'rdExp', ferias: 'rdFer', exames: 'rdExm',
                beneficios: 'rdBenef', aniversariantes: 'rdBday', politicas: 'rdPol', integracao: 'rdIntegracao', treinamentos: 'rdTreinamentosMat', apoio: 'rdApoio',
-               dashboard: 'updDash', estrutura: 'rdEstrutura' };
+               dashboard: 'updDash', estrutura: 'rdEstrutura', documentos: 'dmxRender' };
     var fn = rd[id];
     if (fn && typeof window[fn] === 'function' && !(modalAberto && id === 'funcionarios')) { try { window[fn](); } catch (e) {} }
     if (typeof toast === 'function') toast('🔄 Dados atualizados de outro computador');
@@ -15460,5 +15510,62 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
 })();
 </script>
 
+<script>
+/* ── Menu no celular + dicas no menu recolhido ── */
+function rhMenuMobile(abrir) {
+  var sb = document.getElementById('sidebar'); if (!sb) return;
+  if (abrir === undefined) abrir = !sb.classList.contains('open');
+  sb.classList.toggle('open', abrir);
+  document.body.classList.toggle('menu-aberto', abrir);
+}
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('#sidebar .nav-item').forEach(function (n) {
+    Array.prototype.slice.call(n.childNodes).forEach(function (c) {
+      if (c.nodeType === 3 && c.textContent.trim()) { var w = document.createElement('span'); w.textContent = c.textContent.trim(); n.replaceChild(w, c); }
+    });
+    var sp = n.querySelector('span'); if (sp && !n.title) n.title = sp.textContent.trim();
+    n.addEventListener('click', function () { if (window.innerWidth <= 760) rhMenuMobile(false); });
+  });
+  var sb = document.getElementById('sidebar');
+  if (sb) sb.addEventListener('scroll', function () { if (sb.scrollLeft) sb.scrollLeft = 0; });
+});
+/* ── Assinaturas também sincronizadas entre computadores ── */
+(function () {
+  var MAP = { monica: 'eq_monica_assinatura', bruno: 'eq_bruno_assinatura' };
+  var proto = Storage.prototype, _set = proto.setItem, _rem = proto.removeItem, _get = proto.getItem;
+  var dentro = false;
+  function juntar() {
+    var o = {}; Object.keys(MAP).forEach(function (k) { var v = _get.call(localStorage, MAP[k]); if (v) o[k] = v; });
+    return o;
+  }
+  function publicar() {
+    if (dentro) return; dentro = true;
+    try { if (typeof DB !== 'undefined' && DB.so) DB.so('assinaturas', juntar()); } catch (e) {}
+    dentro = false;
+  }
+  function aplicar(json) {
+    var o = {}; try { o = JSON.parse(json || '{}') || {}; } catch (e) {}
+    Object.keys(MAP).forEach(function (k) {
+      if (o[k]) { if (_get.call(localStorage, MAP[k]) !== o[k]) _set.call(localStorage, MAP[k], o[k]); }
+      else if (_get.call(localStorage, MAP[k])) _rem.call(localStorage, MAP[k]);
+    });
+  }
+  proto.setItem = function (k, v) {
+    _set.call(this, k, v);
+    if (this !== localStorage || dentro) return;
+    if (k === MAP.monica || k === MAP.bruno) publicar();
+    else if (k === 'eq_assinaturas') aplicar(v);
+  };
+  proto.removeItem = function (k) {
+    _rem.call(this, k);
+    if (this === localStorage && !dentro && (k === MAP.monica || k === MAP.bruno)) publicar();
+  };
+  // Primeira vez: assinaturas já salvas neste computador entram na sincronização
+  try {
+    var atual = _get.call(localStorage, 'eq_assinaturas');
+    if (!atual || atual === '{}') { var j = juntar(); if (Object.keys(j).length) document.addEventListener('DOMContentLoaded', publicar); }
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
