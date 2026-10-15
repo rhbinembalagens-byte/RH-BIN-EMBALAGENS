@@ -14831,7 +14831,8 @@ function abrirManual() {
       <div class="tip">💡 Os arquivos ficam no Drive, na pasta <em>Material de Apoio</em> da empresa. O ✎ e o ✕ também valem para os arquivos de Integração, Treinamentos e Documentos da empresa.</div>`],
     ['s10', '10. Gerar Documentos e Políticas', `
       <ul><li><strong>Gerar Documentos:</strong> Termo de Responsabilidade (FOR01), Autorização de Imagem e Voz (FOR02), Termo de Adesão – Saúde e Vacinação e Ficha de Presença. A janela traz os dados do colaborador e da empresa para conferir antes de gerar.</li>
-      <li><strong>Políticas & Normas:</strong> modelo oficial POL01 – Política de Prêmio Assiduidade (com Termo de Ciência) e as políticas que você cadastrar.</li></ul>`],
+      <li><strong>Políticas & Normas:</strong> modelo oficial POL01 – Política de Prêmio Assiduidade (com Termo de Ciência) e as políticas que você cadastrar. Qualquer política pode ser excluída (🗑️ — a POL01 pode ser restaurada) e novas podem ser trazidas em <em>📥 Importar política</em>: arquivos Word (.docx) viram documento para gerar por funcionário com Termo de Ciência; PDF e imagens ficam como arquivo para consulta.</li>
+      <li><strong>⏰ Vencimento de férias:</strong> 30 dias antes da data limite de saída, as férias ainda não programadas aparecem no quadro do topo de Férias, no Dashboard e com contador no menu.</li></ul>`],
     ['s11', '11. Salvamento e Google Drive', `
       <ul>
         <li>Tudo é salvo automaticamente no Drive em cerca de 1 segundo; a cada 15 segundos o sistema busca o que foi alterado em outros computadores.</li>
@@ -15680,6 +15681,8 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
       toast('Texto importado ✅ Agora insira os campos automáticos onde precisar.');
     }).catch(function (e) { alert('Erro ao importar: ' + e.message); });
   };
+
+  window.dmxMontarPagina = montarPagina; window.dmxLimpar = limpar; window.dmxCarregarMammoth = carregarMammoth;
 
   // Sincroniza com o Drive junto com o resto do sistema
   if (window.RT && RT.LIST) {
@@ -17093,6 +17096,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     ['bonif', 'qCaixa', 'vt', 'comb', 'conv', 'va'].forEach(function (k) { o[k] = moeda(r[k]); });
     o.codEmp = texto(r.codEmp); o.codEpr = texto(r.codEpr);
     o.end = montarEndereco(o);
+    ['n', 'rg', 'rgOrg', 'car', 'conta', 'endLog', 'endNum', 'endComp', 'endBairro', 'endCid', 'end', 'folga', 'codEmp', 'codEpr'].forEach(function (k) { if (typeof o[k] === 'string') o[k] = o[k].toLocaleUpperCase('pt-BR'); });
     Object.keys(o).forEach(function (k) { if (vazio(o[k])) delete o[k]; });
     return o;
   }
@@ -17301,7 +17305,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var list = DB.g('funcionarios').filter(function (f) { return !add[f.id]; }).map(function (f) {
       var fe = u.filled[f.id]; if (!fe) return f;
       var c = Object.assign({}, f);
-      Object.keys(fe).forEach(function (k) { if (String(c[k]) === String(fe[k].v)) { if (fe[k].o === null) delete c[k]; else c[k] = fe[k].o; } });
+      Object.keys(fe).forEach(function (k) { if (String(c[k]).toLocaleUpperCase('pt-BR') === String(fe[k].v).toLocaleUpperCase('pt-BR')) { if (fe[k].o === null) delete c[k]; else c[k] = fe[k].o; } });
       return c;
     });
     DB.s('funcionarios', list);
@@ -17443,6 +17447,374 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
 
   injetarFormulario(); injetarImportacao(); injetarAniversarioEmpresa();
+})();
+
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// 1) CADASTRO DE FUNCIONÁRIOS EM MAIÚSCULAS
+//    Campos de texto livre ficam em MAIÚSCULAS (formulário, importações e cadastros já existentes).
+//    Não mexe em listas de opções (sexo, estado civil, status, contrato, escala), datas, CPF,
+//    telefone e e-mail — assim nada do sistema que depende desses valores deixa de funcionar.
+// ════════════════════════════════════════════════════════════
+(function () {
+  var CAMPOS_MAIUSC = ['n', 'rg', 'rgOrg', 'rgUf', 'nac', 'nat', 'mae', 'pai', 'end', 'endLog', 'endNum', 'endComp', 'endBairro', 'endCid', 'endUf',
+                       'car', 'ges', 'pis', 'ctps', 'folga', 'conta', 'codEmp', 'codEpr', 'tamCamisa', 'tamJaleco', 'tamCalca', 'tamCalcado'];
+  var IDS_FORM = ['fn', 'frg', 'fend', 'fcar', 'fges', 'fpis', 'fctps', 'frguf', 'frgorg', 'flog', 'fnum', 'fcomp', 'fbairro', 'fcid', 'fuf',
+                  'ffolga', 'fcodepr', 'fcodemp', 'fconta'];
+  function up(s) { return String(s).toLocaleUpperCase('pt-BR'); }
+  function padronizar(f) {
+    var mudou = false, c = f;
+    CAMPOS_MAIUSC.forEach(function (k) {
+      if (typeof c[k] !== 'string' || !c[k]) return;
+      var u = up(c[k]);
+      if (u !== c[k]) { if (c === f) c = Object.assign({}, f); c[k] = u; mudou = true; }
+    });
+    return mudou ? c : null;
+  }
+  var _rodando = false;
+  window.rhPadronizarFuncionarios = function () {
+    if (_rodando) return 0;
+    _rodando = true;
+    try {
+      var list = DB.g('funcionarios'), n = 0;
+      var nova = list.map(function (f) { var c = f && typeof f === 'object' ? padronizar(f) : null; if (c) { n++; return c; } return f; });
+      if (n) DB.s('funcionarios', nova);
+      return n;
+    } catch (e) { return 0; } finally { _rodando = false; }
+  };
+
+  // visual em maiúsculas enquanto digita
+  var css = document.createElement('style');
+  css.textContent = IDS_FORM.map(function (id) { return '#modal-func #' + id; }).join(',') + '{text-transform:uppercase;}';
+  document.head.appendChild(css);
+
+  // ao salvar, grava em maiúsculas
+  var _sav = window.savFunc;
+  window.savFunc = async function () {
+    IDS_FORM.forEach(function (id) { var e = document.getElementById(id); if (e && e.value) e.value = up(e.value); });
+    var r = await _sav.apply(this, arguments);
+    rhPadronizarFuncionarios();
+    return r;
+  };
+  // corrige os já cadastrados sempre que a lista é desenhada (inclui dados que chegam pela sincronização)
+  var _rdFunc = window.rdFunc;
+  window.rdFunc = function () { rhPadronizarFuncionarios(); return _rdFunc.apply(this, arguments); };
+  var _updDash = window.updDash;
+  window.updDash = function () { rhPadronizarFuncionarios(); return _updDash.apply(this, arguments); };
+
+  // pasta do funcionário no Drive: encontra a pasta antiga mesmo que o nome tenha mudado só de minúscula para MAIÚSCULA
+  var _pasta = window.getOrCreateFuncFolder;
+  if (typeof _pasta === 'function') {
+    window.getOrCreateFuncFolder = async function (nome) {
+      try {
+        if (typeof driveReady !== 'undefined' && driveReady && typeof rhFolderId !== 'undefined' && rhFolderId && nome) {
+          var chave = function (s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+          var prim = String(nome).trim().split(/\s+/)[0].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          var q = "mimeType='application/vnd.google-apps.folder' and '" + rhFolderId + "' in parents and trashed=false and name contains '" + prim + "'";
+          var res = await driveRequest('files', 'GET', { q: q, fields: 'files(id,name)', spaces: 'drive', pageSize: 1000 });
+          var achou = (res.files || []).find(function (x) { return chave(x.name) === chave(nome); });
+          if (achou) return achou.id;
+        }
+      } catch (e) {}
+      return _pasta.apply(this, arguments);
+    };
+  }
+
+  rhPadronizarFuncionarios();
+})();
+
+// ════════════════════════════════════════════════════════════
+// 2) POLÍTICAS — excluir (inclusive a POL01 padrão) e importar novas (.docx, .pdf…)
+//    eq_pol-ocultas: [{id}]  políticas padrão retiradas da lista (podem ser restauradas)
+//    Política importada de Word: guarda o texto (gera documento por funcionário + Termo de Ciência)
+// ════════════════════════════════════════════════════════════
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  var CAT_ICON = { 'Política Interna': '📄', 'Norma Regulamentadora': '⚠️', 'Procedimento': '📝', 'Manual': '📚', 'Comunicado': '📢', 'Outro': '📋' };
+
+  if (typeof MT_KINDS !== 'undefined' && !MT_KINDS.politica) MT_KINDS.politica = { key: 'politicas', folder: 'Políticas e Normas', titulo: 'Políticas & Normas', icone: '🛡' };
+  if (window.RT && RT.LIST && RT.LIST.indexOf('pol-ocultas') === -1) { RT.LIST.push('pol-ocultas'); if (RT.ALL && RT.ALL.indexOf('pol-ocultas') === -1) RT.ALL.push('pol-ocultas'); }
+  function ocultas() { return DB.g('pol-ocultas').map(function (x) { return x.id; }); }
+
+  // ── tela ──
+  function prepararTela() {
+    var sec = el('sec-politicas'); if (!sec || el('pol-imp-inp')) return;
+    var bNova = sec.querySelector('.section-header .btn-primary');
+    if (bNova) {
+      var box = document.createElement('div'); box.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+      bNova.parentNode.insertBefore(box, bNova);
+      box.innerHTML = '<label class="btn btn-outline" style="cursor:pointer;margin:0;" title="Word (.docx) vira documento para gerar por funcionário; PDF e outros ficam como arquivo">📥 Importar política' +
+        '<input type="file" id="pol-imp-inp" multiple accept=".docx,.pdf,.doc,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="polImportar(this)"></label>';
+      box.appendChild(bNova);
+    }
+    // POL01: botão de excluir
+    var card = Array.prototype.find.call(sec.querySelectorAll('.pol-card'), function (c) { return c.querySelector('[onclick*="gerarPol01Assiduidade"]'); });
+    if (card) {
+      card.setAttribute('data-polbase', 'pol01');
+      var g = card.querySelector('[onclick*="gerarPol01Assiduidade"]');
+      var w = document.createElement('div'); w.style.cssText = 'display:flex;gap:6px;align-items:center;';
+      g.parentNode.insertBefore(w, g); w.appendChild(g);
+      w.insertAdjacentHTML('beforeend', '<button class="btn-icon danger" title="Excluir esta política da lista" onclick="polExcluirBase(\'pol01\')">&#128465;</button>');
+      var tit = card.previousElementSibling; if (tit && !tit.classList.contains('pol-card')) tit.id = 'pol-tit-oficiais';
+    }
+    var lista = el('pol-list');
+    if (lista) lista.insertAdjacentHTML('afterend', '<div id="pol-restaurar" style="display:none;margin-top:10px;font-size:12.5px;color:var(--gray-500);">Há política padrão excluída da lista. <a href="#" onclick="polRestaurarBase();return false;" style="color:var(--green-dark);font-weight:600;">♻️ Restaurar</a></div>');
+    // modal para gerar documento de política importada
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-pol-gerar"><div class="modal" style="max-width:520px;">' +
+      '<div class="modal-header"><span class="modal-title" id="polg-titulo">📄 Gerar política</span><button class="modal-close" onclick="closeModal(\'modal-pol-gerar\')">×</button></div>' +
+      '<div class="form-grid"><div class="form-group form-full"><label>Funcionário</label><select id="polg-func"></select></div>' +
+      '<div class="form-group form-full"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-size:13px;color:var(--gray-800);cursor:pointer;"><input type="checkbox" id="polg-termo" checked style="width:auto;"> Incluir <strong>Termo de Ciência</strong> para o funcionário assinar</label></div></div>' +
+      '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">Campos do texto como {{NOME}}, {{CPF}}, {{CARGO}} e {{EMPRESA}} são preenchidos com os dados do funcionário.</div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-pol-gerar\')">Cancelar</button><button class="btn btn-primary" onclick="polGerarConfirmar()">📄 Gerar documento</button></div></div></div>');
+  }
+
+  function aplicarOcultas() {
+    var oc = ocultas(), sec = el('sec-politicas'); if (!sec) return;
+    var vis = 0;
+    sec.querySelectorAll('[data-polbase]').forEach(function (c) { var h = oc.indexOf(c.getAttribute('data-polbase')) !== -1; c.style.display = h ? 'none' : ''; if (!h) vis++; });
+    var t = el('pol-tit-oficiais'); if (t) t.style.display = vis ? '' : 'none';
+    var r = el('pol-restaurar'); if (r) r.style.display = oc.length ? '' : 'none';
+  }
+  window.polExcluirBase = function (id) {
+    if (!confirm('Excluir a "POL01 · Política de Prêmio Assiduidade" da lista de políticas?\n\nVocê pode trazê-la de volta depois em "♻️ Restaurar".')) return;
+    var l = DB.g('pol-ocultas'); if (!l.some(function (x) { return x.id === id; })) l.push({ id: id });
+    DB.s('pol-ocultas', l); aplicarOcultas(); toast('Política excluída da lista.');
+  };
+  window.polRestaurarBase = function () { DB.s('pol-ocultas', []); aplicarOcultas(); toast('Política padrão restaurada ✅'); };
+
+  // lista de políticas cadastradas/importadas (mesmo visual de antes + gerar documento e arquivos)
+  window.rdPol = function () {
+    prepararTela(); aplicarOcultas();
+    var list = DB.g('politicas'), box = el('pol-list'); if (!box) return;
+    if (!list.length) { box.innerHTML = '<div class="alert alert-info">&#128737; Nenhuma política cadastrada. Use <strong>📥 Importar política</strong> ou <strong>+ Nova Política</strong>.</div>'; return; }
+    box.innerHTML = list.map(function (p) {
+      var mats = typeof _mtMats === 'function' ? _mtMats(p) : (p.files || []);
+      var arqs = mats.map(function (m) {
+        var ic = (typeof MT_ICON !== 'undefined' && MT_ICON[m.tipo]) || '📎';
+        if (m.src === 'drive' || m.src === 'local') return '<button class="btn btn-outline btn-sm" onclick="mtAbrir(\'politica\',\'' + p.id + '\',\'' + m.id + '\')">' + ic + ' ' + esc(m.name || m.nome) + '</button>';
+        return m.url ? '<a href="' + esc(m.url) + '" target="_blank" class="btn btn-outline btn-sm">' + ic + ' ' + esc(m.name) + '</a>' : '<span class="btn btn-outline btn-sm">' + ic + ' ' + esc(m.name) + '</span>';
+      }).join('');
+      var gerar = p.html ? '<button class="btn btn-primary btn-sm" onclick="polGerar(\'' + p.id + '\')">📄 Gerar documento</button>' : '';
+      return '<div class="pol-card"><div class="pol-icon">' + (CAT_ICON[p.cat] || '📋') + '</div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;"><div>' +
+        '<div class="pol-title">' + esc(p.titulo) + '</div><div class="pol-desc">' + esc(p.cat || '') + ' | Versão: ' + esc(p.ver || '—') + ' | Publicado: ' + (p.data ? fd(p.data) : '—') +
+        (p.html ? ' | Inclui Termo de Ciência' : '') + '</div>' + (p.desc ? '<p style="font-size:13px;color:var(--gray-600);margin-top:6px">' + esc(p.desc) + '</p>' : '') + '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center;">' + gerar +
+        '<button class="btn-icon" title="Editar" onclick="editPol(\'' + p.id + '\')">&#9999;&#65039;</button>' +
+        '<button class="btn-icon danger" title="Excluir" onclick="polExcluir(\'' + p.id + '\')">&#128465;</button></div></div>' +
+        (arqs ? '<div class="pol-docs">' + arqs + '</div>' : '') + '</div></div>';
+    }).join('');
+  };
+  window.polExcluir = async function (id) {
+    var p = DB.g('politicas').find(function (x) { return x.id === id; }); if (!p) return;
+    if (!confirm('Excluir a política "' + p.titulo + '"?\n\nEssa ação não pode ser desfeita.')) return;
+    DB.s('politicas', DB.g('politicas').filter(function (x) { return x.id !== id; }));
+    if (typeof driveReady !== 'undefined' && driveReady) { try { await driveSync('politicas'); } catch (e) {} }
+    rdPol(); toast('Política excluída.');
+  };
+
+  // ── importar ──
+  function tituloDoArquivo(nome) { return nome.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  window.polImportar = async function (inp) {
+    var files = Array.prototype.slice.call(inp.files || []); inp.value = ''; if (!files.length) return;
+    var feitos = 0, subst = 0;
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i], titulo = tituloDoArquivo(file.name), html = '';
+      try {
+        if (/\.docx$/i.test(file.name)) {
+          toast('Lendo ' + file.name + '…');
+          var mm = await dmxCarregarMammoth();
+          var r = await mm.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+          html = dmxLimpar(r.value || '');
+          var tmp = document.createElement('div'); tmp.innerHTML = html;
+          if (!tmp.textContent.trim()) { alert('O arquivo "' + file.name + '" não tem texto para importar.'); continue; }
+        }
+        var list = DB.g('politicas'), hoje = td();
+        var ex = list.find(function (x) { return norm(x.titulo) === norm(titulo); });
+        var trocar = ex && confirm('Já existe a política "' + ex.titulo + '".\n\nSubstituir pela nova versão do arquivo "' + file.name + '"?\n(OK = substituir · Cancelar = importar como nova)');
+        var rec = trocar ? ex : { id: uid(), titulo: titulo, cat: 'Política Interna', ver: 'v1.0', data: hoje, desc: '', files: [] };
+        var mat = typeof _mtGuardarArquivo === 'function' ? await _mtGuardarArquivo('politica', rec, file) : null;
+        list = DB.g('politicas');
+        if (trocar) {
+          var idx = list.findIndex(function (x) { return x.id === ex.id; }); if (idx < 0) continue;
+          var p = Object.assign({}, list[idx]);
+          var vn = String(p.ver || 'v1.0').match(/(\d+)(?:\.(\d+))?/);
+          p.ver = vn ? 'v' + (parseInt(vn[1], 10) + 1) + '.0' : 'v2.0';
+          p.data = hoje; p.html = html || undefined; if (!html) delete p.html;
+          p.mats = mat ? [mat] : []; p.files = [];
+          list[idx] = p; subst++;
+        } else {
+          if (html) rec.html = html;
+          rec.mats = mat ? [mat] : [];
+          list.push(rec); feitos++;
+        }
+        DB.s('politicas', list);
+      } catch (e) { alert('Não foi possível importar "' + file.name + '": ' + (e && e.message ? e.message : e)); }
+    }
+    if (typeof driveReady !== 'undefined' && driveReady) { try { await driveSync('politicas'); } catch (e) {} }
+    rdPol();
+    if (feitos || subst) toast('✅ ' + (feitos ? feitos + ' política(s) importada(s)' : '') + (feitos && subst ? ' e ' : '') + (subst ? subst + ' substituída(s)' : ''));
+  };
+
+  // ── gerar documento de política importada ──
+  var _polGerarId = null;
+  window.polGerar = function (id) {
+    var p = DB.g('politicas').find(function (x) { return x.id === id; }); if (!p || !p.html) return;
+    _polGerarId = id;
+    el('polg-titulo').textContent = '📄 ' + p.titulo;
+    var s = el('polg-func');
+    s.innerHTML = '<option value="">— Em branco (sem funcionário) —</option>' + DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado'; })
+      .sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); }).map(function (f) { return '<option value="' + esc(f.id) + '">' + esc(f.n) + '</option>'; }).join('');
+    el('polg-termo').checked = p.termo !== false;
+    el('modal-pol-gerar').classList.add('open');
+  };
+  function termoCiencia(titulo) {
+    return '<div style="break-before:page;page-break-before:always;"></div>' +
+      '<h2>TERMO DE CIÊNCIA</h2>' +
+      '<p style="text-align:justify;">Eu, <strong>{{NOME}}</strong>, inscrito(a) no CPF sob o nº {{CPF}}, ocupante do cargo de {{CARGO}} na empresa {{EMPRESA}}, inscrita no CNPJ sob o nº {{EMPRESA_CNPJ}}, ' +
+      'declaro que recebi, li e compreendi a <strong>' + esc(titulo) + '</strong>, estando ciente de todas as suas regras e condições, e comprometo-me a cumpri-la integralmente.</p>' +
+      '<p>{{DATA_EXTENSO}}.</p>' +
+      '<table class="dmx-ass" style="width:100%;margin-top:40px;"><tr>' +
+      '<td style="width:50%;text-align:center;padding:0 16px;"><div class="l" style="border-top:1px solid #000;padding-top:4px;">{{NOME}}<br>CPF: {{CPF}}</div></td>' +
+      '<td style="width:50%;text-align:center;padding:0 16px;"><div class="l" style="border-top:1px solid #000;padding-top:4px;">{{EMPRESA}}<br>CNPJ: {{EMPRESA_CNPJ}}</div></td>' +
+      '</tr></table>';
+  }
+  window.polGerarConfirmar = function () {
+    var p = DB.g('politicas').find(function (x) { return x.id === _polGerarId; }); if (!p) return;
+    var fid = el('polg-func').value, termo = el('polg-termo').checked;
+    var f = fid ? DB.g('funcionarios').find(function (x) { return x.id === fid; }) : null;
+    if (p.termo !== termo) { var l = DB.g('politicas'), i = l.findIndex(function (x) { return x.id === p.id; }); if (i >= 0) { l[i] = Object.assign({}, l[i], { termo: termo }); DB.s('politicas', l); } }
+    var pagina = dmxMontarPagina({ nome: p.titulo, timbrado: true, html: p.html + (termo ? termoCiencia(p.titulo) : '') }, f);
+    closeModal('modal-pol-gerar');
+    _abrirDocSimples(pagina, (p.titulo + '_' + (f ? f.n : 'em_branco')).replace(/\s+/g, '_'));
+  };
+
+  // sincronização / abertura
+  var _so = DB.s; DB.s = function (k, v) { _so(k, v); if (k === 'pol-ocultas') { try { aplicarOcultas(); } catch (e) {} } };
+  prepararTela(); aplicarOcultas();
+})();
+
+// ════════════════════════════════════════════════════════════
+// 3) FÉRIAS — alerta de vencimento 30 dias antes da data limite de saída
+//    Aparece na tela de Férias, no Dashboard e no menu (contador).
+//    Considera férias ainda não realizadas; as já programadas para antes da data limite não alertam.
+// ════════════════════════════════════════════════════════════
+(function () {
+  var DIAS = 30;
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function iso(x) { return typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x); }
+
+  window.ferVencendo = function () {
+    var funcs = {}; DB.g('funcionarios').forEach(function (f) { funcs[f.id] = f; });
+    var hoje = td();
+    return DB.g('ferias').map(function (r) {
+      var f = funcs[r.fid];
+      if (!f || f.st === 'Desligado' || !iso(r.lim)) return null;
+      if (r.st === 'Concluída' || r.st === 'Em andamento') return null;
+      if (r.st === 'Agendada' && iso(r.ini) && r.ini <= r.lim) return null;   // já programada a tempo
+      var dias = dif(hoje, r.lim);
+      if (dias > DIAS) return null;
+      return { r: r, f: f, dias: dias, tardia: r.st === 'Agendada' && iso(r.ini) && r.ini > r.lim };
+    }).filter(Boolean).sort(function (a, b) { return a.dias - b.dias; });
+  };
+  function txtDias(x) {
+    if (x.dias < 0) return 'venceu há ' + (-x.dias) + ' dia' + (-x.dias === 1 ? '' : 's');
+    if (x.dias === 0) return 'vence HOJE';
+    return 'vence em ' + x.dias + ' dia' + (x.dias === 1 ? '' : 's');
+  }
+  function cor(x) { return x.dias < 0 ? { bg: '#fdecea', bd: '#c62828', tx: '#b71c1c' } : x.dias <= 7 ? { bg: '#fff3e0', bd: '#e65100', tx: '#bf360c' } : { bg: '#fffde7', bd: '#f9a825', tx: '#8d6e00' }; }
+  var _verTodos = false;
+  window.ferVencVerTodos = function () { _verTodos = !_verTodos; renderBox(); };
+
+  function renderBox() {
+    var sec = el('sec-ferias'); if (!sec) return;
+    var box = el('fer-venc-box');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'fer-venc-box';
+      var leg = sec.querySelector('.fer-legenda'); if (leg) leg.parentNode.insertBefore(box, leg); else return;
+    }
+    var L = ferVencendo();
+    if (!L.length) {
+      box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:12px;border-radius:var(--radius-sm);background:#e8f5e9;color:#1b5e20;font-size:13px;">✅ Nenhuma férias vencendo nos próximos ' + DIAS + ' dias.</div>';
+      return;
+    }
+    var venc = L.filter(function (x) { return x.dias < 0; }).length, prox = L.length - venc;
+    var mostrar = _verTodos ? L : L.slice(0, 6);
+    box.innerHTML = '<div style="border:1.5px solid ' + (venc ? '#c62828' : '#f9a825') + ';border-radius:var(--radius-sm);margin-bottom:12px;overflow:hidden;">' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:' + (venc ? '#fdecea' : '#fff8e1') + ';">' +
+      '<strong style="font-size:14px;color:' + (venc ? '#b71c1c' : '#8d6e00') + ';">⏰ Vencimento de férias</strong>' +
+      (prox ? '<span class="badge badge-yellow">' + prox + ' vence' + (prox > 1 ? 'm' : '') + ' em até ' + DIAS + ' dias</span>' : '') +
+      (venc ? '<span class="badge badge-red">' + venc + ' com data limite vencida</span>' : '') +
+      '<span style="font-size:12px;color:var(--gray-600);margin-left:auto;">Aviso a partir de ' + DIAS + ' dias antes da data limite de saída</span></div>' +
+      mostrar.map(function (x) {
+        var c = cor(x), r = x.r;
+        return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--gray-100);border-left:4px solid ' + c.bd + ';">' +
+          '<div style="flex:1;min-width:200px;"><strong>' + esc(x.f.n) + '</strong>' +
+          '<div style="font-size:12px;color:var(--gray-600);">' + esc(r.car || x.f.car || '') + (r.uTrab ? ' · ' + esc(r.uTrab) : '') +
+          ' · período ' + esc(r.per || (r.ai ? fd(r.ai) + ' a ' + fd(r.af) : '')) + ' · data limite <strong>' + fd(r.lim) + '</strong>' +
+          (x.tardia ? ' · <span style="color:#b71c1c;">programada para ' + fd(r.ini) + ', depois da data limite</span>' : '') + '</div></div>' +
+          '<span style="font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:20px;background:' + c.bg + ';color:' + c.tx + ';">' + txtDias(x) + '</span>' +
+          '<button class="btn btn-primary btn-sm" onclick="editFer(\'' + esc(r.id) + '\')">📅 Programar</button></div>';
+      }).join('') +
+      (L.length > 6 ? '<div style="padding:8px 14px;border-top:1px solid var(--gray-100);text-align:center;"><a href="#" onclick="ferVencVerTodos();return false;" style="font-size:12.5px;font-weight:600;color:var(--green-dark);">' + (_verTodos ? 'Mostrar menos' : 'Ver todas (' + L.length + ')') + '</a></div>' : '') +
+      '</div>';
+  }
+  // marca na tabela a data limite de quem está nos 30 dias
+  function marcarTabela() {
+    var tb = el('tb-fer'); if (!tb) return;
+    var mapa = {}; ferVencendo().forEach(function (x) { mapa[x.r.id] = x; });
+    Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+      var b = tr.querySelector('button[onclick^="editFer("]'); if (!b) return;
+      var m = b.getAttribute('onclick').match(/editFer\('([^']+)'\)/); if (!m || !mapa[m[1]]) return;
+      var x = mapa[m[1]], td7 = tr.children[6]; if (!td7 || td7.querySelector('.fer-venc-tag')) return;
+      var c = cor(x);
+      td7.insertAdjacentHTML('beforeend', '<div class="fer-venc-tag" style="margin-top:3px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;display:block;width:max-content;white-space:nowrap;background:' + c.bg + ';color:' + c.tx + ';border:1px solid ' + c.bd + ';">' + txtDias(x) + '</div>');
+    });
+  }
+  // contador no menu Férias
+  function badgeMenu() {
+    var item = Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\(['"]ferias['"]/.test(n.getAttribute('onclick') || ''); });
+    if (!item) return;
+    var b = el('fer-venc-badge');
+    if (!b) { b = document.createElement('span'); b.id = 'fer-venc-badge'; b.style.cssText = 'margin-left:auto;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:10px;color:#fff;'; (item.querySelector('span') || item).appendChild(b); }
+    var L = ferVencendo(), venc = L.filter(function (x) { return x.dias < 0; }).length;
+    b.textContent = L.length; b.title = L.length + ' férias vencendo em até ' + DIAS + ' dias' + (venc ? ' (' + venc + ' vencida' + (venc > 1 ? 's' : '') + ')' : '');
+    b.style.background = venc ? '#c62828' : '#e65100'; b.style.display = L.length ? 'inline-block' : 'none';
+    b.style.marginLeft = '8px';
+  }
+  // Dashboard
+  function alertasDash() {
+    var a = el('alertas'); if (!a) return;
+    var L = ferVencendo(); if (!L.length) return;
+    var vazio = a.querySelector('p'); if (vazio && !a.querySelector('.alert')) a.innerHTML = '';
+    var html = L.slice(0, 5).map(function (x) {
+      return '<div class="alert ' + (x.dias < 0 ? 'alert-danger' : 'alert-warning') + '" style="cursor:pointer;" onclick="nav(\'ferias\',Array.prototype.find.call(document.querySelectorAll(\'.nav-item\'),function(n){return /ferias/.test(n.getAttribute(\'onclick\')||\'\')}))">' +
+        '🏖️ <strong>' + esc(x.f.n) + '</strong>: férias ' + txtDias(x) + ' (data limite ' + fd(x.r.lim) + ').</div>';
+    }).join('') + (L.length > 5 ? '<div class="alert alert-warning">🏖️ e mais ' + (L.length - 5) + ' férias vencendo — veja em <strong>Férias</strong>.</div>' : '');
+    a.insertAdjacentHTML('afterbegin', html);
+  }
+
+  var _rdFer = window.rdFer;
+  window.rdFer = function () { var r = _rdFer.apply(this, arguments); try { renderBox(); marcarTabela(); badgeMenu(); } catch (e) {} return r; };
+  var _updDash = window.updDash;
+  window.updDash = function () { var r = _updDash.apply(this, arguments); try { alertasDash(); badgeMenu(); } catch (e) {} return r; };
+
+  // aviso ao abrir o sistema (uma vez por sessão)
+  setTimeout(function () {
+    try {
+      badgeMenu();
+      if (sessionStorage.getItem('rh_fer_aviso')) return;
+      var L = ferVencendo(); if (!L.length) return;
+      sessionStorage.setItem('rh_fer_aviso', '1');
+      var v = L.filter(function (x) { return x.dias < 0; }).length;
+      toast('⏰ ' + L.length + ' férias vencendo em até ' + DIAS + ' dias' + (v ? ' (' + v + ' já vencida' + (v > 1 ? 's' : '') + ')' : '') + ' — veja em Férias.', v ? 'error' : 'warn');
+    } catch (e) {}
+  }, 2500);
 })();
 
 </script>
