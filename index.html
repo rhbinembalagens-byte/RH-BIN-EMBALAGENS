@@ -14787,7 +14787,7 @@ function abrirManual() {
       <p>Menu <strong>Cadastros › Funcionários</strong>, com quatro abas:</p>
       <ul>
         <li><strong>👥 Cadastro:</strong> lista por status (Ativos, Afastados, Férias, Desligados), busca e ordenação. <em>+ Novo Funcionário</em> abre o formulário.</li>
-        <li><strong>🏢 Agência</strong> e <strong>📝 Sem registro:</strong> cadastros separados dos CLT (não entram em Férias, Benefícios nem nos relatórios CLT). Têm acompanhamento da experiência de 45/90 dias pela data de início — também no quadro próprio em <em>Período de Experiência</em> — e o botão <em>✅ Efetivar CLT</em>, que cria o cadastro em Funcionários.</li>
+        <li><strong>🏢 Agência</strong> e <strong>📝 Sem registro:</strong> cadastros separados dos CLT (não entram em Férias, Benefícios nem nos relatórios CLT), com <em>📥 Importar planilha</em> (aba Funcionários do Controle de Colaboradores). Têm acompanhamento da experiência de 45/90 dias pela data de início — também no quadro próprio em <em>Período de Experiência</em> — e o botão <em>✅ Efetivar CLT</em>, que cria o cadastro em Funcionários.</li>
         <li><strong>📊 Relatório:</strong> marque os status, filtre por empresa/departamento, escolha a ordem (A→Z) e as colunas, e clique em <em>📥 Exportar para Excel</em>.</li>
         <li><strong>🎂 Aniversariantes:</strong> do mês, da semana, próximos 30 dias ou de qualquer mês, com o template para divulgação.</li>
         <li><strong>🏢 Aniversário de Empresa:</strong> quem completa anos de casa no mês, nos próximos 30 dias ou em qualquer mês (pela admissão ou pela data de início), com filtro por empresa, botão para parabenizar no WhatsApp e exportação para Excel.</li>
@@ -17875,7 +17875,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       vCad.insertAdjacentHTML('afterend',
         '<div id="func-view-' + t + '" style="display:none;">' +
         '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><span class="card-title" style="font-size:15px;">' + T.ic + ' Colaboradores ' + (t === 'agencia' ? 'de agência' : 'sem registro') + '</span>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="cxExportar(\'' + t + '\')">📥 Excel</button>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="cxImpAbrir(\'' + t + '\')">📥 Importar planilha</button><button class="btn btn-outline btn-sm" onclick="cxExportar(\'' + t + '\')">📤 Excel</button>' +
         '<button class="btn btn-primary" onclick="cxNovo(\'' + t + '\')">' + T.novo + '</button></div></div>' +
         '<div class="alert alert-info" style="font-size:12.5px;margin-bottom:12px;"><div>Cadastro separado dos funcionários CLT — não entra em Férias, Benefícios nem nos relatórios CLT. A experiência (45/90 dias) é contada pela <strong>data de início</strong>' +
         (t === 'agencia' ? '. Quando o colaborador for contratado, use <strong>✅ Efetivar CLT</strong>.' : '. Ao registrar o colaborador, use <strong>✅ Efetivar CLT</strong>.') + '</div></div>' +
@@ -17911,7 +17911,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!linhas.length) { tb.innerHTML = '<tr><td colspan="' + cols + '" style="text-align:center;padding:30px;color:var(--gray-400)">' + (todos.length ? 'Nenhum colaborador neste filtro.' : T.vazio) + '</td></tr>'; return; }
     var h = hoje();
     tb.innerHTML = linhas.map(function (c) {
-      var e = experiencia(c), info = [c.car, nomeDep(c.dep), nomeEmp(c.emp)].filter(Boolean).join(' · ');
+      var e = experiencia(c), info = [c.car, c.escala, nomeDep(c.dep), nomeEmp(c.emp)].filter(Boolean).join(' · ');
       var exp = e ? '<span class="badge ' + e.cor + '">' + esc(e.txt) + '</span>' + (e.dia && e.fase < 3 ? '<div style="font-size:11px;color:var(--gray-400);">' + e.dia + 'º dia</div>' : '') : '<span style="color:var(--gray-400);">—</span>';
       var fimPrev = '';
       if (t === 'agencia') {
@@ -17934,6 +17934,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 
   // ════════ FORMULÁRIO ════════
   var _editId = null, _tipo = 'agencia';
+  var CX_TXT = ['n', 'cpf', 'rg', 'nas', 'tel', 'cep', 'end', 'car', 'ini', 'agencia', 'fimPrev', 'escala', 'tamCamisa', 'conta', 'valor', 'vt', 'bonif', 'qCaixa', 'conv', 'fimData', 'obs'];
   function injetarModal() {
     if (el('modal-colab-ext')) return;
     var g = function (id, label, extra, tipo, full) { return '<div class="form-group' + (full ? ' form-full' : '') + '" id="cxg-' + id + '"><label>' + label + '</label><input id="cx-' + id + '" type="' + (tipo || 'text') + '"' + (extra || '') + '></div>'; };
@@ -17952,7 +17953,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="form-group"><label>Departamento</label><select id="cx-dep"></select></div>' +
       g('car', 'Cargo / Função', UP + ' list="dl-cx-cargos" autocomplete="off"') + g('ini', 'Data de início *', '', 'date') +
       g('agencia', 'Agência', UP + ' list="dl-cx-agencias" autocomplete="off" placeholder="Nome da agência"') + g('fimPrev', 'Fim previsto do contrato', '', 'date') +
-      g('valor', 'Valor combinado (salário / diária)', ' placeholder="R$ 0,00"') +
+      g('escala', 'Escala / categoria', UP + ' placeholder="ex.: SAB/DOM, APRENDIZ, S/REG"') +
+      '<div class="form-group"><label>Uniforme</label><input id="cx-tamCamisa" type="text"' + UP + ' placeholder="P, M, G..."></div>' +
+      g('conta', 'Conta bancária', UP) +
+      '</div><div class="uni-sec-tit" style="margin-top:14px;">💰 Valores</div><div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));">' +
+      g('valor', 'Salário / valor combinado', ' placeholder="R$ 0,00"') + g('vt', 'VT', ' placeholder="R$ 0,00"') + g('bonif', 'Bonificação', ' placeholder="R$ 0,00"') +
+      g('qCaixa', 'Quebra de caixa', ' placeholder="R$ 0,00"') + g('conv', 'Convênio', ' placeholder="R$ 0,00"') +
+      '</div><div class="form-grid" style="margin-top:6px;">' +
       '<div class="form-group"><label>Status</label><select id="cx-st"><option>Ativo</option><option>Encerrado</option><option>Efetivado</option></select></div>' +
       g('fimData', 'Data de saída / efetivação', '', 'date') +
       '<div class="form-group form-full"><label>Observações</label><textarea id="cx-obs" rows="2"></textarea></div></div>' +
@@ -17963,7 +17970,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     injetarModal(); _tipo = t; _editId = c ? c.id : null;
     el('cx-titulo').textContent = (c ? '✏️ Editar' : TIPOS[t].ic + ' Novo') + ' colaborador ' + (t === 'agencia' ? 'de agência' : 'sem registro');
     fillSel('cx-emp', 'empresas', 'razao');
-    ['n', 'cpf', 'rg', 'nas', 'tel', 'cep', 'end', 'car', 'ini', 'agencia', 'fimPrev', 'valor', 'fimData', 'obs'].forEach(function (k) { el('cx-' + k).value = c && c[k] != null ? c[k] : ''; });
+    CX_TXT.forEach(function (k) { el('cx-' + k).value = c && c[k] != null ? c[k] : ''; });
     el('cx-sex').value = c ? (c.sex || '') : ''; el('cx-st').value = c ? (c.st || 'Ativo') : 'Ativo';
     el('cx-emp').value = c ? (c.emp || '') : '';
     if (typeof estFillDepSelect === 'function') estFillDepSelect('cx-dep', el('cx-emp').value);
@@ -17981,8 +17988,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.cxEditar = function (id) { var c = lista().find(function (x) { return x.id === id; }); if (c) prepararForm(c.tipo, c); };
   window.cxSalvar = function () {
     var d = {};
-    ['n', 'cpf', 'rg', 'nas', 'sex', 'tel', 'cep', 'end', 'emp', 'dep', 'car', 'ini', 'agencia', 'fimPrev', 'valor', 'st', 'fimData', 'obs'].forEach(function (k) { d[k] = (el('cx-' + k).value || '').trim(); });
-    ['n', 'rg', 'end', 'car', 'agencia'].forEach(function (k) { d[k] = up(d[k]); });
+    CX_TXT.concat(['sex', 'emp', 'dep', 'st']).forEach(function (k) { d[k] = (el('cx-' + k).value || '').trim(); });
+    ['n', 'rg', 'end', 'car', 'agencia', 'escala', 'tamCamisa', 'conta'].forEach(function (k) { d[k] = up(d[k]); });
     if (_tipo !== 'agencia') { d.agencia = ''; d.fimPrev = ''; }
     if (!d.n) { alert('Informe o nome.'); el('cx-n').focus(); return; }
     if (!d.ini) { alert('Informe a data de início — ela é usada para acompanhar a experiência.'); el('cx-ini').focus(); return; }
@@ -18024,6 +18031,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!f) {
       f = { id: uid(), n: c.n, cpf: c.cpf || '', rg: c.rg || '', nas: c.nas || '', sex: c.sex || '', tel: c.tel || '', end: c.end || '', cep: c.cep || '',
             emp: c.emp || '', dep: c.dep || '', car: c.car || '', adm: dt, dtIni: c.ini || '', tip: 'CLT', st: 'Ativo', docs: [],
+            sal: c.valor || '', tamCamisa: c.tamCamisa || '', conta: c.conta || '', vt: c.vt || '', bonif: c.bonif || '', qCaixa: c.qCaixa || '', conv: c.conv || '',
             origem: c.tipo === 'agencia' ? 'Efetivado de agência' + (c.agencia ? ' (' + c.agencia + ')' : '') : 'Efetivado (antes sem registro)' };
       funcs.push(f); DB.s('funcionarios', funcs);
     }
@@ -18035,12 +18043,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.cxExportar = function (t) {
     var l = lista().filter(function (c) { return c.tipo === t; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
     if (!l.length) { alert('Nenhum colaborador para exportar.'); return; }
-    var cab = ['Nome', 'CPF', 'RG', 'Nascimento', 'Telefone', 'Endereço', 'Empresa', 'Departamento', 'Cargo', 'Início'].concat(t === 'agencia' ? ['Agência', 'Fim previsto'] : ['Valor']).concat(['Experiência', 'Status', 'Saída/Efetivação', 'Observações']);
+    var cab = ['Nome', 'CPF', 'RG', 'Nascimento', 'Telefone', 'Endereço', 'Empresa', 'Departamento', 'Cargo', 'Escala/categoria', 'Início'].concat(t === 'agencia' ? ['Agência', 'Fim previsto'] : []).concat(['Salário/valor', 'VT', 'Uniforme', 'Conta', 'Experiência', 'Status', 'Saída/Efetivação', 'Observações']);
     var linhas = l.map(function (c) {
       var e = experiencia(c);
-      return [c.n, c.cpf, c.rg, c.nas ? fd(c.nas) : '', c.tel, c.end, nomeEmp(c.emp), nomeDep(c.dep), c.car, c.ini ? fd(c.ini) : '']
-        .concat(t === 'agencia' ? [c.agencia, c.fimPrev ? fd(c.fimPrev) : ''] : [c.valor ? brl(c.valor) : ''])
-        .concat([e ? e.txt : '', c.st || 'Ativo', c.fimData ? fd(c.fimData) : '', c.obs]).map(function (x) { return x == null ? '' : x; });
+      return [c.n, c.cpf, c.rg, c.nas ? fd(c.nas) : '', c.tel, c.end, nomeEmp(c.emp), nomeDep(c.dep), c.car, c.escala, c.ini ? fd(c.ini) : '']
+        .concat(t === 'agencia' ? [c.agencia, c.fimPrev ? fd(c.fimPrev) : ''] : [])
+        .concat([c.valor ? brl(c.valor) : '', c.vt ? brl(c.vt) : '', c.tamCamisa, c.conta, e ? e.txt : '', c.st || 'Ativo', c.fimData ? fd(c.fimData) : '', c.obs]).map(function (x) { return x == null ? '' : x; });
     });
     var nome = 'Colaboradores_' + (t === 'agencia' ? 'Agencia' : 'Sem_registro') + '_' + fd(hoje()).replace(/\//g, '-');
     if (typeof XLSX === 'undefined') {
@@ -18143,6 +18151,173 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (avisos.length) { if (!a.querySelector('.alert')) a.innerHTML = ''; a.insertAdjacentHTML('beforeend', avisos.join('')); }
     } catch (e) {}
     return r;
+  };
+
+  // ════════ IMPORTAR PLANILHA (aba "Funcionários" do Controle de Colaboradores) ════════
+  // Só completa o que estiver vazio em quem já existe (CPF ou nome); nada é apagado.
+  var CX_CAB = { nome: 'n', nomecompleto: 'n', escala: 'escala', genero: 'sex', sexo: 'sex', cargo: 'car', funcao: 'car', quebradecaixa: 'qCaixa',
+    cpf: 'cpf', rg: 'rg', conta: 'conta', datanasc: 'nas', datanascimento: 'nas', nascimento: 'nas', inicio: 'ini', datainicio: 'ini',
+    dataadm: 'adm', dataadmissao: 'adm', admissao: 'adm', salario: 'valor', uniforme: 'tamCamisa', tamanho: 'tamCamisa', bonificacao: 'bonif',
+    vt: 'vt', convenio: 'conv', departamento: '_dep', desligamento: '_desl', telefone: 'tel', celular: 'tel', agencia: 'agencia', endereco: 'end' };
+  function chave(s) { return norm(s).replace(/[^a-z0-9]/g, ''); }
+  function vazio(x) { return x === undefined || x === null || String(x).trim() === ''; }
+  function cxData(x) {
+    if (vazio(x)) return '';
+    if (typeof x === 'number') { if (x < 1000 || x > 80000) return ''; return new Date(Math.round((x - 25569) * 86400000)).toISOString().slice(0, 10); }
+    var m = String(x).trim().replace(/\/+/g, '/').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (!m) return '';
+    var a = +m[3]; if (a < 100) a += a > 40 ? 1900 : 2000;
+    if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31) return '';
+    return a + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  }
+  function cxMoeda(x) {
+    if (vazio(x)) return '';
+    if (typeof x === 'number') return x ? String(Math.round(x * 100) / 100) : '';
+    var s = String(x).replace(/R\$|\s/g, ''); if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(s); return isNaN(n) || !n ? '' : String(Math.round(n * 100) / 100);
+  }
+  function cxCPF(x) { var d = String(x || '').replace(/\D/g, ''); if (d.length > 0 && d.length < 11 && typeof x === 'number') d = d.padStart(11, '0'); return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : ''; }
+  function cxTxt(x) { return vazio(x) || /^#(REF|N\/A|VALUE|DIV)/i.test(String(x)) ? '' : String(x).replace(/\s+/g, ' ').trim(); }
+  function depPorCodigo(cod) {
+    var k = chave(cod), m = norm(cod).match(/^(?:l|loja)\s*0*(\d+)$/); if (!k || k === 'ag') return '';
+    var alvo = m ? 'loja' + m[1] : k;
+    var achados = DB.g('departamentos').filter(function (d) { var mm = norm(d.nome).match(/^(?:l|loja)\s*0*(\d+)$/); return (mm ? 'loja' + mm[1] : chave(d.nome)) === alvo; });
+    return achados.length ? achados[0].id : '';
+  }
+
+  function cxLer(buf) {
+    if (typeof XLSX === 'undefined') throw new Error('A biblioteca de planilhas não carregou. Verifique a internet e recarregue a página.');
+    var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    var nomes = wb.SheetNames.slice().sort(function (a, b) { return (/^funcion/i.test(b.trim()) ? 1 : 0) - (/^funcion/i.test(a.trim()) ? 1 : 0); });
+    for (var si = 0; si < nomes.length; si++) {
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[nomes[si]], { header: 1, defval: '', raw: true });
+      var hi = rows.findIndex(function (r) { var c = r.map(chave); return c.indexOf('nome') !== -1 && c.indexOf('cpf') !== -1; });
+      if (hi < 0) continue;
+      var mapa = {}, ultimaCol = 0;
+      rows[hi].forEach(function (h, i) { var k = CX_CAB[chave(h)]; if (k && !(k in mapa)) { mapa[k] = i; ultimaCol = Math.max(ultimaCol, i); } });
+      var linhas = [], secao = 'ativos';
+      for (var r = hi + 1; r < rows.length; r++) {
+        var row = rows[r], nome = cxTxt(row[mapa.n]);
+        var primeiro = row.map(cxTxt).filter(Boolean)[0] || '';
+        if (/^desligad/i.test(primeiro) && (!nome || /^desligad/i.test(nome))) { secao = 'desligados'; continue; }
+        if (!nome || chave(nome) === 'nome') continue;
+        var o = { _linha: r + 1, _secao: secao };
+        Object.keys(mapa).forEach(function (k) { o[k] = row[mapa[k]]; });
+        o._notas = row.slice(mapa._desl != null ? mapa._desl : ultimaCol + 1).map(cxTxt).filter(Boolean).join(' · ');
+        linhas.push(o);
+      }
+      return { aba: nomes[si], linhas: linhas };
+    }
+    throw new Error('Não encontrei as colunas "Nome" e "CPF" na planilha.');
+  }
+  function cxLinha(r, tipo) {
+    var o = {}, nome = cxTxt(r.n);
+    var ag = nome.match(/\(\s*ag[eê]ncia\s*([^)]*)\)/i);
+    if (ag) { o.agencia = up(ag[1]); nome = nome.replace(ag[0], ''); }
+    o.n = up(nome.replace(/\s+/g, ' '));
+    o.cpf = cxCPF(r.cpf); o.rg = up(cxTxt(r.rg)); o.nas = cxData(r.nas);
+    o.ini = cxData(r.ini) || cxData(r.adm); o.car = up(cxTxt(r.car)); o.escala = up(cxTxt(r.escala));
+    var sx = norm(cxTxt(r.sex)); o.sex = sx === 'f' || sx.indexOf('fem') === 0 ? 'Feminino' : sx === 'm' || sx.indexOf('mas') === 0 ? 'Masculino' : '';
+    var conta = cxTxt(r.conta); o.conta = /^(n\/?a|s\/?r|j\.?a\.?|-)$/i.test(conta) ? '' : up(conta);
+    o.valor = cxMoeda(r.valor); o.vt = cxMoeda(r.vt); o.bonif = cxMoeda(r.bonif); o.qCaixa = cxMoeda(r.qCaixa); o.conv = cxMoeda(r.conv);
+    var tam = up(cxTxt(r.tamCamisa)); o.tamCamisa = tam === '-' ? '' : tam;
+    if (r.agencia && !o.agencia) o.agencia = up(cxTxt(r.agencia));
+    o.tel = cxTxt(r.tel); o.end = up(cxTxt(r.end));
+    o.dep = depPorCodigo(cxTxt(r._dep));
+    var notas = cxTxt(r._notas); if (notas && notas !== '-') o.obs = notas;
+    // desligamento: nota com data ou seção DESLIGADOS
+    var dl = notas.match(/(deslig|demiss|dispens|fim de contrato)[^0-9]*(\d{1,2}\/+\d{1,2}\/+\d{2,4})/i);
+    var dlCol = (typeof r._desl === 'number' || /^\s*\d{1,2}\/+\d{1,2}\/+\d{2,4}\s*$/.test(String(r._desl || ''))) ? cxData(r._desl) : '';
+    if (dl || r._secao === 'desligados' || (dlCol && /^\d{4}/.test(dlCol))) { o.st = 'Encerrado'; o.fimData = (dl ? cxData(dl[2]) : '') || dlCol || ''; }
+    else o.st = 'Ativo';
+    if (tipo !== 'agencia') { delete o.agencia; }
+    Object.keys(o).forEach(function (k) { if (vazio(o[k])) delete o[k]; });
+    return o;
+  }
+
+  var _cxImp = { tipo: null, dados: null, plano: null, arq: '' };
+  function cxPlanejar() {
+    var t = _cxImp.tipo, incluirDesl = el('cxi-desl') && el('cxi-desl').checked;
+    var exist = lista(), clt = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado'; });
+    var porCpf = {}, porNome = {}; exist.forEach(function (c) { var d = (c.cpf || '').replace(/\D/g, ''); if (d) porCpf[d] = c; porNome[chave(c.n)] = c; });
+    var cltCpf = {}, cltNome = {}; clt.forEach(function (f) { var d = (f.cpf || '').replace(/\D/g, ''); if (d) cltCpf[d] = f; cltNome[chave(f.n)] = f; });
+    var P = { novos: [], completar: [], iguais: [], fora: [], desl: 0 }, vistos = {};
+    _cxImp.dados.linhas.forEach(function (r) {
+      if (r._secao === 'desligados' && !incluirDesl) { P.desl++; return; }
+      var o = cxLinha(r, t), d = (o.cpf || '').replace(/\D/g, ''), k = d || chave(o.n);
+      if (vistos[k]) { P.fora.push({ n: o.n, motivo: 'Repetido na planilha (linha ' + r._linha + ')' }); return; }
+      vistos[k] = 1;
+      var ex = (d && porCpf[d]) || porNome[chave(o.n)];
+      if (ex && d && ex.cpf && ex.cpf.replace(/\D/g, '') !== d) ex = null;
+      var cltF = (d && cltCpf[d]) || cltNome[chave(o.n)] || (!d && chave(o.n).length > 8 ? clt.find(function (f) { return chave(f.n).indexOf(chave(o.n)) === 0; }) : null);
+      if (ex) {
+        var pre = {}; Object.keys(o).forEach(function (kk) { if (kk !== 'n' && kk !== 'st' && vazio(ex[kk]) && !vazio(o[kk])) pre[kk] = o[kk]; });
+        (Object.keys(pre).length ? P.completar : P.iguais).push({ ex: ex, pre: pre });
+      } else P.novos.push({ o: o, clt: cltF || null, marcado: !cltF });
+    });
+    _cxImp.plano = P;
+  }
+  function cxRenderPrevia() {
+    var P = _cxImp.plano, box = el('cxi-prev'); if (!P) { box.innerHTML = ''; el('cxi-ok').disabled = true; return; }
+    var chip = function (cor, n, t) { return '<div style="flex:1;min-width:120px;padding:9px 12px;border-radius:var(--radius-sm);background:' + cor + ';"><div style="font-size:21px;font-weight:700;">' + n + '</div><div style="font-size:12px;">' + t + '</div></div>'; };
+    var h = '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;">📄 <strong>' + esc(_cxImp.arq) + '</strong> · aba "' + esc(_cxImp.dados.aba.trim()) + '"</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + chip('#e8f5e9', P.novos.length, 'novos') + chip('#e3f2fd', P.completar.length, 'a completar') +
+      chip('var(--gray-50)', P.iguais.length, 'já cadastrados') + chip(P.fora.length ? '#fff3e0' : 'var(--gray-50)', P.fora.length, 'ignorados') + '</div>';
+    if (_cxImp.dados.linhas.some(function (r) { return r._secao === 'desligados'; })) {
+      h += '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="cxi-desl" ' + (el('cxi-desl') && el('cxi-desl').checked ? 'checked' : '') +
+        ' onchange="cxImpReplanejar()" style="width:auto;margin-top:3px;"> <span>Incluir também os nomes da seção <strong>DESLIGADOS</strong> da planilha (entram como <em>Encerrados</em>, só para histórico)' + (P.desl ? ' — ' + P.desl + ' nome(s)' : '') + '</span></label>';
+    }
+    if (P.novos.length) h += '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:10px 0 6px;">🟢 Novos</div><div class="table-wrap" style="max-height:320px;overflow:auto;"><table><thead><tr><th></th><th>Nome</th><th>CPF</th><th>Cargo</th>' +
+      (_cxImp.tipo === 'agencia' ? '<th>Agência</th>' : '<th>Escala</th>') + '<th>Início</th><th>Situação</th></tr></thead><tbody>' +
+      P.novos.map(function (x, i) {
+        var o = x.o;
+        return '<tr><td><input type="checkbox" data-cxi="' + i + '" ' + (x.marcado ? 'checked' : '') + ' style="width:auto;"></td><td style="font-weight:600;">' + esc(o.n) +
+          (x.clt ? '<div style="font-size:11px;color:#b71c1c;font-weight:400;">já é CLT em Funcionários — desmarcado</div>' : '') + '</td><td>' + esc(o.cpf || '—') + '</td><td>' + esc(o.car || '') + '</td><td>' +
+          esc(_cxImp.tipo === 'agencia' ? (o.agencia || '') : (o.escala || '')) + '</td><td>' + (o.ini ? fd(o.ini) : '—') + '</td><td>' +
+          (o.st === 'Encerrado' ? '<span class="badge badge-gray">Encerrado' + (o.fimData ? ' ' + fd(o.fimData) : '') + '</span>' : '<span class="badge badge-green">Ativo</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    if (P.completar.length) h += '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:12px 0 6px;">🔵 Cadastros que serão completados (só o que está vazio)</div><div style="font-size:12.5px;">' +
+      P.completar.map(function (x) { return '<div style="padding:4px 0;border-bottom:1px solid var(--gray-100);"><strong>' + esc(x.ex.n) + '</strong>: ' + Object.keys(x.pre).map(function (k) { return esc(k) + ' = ' + esc(x.pre[k]); }).join(' · ') + '</div>'; }).join('') + '</div>';
+    if (P.fora.length) h += '<div style="font-weight:700;font-size:13.5px;color:#e65100;margin:12px 0 6px;">🟠 Ignorados</div><div style="font-size:12.5px;">' + P.fora.map(function (x) { return esc(x.n) + ' — ' + esc(x.motivo); }).join('<br>') + '</div>';
+    box.innerHTML = h;
+    el('cxi-ok').disabled = !(P.novos.length || P.completar.length);
+  }
+  window.cxImpReplanejar = function () { cxPlanejar(); cxRenderPrevia(); };
+  window.cxImpAbrir = function (t) {
+    _cxImp = { tipo: t, dados: null, plano: null, arq: '' };
+    if (!el('modal-cx-imp')) document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-cx-imp"><div class="modal" style="max-width:900px;">' +
+      '<div class="modal-header"><span class="modal-title" id="cxi-tit">📥 Importar planilha</span><button class="modal-close" onclick="closeModal(\'modal-cx-imp\')">×</button></div>' +
+      '<div class="alert alert-info" style="font-size:13px;margin-bottom:12px;"><div>Lê a aba <strong>Funcionários</strong> da planilha (colunas Nome, CPF, Cargo, Início, Salário…). Quem já está cadastrado aqui (mesmo CPF ou nome) só recebe o que estiver faltando. Nomes com <em>(Agência …)</em> têm a agência separada automaticamente. Nada vai para o cadastro CLT.</div></div>' +
+      '<label class="btn btn-primary" style="cursor:pointer;margin:0 0 6px;">📂 Escolher planilha (.xlsx / .xls)<input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="cxImpArquivo(this)"></label>' +
+      '<div id="cxi-prev" style="margin-top:10px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-cx-imp\')">Cancelar</button><button class="btn btn-primary" id="cxi-ok" disabled onclick="cxImpConfirmar()">✅ Importar</button></div></div></div>');
+    el('cxi-tit').textContent = '📥 Importar planilha — ' + (t === 'agencia' ? 'Agência' : 'Sem registro');
+    el('cxi-prev').innerHTML = ''; el('cxi-ok').disabled = true;
+    el('modal-cx-imp').classList.add('open');
+  };
+  window.cxImpArquivo = function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    _cxImp.arq = f.name;
+    var rd = new FileReader();
+    rd.onload = function (e) {
+      try { _cxImp.dados = cxLer(e.target.result); cxPlanejar(); cxRenderPrevia(); }
+      catch (err) { _cxImp.plano = null; cxRenderPrevia(); el('cxi-prev').innerHTML = '<div class="alert alert-warning"><div>⚠️ ' + esc(err.message || err) + '</div></div>'; }
+    };
+    rd.readAsArrayBuffer(f);
+  };
+  window.cxImpConfirmar = function () {
+    var P = _cxImp.plano, t = _cxImp.tipo; if (!P) return;
+    var marc = {}; document.querySelectorAll('#cxi-prev input[data-cxi]').forEach(function (c) { if (c.checked) marc[c.getAttribute('data-cxi')] = 1; });
+    var novos = P.novos.filter(function (x, i) { return marc[i]; });
+    if (!novos.length && !P.completar.length) { alert('Nenhum colaborador marcado.'); return; }
+    if (!confirm('Cadastrar ' + novos.length + ' colaborador(es) e completar ' + P.completar.length + ' cadastro(s) em ' + TIPOS[t].t + '?')) return;
+    var l = lista(), hj = hoje();
+    P.completar.forEach(function (x) { var i = l.findIndex(function (c) { return c.id === x.ex.id; }); if (i < 0) return; var c = Object.assign({}, l[i]); Object.keys(x.pre).forEach(function (k) { if (vazio(c[k])) c[k] = x.pre[k]; }); l[i] = c; });
+    novos.forEach(function (x) { l.push(Object.assign({ id: uid(), tipo: t, criado: hj, origem: 'Planilha ' + _cxImp.arq }, x.o)); });
+    DB.s(KEY, l);
+    closeModal('modal-cx-imp'); rdColabExt(t);
+    toast('✅ ' + novos.length + ' colaborador(es) importado(s)' + (P.completar.length ? ' e ' + P.completar.length + ' completado(s)' : ''));
   };
 
   injetarAbas();
