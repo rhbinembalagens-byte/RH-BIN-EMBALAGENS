@@ -14784,11 +14784,13 @@ function abrirManual() {
       <div class="ok">✅ Ao escolher um cargo no cadastro do funcionário, o sistema preenche salário, departamento e escala (se estiverem vazios). Na vaga, preenche também atividades e requisitos.</div>
       <div class="tip">💡 Também dá para criar um departamento, cargo ou escala sem sair do formulário, pelo botão <strong>＋</strong> ao lado do campo. Renomear um cargo ou escala atualiza os funcionários que o usam.</div>`],
     ['s4', '4. Funcionários', `
-      <p>Menu <strong>Cadastros › Funcionários</strong>, com três abas:</p>
+      <p>Menu <strong>Cadastros › Funcionários</strong>, com quatro abas:</p>
       <ul>
         <li><strong>👥 Cadastro:</strong> lista por status (Ativos, Afastados, Férias, Desligados), busca e ordenação. <em>+ Novo Funcionário</em> abre o formulário.</li>
         <li><strong>📊 Relatório:</strong> marque os status, filtre por empresa/departamento, escolha a ordem (A→Z) e as colunas, e clique em <em>📥 Exportar para Excel</em>.</li>
         <li><strong>🎂 Aniversariantes:</strong> do mês, da semana, próximos 30 dias ou de qualquer mês, com o template para divulgação.</li>
+        <li><strong>🏢 Aniversário de Empresa:</strong> quem completa anos de casa no mês, nos próximos 30 dias ou em qualquer mês (pela admissão ou pela data de início), com filtro por empresa, botão para parabenizar no WhatsApp e exportação para Excel.</li>
+        <li><strong>📥 Importar planilha:</strong> lê a planilha de funcionários (.xls/.xlsx). Quem já está cadastrado (mesmo CPF, ou mesmo nome sem CPF) só recebe o que estiver faltando; os demais entram como novos. Há uma prévia antes de confirmar e o botão <em>↩️ Desfazer última importação</em>.</li>
       </ul>
       <h3>O formulário do funcionário</h3>
       <table><tr><th>Aba</th><th>Conteúdo</th></tr>
@@ -16858,6 +16860,589 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!confirm('Voltar a usar o modelo padrão da Anamnese Clínica?')) return;
     DB.so('anamnese-modelo', {}); renderModelo(); toast('Modelo padrão restaurado ✅');
   };
+})();
+
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// FUNCIONÁRIOS — campos da planilha, importação e Aniversário de Empresa
+// • Novos campos no cadastro (endereço detalhado, RG UF/órgão, início, conta, folgas, benefícios, códigos)
+// • 📥 Importar planilha: completa só o que falta nos já cadastrados (CPF / nome), sem duplicar
+// • 🏢 Aniversário de Empresa: tempo de casa por mês
+// Nada é apagado: os campos antigos continuam iguais.
+// ════════════════════════════════════════════════════════════
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function chave(s) { return norm(s).replace(/[^a-z0-9]/g, ''); }
+  function vazio(x) { return x === undefined || x === null || String(x).trim() === ''; }
+  function dig(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+  function hojeISO() { return typeof _expHoje === 'function' ? _expHoje() : td(); }
+  function nomeEmpresaSis() { return (window.RH_TENANT && RH_TENANT.nome) || 'BIN Embalagens'; }
+
+  // ── Campos novos (chave no cadastro, id no formulário, rótulo) ──
+  var EXTRA = [
+    { k: 'rgUf',      id: 'frguf',   t: 'UF do RG' },
+    { k: 'rgOrg',     id: 'frgorg',  t: 'Órgão emissor do RG' },
+    { k: 'endLog',    id: 'flog',    t: 'Logradouro' },
+    { k: 'endNum',    id: 'fnum',    t: 'Número' },
+    { k: 'endComp',   id: 'fcomp',   t: 'Complemento' },
+    { k: 'endBairro', id: 'fbairro', t: 'Bairro' },
+    { k: 'endCid',    id: 'fcid',    t: 'Cidade' },
+    { k: 'endUf',     id: 'fuf',     t: 'UF' },
+    { k: 'dtIni',     id: 'fdtini',  t: 'Data de início' },
+    { k: 'folga',     id: 'ffolga',  t: 'Folgas (escala)' },
+    { k: 'codEpr',    id: 'fcodepr', t: 'Cód. funcionário' },
+    { k: 'codEmp',    id: 'fcodemp', t: 'Cód. empresa' },
+    { k: 'conta',     id: 'fconta',  t: 'Conta bancária' },
+    { k: 'bonif',     id: 'fbonif',  t: 'Bonificação', money: 1 },
+    { k: 'qCaixa',    id: 'fqcaixa', t: 'Quebra de caixa', money: 1 },
+    { k: 'vt',        id: 'fvt',     t: 'VT', money: 1 },
+    { k: 'comb',      id: 'fcomb',   t: 'Combustível', money: 1 },
+    { k: 'conv',      id: 'fconv',   t: 'Convênio', money: 1 },
+    { k: 'va',        id: 'fva',     t: 'VA', money: 1 }
+  ];
+  // rótulos dos campos já existentes (para a prévia da importação)
+  var ROT = { n: 'Nome', cpf: 'CPF', rg: 'RG', nas: 'Nascimento', sex: 'Sexo', end: 'Endereço completo', cep: 'CEP', emp: 'Empresa', dep: 'Departamento',
+              car: 'Cargo', sal: 'Salário', adm: 'Admissão', tamCamisa: 'Uniforme (camiseta)' };
+  EXTRA.forEach(function (c) { ROT[c.k] = c.t; });
+
+  function moeda(x) {
+    if (vazio(x)) return '';
+    if (typeof x === 'number') return String(Math.round(x * 100) / 100);
+    var s = String(x).replace(/R\$|\s/g, '');
+    if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(s);
+    return isNaN(n) ? String(x).trim() : String(Math.round(n * 100) / 100);
+  }
+  function montarEndereco(o) {
+    var l1 = [o.endLog, o.endNum].filter(function (x) { return !vazio(x); }).join(', ');
+    if (!vazio(o.endComp)) l1 += (l1 ? ' - ' : '') + o.endComp;
+    var l2 = [o.endBairro, [o.endCid, o.endUf].filter(function (x) { return !vazio(x); }).join(' - ')].filter(function (x) { return !vazio(x); }).join(', ');
+    return [l1, l2].filter(function (x) { return !vazio(x); }).join(' - ');
+  }
+
+  // ════════════ 1. FORMULÁRIO DO FUNCIONÁRIO ════════════
+  function grupo(c, extra) {
+    var tipo = c.k === 'dtIni' ? 'date' : 'text';
+    var ph = c.money ? ' placeholder="R$ 0,00"' : (c.k === 'endUf' || c.k === 'rgUf' ? ' placeholder="SP" maxlength="2" style="text-transform:uppercase;"' : '');
+    if (c.k === 'folga') ph = ' placeholder="ex.: SAB/DOM, DOM/QUA, S/REG" list="dl-folgas" autocomplete="off"';
+    return '<div class="form-group' + (extra || '') + '"><label>' + c.t + '</label><input id="' + c.id + '" type="' + tipo + '"' + ph + '></div>';
+  }
+  function C(k) { return EXTRA.find(function (c) { return c.k === k; }); }
+  function injetarFormulario() {
+    if (el('frguf') || !el('frg')) return;
+    var g = function (id) { var e = el(id); return e ? e.closest('.form-group') : null; };
+    // Dados pessoais
+    g('frg').insertAdjacentHTML('afterend', grupo(C('rgUf')) + grupo(C('rgOrg')));
+    g('fend').insertAdjacentHTML('beforebegin',
+      '<div class="form-group form-full" style="margin-bottom:-6px;"><label style="color:var(--green-dark);">🏠 Endereço</label></div>' +
+      grupo(C('endLog'), ' form-full') + grupo(C('endNum')) + grupo(C('endComp')) + grupo(C('endBairro')) + grupo(C('endCid')) + grupo(C('endUf')));
+    var lbl = g('fend').querySelector('label'); if (lbl) lbl.textContent = 'Endereço Completo (montado automaticamente)';
+    ['flog', 'fnum', 'fcomp', 'fbairro', 'fcid', 'fuf'].forEach(function (id) { el(id).addEventListener('input', function () {
+      var o = {}; ['endLog', 'endNum', 'endComp', 'endBairro', 'endCid', 'endUf'].forEach(function (k) { o[k] = el(C(k).id).value.trim(); });
+      el('fend').value = montarEndereco(o);
+    }); });
+    // Contrato
+    g('fadm').insertAdjacentHTML('afterend', grupo(C('dtIni')));
+    g('fescala').insertAdjacentHTML('afterend', grupo(C('folga')) + grupo(C('codEpr')) + grupo(C('codEmp')) + grupo(C('conta'), ' form-full'));
+    g('fescala').closest('.form-grid').insertAdjacentHTML('afterend',
+      '<div class="uni-sec-tit" style="margin-top:18px;">💰 Remuneração e benefícios</div>' +
+      '<div class="uni-sec-sub">Valores da planilha de funcionários (não altera o menu Benefícios).</div>' +
+      '<div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));">' +
+      ['bonif', 'qCaixa', 'vt', 'comb', 'conv', 'va'].map(function (k) { return grupo(C(k)); }).join('') + '</div>');
+    var dl = document.createElement('datalist'); dl.id = 'dl-folgas'; document.body.appendChild(dl);
+  }
+  function atualizarListaFolgas() {
+    var dl = el('dl-folgas'); if (!dl) return;
+    var vals = {}; ['SAB/DOM', 'DOM/SEG', 'DOM/TER', 'DOM/QUA', 'DOM/QUI', 'DOM/SEX', 'S/REG'].forEach(function (x) { vals[x] = 1; });
+    DB.g('funcionarios').forEach(function (f) { if (!vazio(f.folga)) vals[String(f.folga).trim()] = 1; });
+    dl.innerHTML = Object.keys(vals).sort().map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+  }
+  function garantirOpcao(id, val) {
+    var s = el(id); if (!s || vazio(val)) return;
+    if (!Array.prototype.some.call(s.options, function (o) { return o.value === val; })) { var o = document.createElement('option'); o.value = val; o.textContent = val; s.appendChild(o); }
+    s.value = val;
+  }
+  function limparExtras() { EXTRA.forEach(function (c) { var e = el(c.id); if (e) e.value = ''; }); }
+  function coletarExtras() {
+    var o = {};
+    EXTRA.forEach(function (c) { var e = el(c.id); if (!e) return; var val = e.value.trim(); if (c.k === 'rgUf' || c.k === 'endUf') val = val.toUpperCase(); o[c.k] = c.money ? moeda(val) : val; });
+    return o;
+  }
+
+  var _editFunc = window.editFunc;
+  window.editFunc = function (id) {
+    var r = _editFunc.apply(this, arguments);
+    try {
+      var f = DB.g('funcionarios').find(function (x) { return x.id === id; }); if (!f) return r;
+      EXTRA.forEach(function (c) { var e = el(c.id); if (e) e.value = f[c.k] == null ? '' : f[c.k]; });
+      // tamanhos fora da lista (ex.: G1) continuam aparecendo e não se perdem ao salvar
+      garantirOpcao('ftam-camisa', f.tamCamisa); garantirOpcao('ftam-jaleco', f.tamJaleco);
+      garantirOpcao('ftam-calca', f.tamCalca); garantirOpcao('ftam-calcado', f.tamCalcado);
+      atualizarListaFolgas();
+    } catch (e) {}
+    return r;
+  };
+  var _resetFuncModal = window.resetFuncModal;
+  window.resetFuncModal = function () { var r = _resetFuncModal.apply(this, arguments); try { limparExtras(); atualizarListaFolgas(); } catch (e) {} return r; };
+  var _savFunc = window.savFunc;
+  window.savFunc = async function () {
+    var extra = coletarExtras(), editId = null;
+    try { editId = editingFuncId; } catch (e) {}
+    var antes = {}; DB.g('funcionarios').forEach(function (f) { antes[f.id] = 1; });
+    await _savFunc.apply(this, arguments);
+    if (el('modal-func').classList.contains('open')) return;              // não salvou (faltou campo obrigatório)
+    var list = DB.g('funcionarios');
+    var idx = editId ? list.findIndex(function (f) { return f.id === editId; }) : list.findIndex(function (f) { return !antes[f.id]; });
+    if (idx < 0) return;
+    var f = Object.assign({}, list[idx]), mudou = false;
+    Object.keys(extra).forEach(function (k) {
+      if (!editId && vazio(extra[k])) return;
+      if ((f[k] == null ? '' : String(f[k])) !== extra[k]) { f[k] = extra[k]; mudou = true; }
+    });
+    if (vazio(f.end) && montarEndereco(f)) { f.end = montarEndereco(f); mudou = true; }
+    if (!mudou) return;
+    list[idx] = f; DB.s('funcionarios', list);
+    try { rdFunc(); } catch (e) {}
+  };
+
+  // ════════════ 2. RELATÓRIO — novas colunas disponíveis ════════════
+  function addCols(depoisDe, cols) {
+    if (typeof FR_COLS === 'undefined') return;
+    cols = cols.filter(function (c) { return !FR_COLS.some(function (x) { return x.k === c.k; }); });
+    var i = FR_COLS.findIndex(function (c) { return c.k === depoisDe; });
+    FR_COLS.splice(i < 0 ? FR_COLS.length : i + 1, 0, ...cols);
+  }
+  addCols('rg', [{ k: 'rgUf', t: 'UF RG', on: 0, w: 7 }, { k: 'rgOrg', t: 'Órgão RG', on: 0, w: 9 }]);
+  addCols('end', [{ k: 'endLog', t: 'Logradouro', on: 0, w: 34 }, { k: 'endNum', t: 'Número', on: 0, w: 8 }, { k: 'endComp', t: 'Complemento', on: 0, w: 14 },
+                  { k: 'endBairro', t: 'Bairro', on: 0, w: 24 }, { k: 'endCid', t: 'Cidade', on: 0, w: 16 }, { k: 'endUf', t: 'UF', on: 0, w: 5 }]);
+  addCols('adm', [{ k: 'dtIni', t: 'Data de início', on: 0, w: 12, d: 1 }]);
+  addCols('escala', [{ k: 'folga', t: 'Folgas', on: 0, w: 10 }]);
+  addCols('sal', [{ k: 'bonif', t: 'Bonificação', on: 0, w: 12, money: 1 }, { k: 'qCaixa', t: 'Quebra de caixa', on: 0, w: 12, money: 1 },
+                  { k: 'vt', t: 'VT', on: 0, w: 10, money: 1 }, { k: 'comb', t: 'Combustível', on: 0, w: 11, money: 1 },
+                  { k: 'conv', t: 'Convênio', on: 0, w: 11, money: 1 }, { k: 'va', t: 'VA', on: 0, w: 10, money: 1 }, { k: 'conta', t: 'Conta bancária', on: 0, w: 28 }]);
+  addCols('cpf', [{ k: 'codEpr', t: 'Cód. funcionário', on: 0, w: 9 }]);
+  addCols('emp', [{ k: 'codEmp', t: 'Cód. empresa', on: 0, w: 9 }]);
+
+  // ════════════ 3. IMPORTAR PLANILHA ════════════
+  // cabeçalho normalizado → campo
+  var CAB = {
+    codemp: 'codEmp', codempresa: 'codEmp', empresa: '_emp', razaosocial: '_emp', cnpj: '_cnpj',
+    codepr: 'codEpr', codfuncionario: 'codEpr', codigo: 'codEpr', matricula: 'codEpr',
+    nome: 'n', nomecompleto: 'n', genero: 'sex', sexo: 'sex',
+    datadeinicio: 'dtIni', datainicio: 'dtIni', inicio: 'dtIni',
+    datadeadmissao: 'adm', dataadmissao: 'adm', admissao: 'adm',
+    conta: 'conta', contabancaria: 'conta', salario: 'sal',
+    cargo: 'car', descricaocargo: 'car', funcao: 'car',
+    departamento: '_dep', depto: '_dep', setor: '_dep', loja: '_dep',
+    cpf: 'cpf', rg: 'rg', ufrg: 'rgUf', orgaorg: 'rgOrg', orgaoemissor: 'rgOrg', orgaoexpedidor: 'rgOrg',
+    datanascimento: 'nas', datadenascimento: 'nas', nascimento: 'nas',
+    endereco: 'endLog', logradouro: 'endLog', rua: 'endLog', numero: 'endNum', complemento: 'endComp', bairro: 'endBairro',
+    cep: 'cep', cidade: 'endCid', municipio: 'endCid', ufend: 'endUf', uf: 'endUf', estado: 'endUf',
+    escala: 'folga', folga: 'folga', folgas: 'folga', uniforme: 'tamCamisa', camiseta: 'tamCamisa',
+    bonificacao: 'bonif', quebradecaixa: 'qCaixa', quebracaixa: 'qCaixa', vt: 'vt', valetransporte: 'vt',
+    combustivel: 'comb', convenio: 'conv', va: 'va', valealimentacao: 'va'
+  };
+  function dataISO(x) {
+    if (vazio(x)) return '';
+    if (typeof x === 'number') {
+      if (x < 1000 || x > 80000) return '';
+      var d = new Date(Math.round((x - 25569) * 86400000));
+      return d.toISOString().slice(0, 10);
+    }
+    if (x instanceof Date && !isNaN(x)) return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+    var s = String(x).trim(), m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (!m) return '';
+    var a = +m[3]; if (a < 100) a += a > 40 ? 1900 : 2000;
+    if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31) return '';
+    return a + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  }
+  function fmtCPF(x) {
+    var d = dig(x); if (!d) return '';
+    if (d.length < 11) d = d.padStart(11, '0');
+    if (d.length !== 11) return '';
+    return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  function fmtCEP(x) { var d = dig(x); return d.length === 8 ? d.replace(/(\d{5})(\d{3})/, '$1-$2') : String(x || '').trim(); }
+  function fmtCNPJ(x) { var d = dig(x); return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : String(x || '').trim(); }
+  function limparLogradouro(s) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    var p = s.split(' ');
+    if (p.length > 2 && norm(p[0]) === norm(p[1])) p.splice(1, 1);                 // "Rua Rua Fulano" → "Rua Fulano"
+    return p.join(' ');
+  }
+  function texto(x) { return vazio(x) ? '' : String(x).replace(/\s+/g, ' ').trim(); }
+
+  // valores da linha da planilha → objeto de funcionário
+  function linhaParaFunc(r) {
+    var o = {};
+    o.n = texto(r.n).toUpperCase();
+    o.cpf = fmtCPF(r.cpf);
+    o.rg = texto(r.rg); o.rgUf = texto(r.rgUf).toUpperCase(); o.rgOrg = texto(r.rgOrg).toUpperCase();
+    o.nas = dataISO(r.nas); o.adm = dataISO(r.adm); o.dtIni = dataISO(r.dtIni);
+    var sx = norm(r.sex); o.sex = sx === 'f' || sx.indexOf('fem') === 0 ? 'Feminino' : sx === 'm' || sx.indexOf('mas') === 0 ? 'Masculino' : texto(r.sex);
+    o.car = texto(r.car); o.sal = moeda(r.sal); o.conta = texto(r.conta);
+    o.endLog = limparLogradouro(r.endLog); o.endNum = texto(r.endNum); o.endComp = texto(r.endComp); o.endBairro = texto(r.endBairro);
+    o.endCid = texto(r.endCid); o.endUf = texto(r.endUf).toUpperCase(); o.cep = fmtCEP(r.cep);
+    o.folga = texto(r.folga).toUpperCase(); o.tamCamisa = texto(r.tamCamisa).toUpperCase();
+    ['bonif', 'qCaixa', 'vt', 'comb', 'conv', 'va'].forEach(function (k) { o[k] = moeda(r[k]); });
+    o.codEmp = texto(r.codEmp); o.codEpr = texto(r.codEpr);
+    o.end = montarEndereco(o);
+    Object.keys(o).forEach(function (k) { if (vazio(o[k])) delete o[k]; });
+    return o;
+  }
+
+  function lerPlanilha(buf) {
+    if (typeof XLSX === 'undefined') throw new Error('A biblioteca de planilhas não carregou. Verifique a internet e recarregue a página.');
+    var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    for (var si = 0; si < wb.SheetNames.length; si++) {
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[si]], { header: 1, defval: '', raw: true });
+      var hi = rows.findIndex(function (r) { var c = r.map(chave); return c.indexOf('nome') !== -1 && c.indexOf('cpf') !== -1; });
+      if (hi < 0) continue;
+      var mapa = {}, ignoradas = [];
+      rows[hi].forEach(function (h, i) { var k = CAB[chave(h)]; if (k && !(k in mapa)) mapa[k] = i; else if (!vazio(h)) ignoradas.push(String(h).trim()); });
+      var linhas = [];
+      for (var r = hi + 1; r < rows.length; r++) {
+        var row = rows[r], o = { _linha: r + 1 };
+        Object.keys(mapa).forEach(function (k) { o[k] = row[mapa[k]]; });
+        if (vazio(o.n) && vazio(o.cpf)) continue;                                   // linha vazia
+        if (chave(o.n) === 'nome') continue;                                         // cabeçalho repetido
+        linhas.push(o);
+      }
+      return { aba: wb.SheetNames[si], linhas: linhas, ignoradas: ignoradas, temCodEpr: 'codEpr' in mapa };
+    }
+    throw new Error('Não encontrei as colunas "Nome" e "CPF" na planilha.');
+  }
+
+  function depChave(s) { var n = norm(s), m = n.match(/^(?:l|loja)\s*0*(\d+)$/); return m ? 'loja' + m[1] : chave(s); }
+
+  // monta o plano (nada é gravado aqui)
+  function planejar(dados) {
+    var funcs = DB.g('funcionarios'), emps = DB.g('empresas'), deps = DB.g('departamentos');
+    var porCpf = {}, porNome = {};
+    funcs.forEach(function (f) { var d = dig(f.cpf); if (d.length === 11) porCpf[d] = f; var nn = chave(f.n); if (nn) (porNome[nn] = porNome[nn] || []).push(f); });
+    var novasEmp = [], novosDep = [], usados = {}, cpfsPlanilha = {};
+    // códigos de funcionário repetidos dentro da mesma empresa na planilha não são importados
+    var contCod = {};
+    dados.linhas.forEach(function (r) { var k = texto(r.codEmp) + '|' + texto(r.codEpr); if (!vazio(r.codEpr)) contCod[k] = (contCod[k] || 0) + 1; });
+
+    function empresaDe(r) {
+      var cnpj = dig(r._cnpj), nome = texto(r._emp);
+      if (!cnpj && !nome) return null;
+      var e = emps.concat(novasEmp).find(function (x) { return cnpj && dig(x.cnpj) === cnpj; }) ||
+              (!cnpj ? emps.concat(novasEmp).find(function (x) { return chave(x.razao) === chave(nome) || chave(x.fan) === chave(nome); }) : null);
+      if (e) return e;
+      e = { id: uid(), razao: nome || fmtCNPJ(cnpj), cnpj: fmtCNPJ(cnpj), mats: [], _nova: 1 };
+      novasEmp.push(e); return e;
+    }
+    function depDe(r, emp) {
+      var nome = texto(r._dep); if (!nome || !chave(nome)) return null;
+      var k = depChave(nome), todos = deps.concat(novosDep);
+      var d = todos.find(function (x) { return depChave(x.nome) === k && emp && x.emp === emp.id; }) ||
+              todos.find(function (x) { return depChave(x.nome) === k && !x.emp; }) ||
+              (!emp ? todos.find(function (x) { return depChave(x.nome) === k; }) : null);
+      if (d) return d;
+      d = { id: uid(), nome: nome.toUpperCase(), resp: '', emp: emp ? emp.id : '', desc: 'Criado na importação da planilha de funcionários', _novo: 1 };
+      novosDep.push(d); return d;
+    }
+
+    var plano = { novos: [], completar: [], iguais: [], fora: [], novasEmp: novasEmp, novosDep: novosDep };
+    dados.linhas.forEach(function (r) {
+      var o = linhaParaFunc(r), nome = o.n || '(sem nome)', d = dig(o.cpf);
+      if (!vazio(o.codEpr) && contCod[texto(r.codEmp) + '|' + texto(r.codEpr)] > 1) delete o.codEpr;
+      if (d.length !== 11) { plano.fora.push({ nome: nome, motivo: 'CPF ausente ou inválido (linha ' + r._linha + ')' }); return; }
+      if (cpfsPlanilha[d]) { plano.fora.push({ nome: nome, motivo: 'CPF repetido na planilha (linha ' + r._linha + ')' }); return; }
+      cpfsPlanilha[d] = 1;
+      var f = porCpf[d], porNomeUsado = false;
+      if (!f) {
+        var cands = (porNome[chave(o.n)] || []).filter(function (x) { return !usados[x.id]; });
+        var semConflito = cands.filter(function (x) { var cd = dig(x.cpf); return !cd || cd === d; });
+        if (cands.length && !semConflito.length) { plano.fora.push({ nome: nome, motivo: 'Já existe funcionário com este nome e outro CPF (' + (cands[0].cpf || '') + '). Confira e ajuste manualmente.' }); return; }
+        if (semConflito.length > 1) { plano.fora.push({ nome: nome, motivo: 'Há mais de um cadastro com este nome sem CPF. Complete o CPF de um deles e importe de novo.' }); return; }
+        f = semConflito[0]; porNomeUsado = !!f;
+      }
+      if (f && usados[f.id]) { plano.fora.push({ nome: nome, motivo: 'Outra linha da planilha já corresponde a este funcionário' }); return; }
+      var emp = empresaDe(r), dep = null;
+      if (emp) o.emp = emp.id;
+      if (f) {
+        var empRef = emp || DB.g('empresas').find(function (x) { return x.id === f.emp; }) || null;
+        dep = vazio(f.dep) ? depDe(r, vazio(f.emp) ? emp : empRef) : null;
+      } else dep = depDe(r, emp);
+      if (dep) o.dep = dep.id;
+      if (f) {
+        usados[f.id] = 1;
+        var preencher = {};
+        Object.keys(o).forEach(function (k) {
+          if (k === 'n') return;
+          if (vazio(f[k]) && !vazio(o[k])) preencher[k] = o[k];
+        });
+        // endereço completo só quando o cadastro não tem nenhum
+        if (preencher.end && !vazio(f.end)) delete preencher.end;
+        var item = { f: f, preencher: preencher, porNome: porNomeUsado, empNova: emp && emp._nova && preencher.emp, depNovo: dep && dep._novo && preencher.dep };
+        (Object.keys(preencher).length ? plano.completar : plano.iguais).push(item);
+      } else {
+        o.st = 'Ativo'; o.docs = []; o.origem = 'Planilha de funcionários';
+        plano.novos.push({ o: o, emp: emp, dep: dep });
+      }
+    });
+    // empresas / departamentos novos só entram se algum funcionário usar
+    var usadosEmp = {}, usadosDep = {};
+    plano.novos.forEach(function (x) { if (x.o.emp) usadosEmp[x.o.emp] = 1; if (x.o.dep) usadosDep[x.o.dep] = 1; });
+    plano.completar.forEach(function (x) { if (x.preencher.emp) usadosEmp[x.preencher.emp] = 1; if (x.preencher.dep) usadosDep[x.preencher.dep] = 1; });
+    plano.novasEmp = novasEmp.filter(function (e) { return usadosEmp[e.id]; });
+    plano.novosDep = novosDep.filter(function (d) { return usadosDep[d.id]; });
+    return plano;
+  }
+
+  var _plano = null, _arquivo = '';
+  function nomeEmp(id, plano) { var e = DB.g('empresas').concat(plano ? plano.novasEmp : []).find(function (x) { return x.id === id; }); return e ? e.razao : ''; }
+  function nomeDep(id, plano) { var d = DB.g('departamentos').concat(plano ? plano.novosDep : []).find(function (x) { return x.id === id; }); return d ? d.nome : ''; }
+  function valorLegivel(k, val, plano) {
+    if (k === 'emp') return nomeEmp(val, plano);
+    if (k === 'dep') return nomeDep(val, plano);
+    if (k === 'nas' || k === 'adm' || k === 'dtIni') return fd(val);
+    if (k === 'sal' || C(k) && C(k).money) return Number(val).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return val;
+  }
+
+  function renderPrevia() {
+    var P = _plano, box = el('fi-prev');
+    if (!P) { box.innerHTML = ''; el('fi-btn-importar').disabled = true; return; }
+    var chip = function (cor, n, t) { return '<div style="flex:1;min-width:130px;padding:10px 12px;border-radius:var(--radius-sm);background:' + cor + ';"><div style="font-size:22px;font-weight:700;">' + n + '</div><div style="font-size:12px;">' + t + '</div></div>'; };
+    var h = '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;">📄 <strong>' + esc(_arquivo) + '</strong></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
+      chip('#e8f5e9', P.novos.length, 'novos funcionários') + chip('#e3f2fd', P.completar.length, 'cadastros a completar') +
+      chip('var(--gray-50)', P.iguais.length, 'já completos (sem mudança)') + chip(P.fora.length ? '#fff3e0' : 'var(--gray-50)', P.fora.length, 'não importados') + '</div>';
+    if (P.novasEmp.length || P.novosDep.length) {
+      h += '<div class="alert alert-info" style="font-size:12.5px;margin-bottom:12px;"><div>' +
+        (P.novasEmp.length ? '🏭 Empresas que serão cadastradas: <strong>' + P.novasEmp.map(function (e) { return esc(e.razao) + (e.cnpj ? ' (' + esc(e.cnpj) + ')' : ''); }).join('; ') + '</strong><br>' : '') +
+        (P.novosDep.length ? '🏷️ Departamentos que serão cadastrados: <strong>' + P.novosDep.map(function (d) { return esc(d.nome) + (d.emp ? ' — ' + esc(nomeEmp(d.emp, P)) : ''); }).join('; ') + '</strong>' : '') + '</div></div>';
+    }
+    var tabela = function (titulo, cab, linhas) {
+      return '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:14px 0 6px;">' + titulo + '</div>' +
+        '<div class="table-wrap" style="max-height:300px;overflow:auto;"><table><thead><tr>' + cab.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr></thead><tbody>' + linhas + '</tbody></table></div>';
+    };
+    if (P.novos.length) h += tabela('🟢 Novos funcionários', ['<input type="checkbox" checked onchange="fiMarcarTodos(\'n\',this.checked)" style="width:auto;">', 'Nome', 'CPF', 'Empresa', 'Cargo', 'Admissão'],
+      P.novos.map(function (x, i) { return '<tr><td><input type="checkbox" data-fi="n" data-i="' + i + '" checked style="width:auto;"></td><td style="font-weight:600;">' + esc(x.o.n) + '</td><td>' + esc(x.o.cpf) + '</td><td>' + esc(nomeEmp(x.o.emp, P)) + '</td><td>' + esc(x.o.car || '') + '</td><td>' + (x.o.adm ? fd(x.o.adm) : '—') + '</td></tr>'; }).join(''));
+    if (P.completar.length) h += tabela('🔵 Cadastros que serão completados (só o que está vazio)', ['<input type="checkbox" checked onchange="fiMarcarTodos(\'c\',this.checked)" style="width:auto;">', 'Funcionário no sistema', 'Informações que serão preenchidas'],
+      P.completar.map(function (x, i) {
+        return '<tr><td><input type="checkbox" data-fi="c" data-i="' + i + '" checked style="width:auto;"></td><td style="font-weight:600;white-space:nowrap;">' + esc(x.f.n) +
+          (x.porNome ? '<div style="font-size:11px;color:var(--gray-500);font-weight:400;">encontrado pelo nome</div>' : '') + '</td><td style="font-size:12px;">' +
+          Object.keys(x.preencher).map(function (k) { return '<span style="display:inline-block;margin:1px 6px 1px 0;"><span style="color:var(--gray-500);">' + esc(ROT[k] || k) + ':</span> ' + esc(valorLegivel(k, x.preencher[k], P)) + '</span>'; }).join('') + '</td></tr>';
+      }).join(''));
+    if (P.fora.length) h += tabela('🟠 Não importados', ['Nome', 'Motivo'], P.fora.map(function (x) { return '<tr><td style="font-weight:600;">' + esc(x.nome) + '</td><td style="font-size:12px;">' + esc(x.motivo) + '</td></tr>'; }).join(''));
+    if (P.iguais.length) h += '<details style="margin-top:12px;font-size:12.5px;"><summary style="cursor:pointer;color:var(--gray-600);">Ver os ' + P.iguais.length + ' cadastro(s) que já estão completos</summary><div style="padding:6px 0;color:var(--gray-600);">' + P.iguais.map(function (x) { return esc(x.f.n); }).join(' · ') + '</div></details>';
+    box.innerHTML = h;
+    el('fi-btn-importar').disabled = !(P.novos.length || P.completar.length);
+  }
+  window.fiMarcarTodos = function (t, on) { document.querySelectorAll('#fi-prev input[data-fi="' + t + '"]').forEach(function (c) { c.checked = on; }); };
+
+  window.fiArquivo = function (inp) {
+    var file = inp.files && inp.files[0]; inp.value = ''; if (!file) return;
+    _arquivo = file.name;
+    var rd = new FileReader();
+    rd.onload = function (e) {
+      try { _plano = planejar(lerPlanilha(e.target.result)); renderPrevia(); }
+      catch (err) { _plano = null; renderPrevia(); el('fi-prev').innerHTML = '<div class="alert alert-warning"><div>⚠️ ' + esc(err.message || err) + '</div></div>'; }
+    };
+    rd.readAsArrayBuffer(file);
+  };
+
+  var UNDO_KEY = 'rh_func_import_ultimo';
+  function lerUndo() { try { return JSON.parse(localStorage.getItem(UNDO_KEY) || 'null'); } catch (e) { return null; } }
+  function atualizarBotaoUndo() {
+    var u = lerUndo(), b = el('fi-btn-desfazer'); if (!b) return;
+    b.style.display = u ? '' : 'none';
+    if (u) b.title = 'Importação de ' + (u.quando || '') + ' — ' + (u.added.length) + ' novo(s), ' + Object.keys(u.filled).length + ' completado(s)';
+  }
+
+  window.fiImportar = function () {
+    var P = _plano; if (!P) return;
+    var marc = function (t) { var s = {}; document.querySelectorAll('#fi-prev input[data-fi="' + t + '"]').forEach(function (c) { if (c.checked) s[c.getAttribute('data-i')] = 1; }); return s; };
+    var mn = marc('n'), mc = marc('c');
+    var novos = P.novos.filter(function (x, i) { return mn[i]; }), comp = P.completar.filter(function (x, i) { return mc[i]; });
+    if (!novos.length && !comp.length) { alert('Nenhum funcionário marcado.'); return; }
+    if (!confirm('Importar ' + novos.length + ' novo(s) funcionário(s) e completar ' + comp.length + ' cadastro(s)?\n\nNenhuma informação já preenchida será alterada.')) return;
+    var usadosEmp = {}, usadosDep = {};
+    novos.forEach(function (x) { if (x.o.emp) usadosEmp[x.o.emp] = 1; if (x.o.dep) usadosDep[x.o.dep] = 1; });
+    comp.forEach(function (x) { if (x.preencher.emp) usadosEmp[x.preencher.emp] = 1; if (x.preencher.dep) usadosDep[x.preencher.dep] = 1; });
+    var undo = { quando: new Date().toLocaleString('pt-BR'), arquivo: _arquivo, added: [], filled: {}, emps: [], deps: [] };
+    // empresas e departamentos novos
+    var empsAdd = P.novasEmp.filter(function (e) { return usadosEmp[e.id]; }).map(function (e) { var c = Object.assign({}, e); delete c._nova; return c; });
+    var depsAdd = P.novosDep.filter(function (d) { return usadosDep[d.id]; }).map(function (d) { var c = Object.assign({}, d); delete c._novo; return c; });
+    if (empsAdd.length) { DB.s('empresas', DB.g('empresas').concat(empsAdd)); undo.emps = empsAdd.map(function (e) { return e.id; }); }
+    if (depsAdd.length) { DB.s('departamentos', DB.g('departamentos').concat(depsAdd)); undo.deps = depsAdd.map(function (d) { return d.id; }); }
+    // funcionários — relê a lista agora e só preenche o que continuar vazio
+    var list = DB.g('funcionarios');
+    comp.forEach(function (x) {
+      var i = list.findIndex(function (f) { return f.id === x.f.id; }); if (i < 0) return;
+      var f = Object.assign({}, list[i]), feitos = {};
+      Object.keys(x.preencher).forEach(function (k) { if (vazio(f[k])) { feitos[k] = { v: x.preencher[k], o: f[k] === undefined ? null : f[k] }; f[k] = x.preencher[k]; } });
+      if (Object.keys(feitos).length) { list[i] = f; undo.filled[f.id] = feitos; }
+    });
+    novos.forEach(function (x) { var f = Object.assign({ id: uid() }, x.o); list.push(f); undo.added.push(f.id); });
+    DB.s('funcionarios', list);
+    try { localStorage.setItem(UNDO_KEY, JSON.stringify(undo)); } catch (e) {}
+    _plano = null; closeModal('modal-func-imp');
+    try { rdFuncAtual(); } catch (e) { try { rdFunc(); } catch (e2) {} }
+    try { updDash(); } catch (e) {}
+    toast('✅ ' + undo.added.length + ' funcionário(s) importado(s) e ' + Object.keys(undo.filled).length + ' cadastro(s) completado(s)');
+  };
+
+  window.fiDesfazer = function () {
+    var u = lerUndo(); if (!u) return;
+    if (!confirm('Desfazer a importação de ' + u.quando + '?\n\n• Remove os ' + u.added.length + ' funcionário(s) que ela incluiu\n• Esvazia de novo só os campos que ela preencheu (se você não os alterou depois)\n\nO resto do sistema não é mexido.')) return;
+    var add = {}; u.added.forEach(function (id) { add[id] = 1; });
+    var list = DB.g('funcionarios').filter(function (f) { return !add[f.id]; }).map(function (f) {
+      var fe = u.filled[f.id]; if (!fe) return f;
+      var c = Object.assign({}, f);
+      Object.keys(fe).forEach(function (k) { if (String(c[k]) === String(fe[k].v)) { if (fe[k].o === null) delete c[k]; else c[k] = fe[k].o; } });
+      return c;
+    });
+    DB.s('funcionarios', list);
+    var refE = {}, refD = {}; list.forEach(function (f) { refE[f.emp] = 1; refD[f.dep] = 1; });
+    if (u.deps.length) DB.s('departamentos', DB.g('departamentos').filter(function (d) { return u.deps.indexOf(d.id) === -1 || refD[d.id]; }));
+    if (u.emps.length) DB.s('empresas', DB.g('empresas').filter(function (e) { return u.emps.indexOf(e.id) === -1 || refE[e.id] || (e.mats || []).length; }));
+    try { localStorage.removeItem(UNDO_KEY); } catch (e) {}
+    closeModal('modal-func-imp');
+    try { rdFuncAtual(); } catch (e) {}
+    try { updDash(); } catch (e) {}
+    toast('↩️ Importação desfeita.');
+  };
+
+  window.fiAbrir = function () {
+    _plano = null; renderPrevia(); atualizarBotaoUndo();
+    el('modal-func-imp').classList.add('open');
+  };
+
+  function injetarImportacao() {
+    if (el('modal-func-imp')) return;
+    var bNovo = document.querySelector('#sec-funcionarios .card-header button.btn-primary');
+    if (bNovo) bNovo.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" onclick="fiAbrir()" title="Importar planilha de funcionários (.xls, .xlsx)">📥 Importar planilha</button>');
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-func-imp"><div class="modal" style="max-width:980px;">' +
+      '<div class="modal-header"><span class="modal-title">📥 Importar planilha de funcionários</span><button class="modal-close" onclick="closeModal(\'modal-func-imp\')">×</button></div>' +
+      '<div class="alert alert-info" style="font-size:13px;margin-bottom:12px;"><div>Quem já está cadastrado (mesmo CPF, ou mesmo nome quando o cadastro está sem CPF) <strong>só recebe as informações que estiverem faltando</strong>, nada é substituído. Os demais entram como novos, com status Ativo. Você confere tudo antes de confirmar.</div></div>' +
+      '<label class="btn btn-primary" style="cursor:pointer;margin:0 0 6px;">📂 Escolher planilha (.xls / .xlsx)<input type="file" accept=".xls,.xlsx,.xlsm,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="fiArquivo(this)"></label>' +
+      '<div id="fi-prev" style="margin-top:10px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" id="fi-btn-desfazer" style="display:none;margin-right:auto;" onclick="fiDesfazer()">↩️ Desfazer última importação</button>' +
+      '<button class="btn btn-outline" onclick="closeModal(\'modal-func-imp\')">Cancelar</button>' +
+      '<button class="btn btn-primary" id="fi-btn-importar" disabled onclick="fiImportar()">✅ Importar</button></div></div></div>');
+  }
+
+  // ════════════ 4. ANIVERSÁRIO DE EMPRESA (tempo de casa) ════════════
+  var MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var MESES_ABR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  function injetarAniversarioEmpresa() {
+    if (el('func-view-tempo')) return;
+    var tabAniv = document.querySelector('#func-main-tabs .tab[data-v="aniv"]');
+    if (tabAniv) tabAniv.insertAdjacentHTML('afterend', '<div class="tab" data-v="tempo" onclick="funcView(\'tempo\',this)">🏢 Aniversário de Empresa</div>');
+    var viewAniv = el('func-view-aniv'); if (!viewAniv) return;
+    var sel = 'padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;';
+    viewAniv.insertAdjacentHTML('afterend',
+      '<div id="func-view-tempo" style="display:none;">' +
+      '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><span class="card-title" style="font-size:15px;">🏢 Aniversário de Empresa</span>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<select id="tc-filtro" onchange="rdTempoCasa()" style="' + sel + '"><option value="mes">Este mês</option><option value="prox30">Próximos 30 dias</option><option value="todos">Todos os meses</option>' +
+      '<optgroup label="Mês específico">' + MESES.map(function (m, i) { return '<option value="m' + (i + 1) + '">' + m + '</option>'; }).join('') + '</optgroup></select>' +
+      '<select id="tc-emp" onchange="rdTempoCasa()" style="' + sel + '"></select>' +
+      '<select id="tc-base" onchange="rdTempoCasa()" style="' + sel + '" title="Data usada para contar o tempo de casa"><option value="adm">Contar pela admissão</option><option value="ini">Contar pela data de início</option></select>' +
+      '<button class="btn btn-outline btn-sm" onclick="exportarTempoCasa()">📥 Excel</button></div></div>' +
+      '<div id="tc-resumo" style="margin-bottom:12px;"></div><div id="tc-list"></div></div>');
+  }
+  function _tcLista() {
+    var filtro = v('tc-filtro') || 'mes', empF = v('tc-emp'), base = v('tc-base') || 'adm';
+    var hoje = new Date(), ano = hoje.getFullYear(), hm = hoje.getMonth() + 1, hd = hoje.getDate();
+    if (/^m\d+$/.test(filtro)) { hm = parseInt(filtro.slice(1), 10); filtro = 'mes'; }
+    var emps = {}; DB.g('empresas').forEach(function (e) { emps[e.id] = e; });
+    var h0 = new Date(ano, hoje.getMonth(), hd);
+    var lista = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!empF || f.emp === empF); }).map(function (f) {
+      var dt = base === 'ini' ? (f.dtIni || f.adm) : (f.adm || f.dtIni);
+      if (!dt || !/^\d{4}-\d{2}-\d{2}/.test(dt)) return null;
+      var p = dt.split('-').map(Number), prox = new Date(ano, p[1] - 1, p[2]);
+      if (filtro === 'prox30' && prox < h0) prox.setFullYear(ano + 1);
+      var anos = prox.getFullYear() - p[0];
+      return Object.assign({}, f, { _dt: dt, _m: p[1], _d: p[2], _anos: anos, _prox: prox, _dias: Math.round((prox - h0) / 86400000), _emp: emps[f.emp] ? emps[f.emp].razao : '' });
+    }).filter(function (f) { return f && f._anos >= 1; });
+    if (filtro === 'mes') lista = lista.filter(function (f) { return f._m === hm; });
+    if (filtro === 'prox30') lista = lista.filter(function (f) { return f._dias >= 0 && f._dias <= 30; }).sort(function (a, b) { return a._dias - b._dias; });
+    else lista.sort(function (a, b) { return a._m - b._m || a._d - b._d || (a.n || '').localeCompare(b.n || ''); });
+    return { lista: lista, filtro: filtro, hm: hm, hoje: hoje };
+  }
+  window.rdTempoCasa = function () {
+    var se = el('tc-emp');
+    if (se) { var cur = se.value; se.innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join(''); se.value = cur; }
+    var R = _tcLista(), box = el('tc-list'), res = el('tc-resumo'); if (!box) return;
+    var hoje = R.hoje, titulo = R.filtro === 'mes' ? MESES[R.hm - 1] : R.filtro === 'prox30' ? 'próximos 30 dias' : 'o ano todo';
+    if (!R.lista.length) {
+      res.innerHTML = '';
+      box.innerHTML = '<div class="alert alert-info"><div>🏢 Nenhum aniversário de empresa em ' + titulo + '. Funcionários sem data de admissão ou com menos de 1 ano de casa não aparecem.</div></div>';
+      return;
+    }
+    var porAnos = {}; R.lista.forEach(function (f) { porAnos[f._anos] = (porAnos[f._anos] || 0) + 1; });
+    res.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12.5px;"><strong style="margin-right:4px;">' + R.lista.length + ' em ' + titulo + ':</strong>' +
+      Object.keys(porAnos).sort(function (a, b) { return a - b; }).map(function (a) { return '<span class="badge ' + (a % 5 === 0 ? 'badge-yellow' : 'badge-gray') + '">' + a + ' ano' + (a > 1 ? 's' : '') + ': ' + porAnos[a] + '</span>'; }).join('') + '</div>';
+    box.innerHTML = '';
+    R.lista.forEach(function (f) {
+      var ehHoje = f._m === hoje.getMonth() + 1 && f._d === hoje.getDate();
+      var card = document.createElement('div'); card.className = 'bday-card';
+      if (ehHoje) card.style.cssText = 'background:linear-gradient(135deg,#fbf1e4,#fff8e1);border:2px solid var(--green);';
+      var av = document.createElement('div'); av.className = 'bday-avatar' + (ehHoje ? ' today' : '');
+      var foto = typeof fotoStoreGet === 'function' ? fotoStoreGet(f.id) : null;
+      if (foto) { var img = document.createElement('img'); img.src = foto; img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;'; av.appendChild(img); }
+      else av.textContent = (f.n || '?')[0].toUpperCase();
+      var info = document.createElement('div'); info.className = 'bday-info';
+      info.innerHTML = '<div class="name">' + esc(f.n) + (ehHoje ? ' 🏢🎉' : '') + '</div>' +
+        '<div class="detail">' + esc(f.car || '—') + (f._emp ? ' · ' + esc(f._emp) : '') + ' · desde ' + fd(f._dt) + '</div>';
+      var tag = document.createElement('span'); tag.className = 'bday-tag ' + (ehHoje ? 'hoje' : 'mes');
+      tag.innerHTML = '<strong>' + f._anos + ' ano' + (f._anos > 1 ? 's' : '') + '</strong> · ' + (ehHoje ? 'Hoje!' : String(f._d).padStart(2, '0') + '/' + MESES_ABR[f._m - 1]);
+      if (f._anos % 5 === 0) tag.style.cssText = 'background:#fff8e1;color:#b26a00;border:1px solid #ffd54f;';
+      card.appendChild(av); card.appendChild(info); card.appendChild(tag);
+      if (f.tel) {
+        var b = document.createElement('button'); b.className = 'btn btn-whatsapp btn-sm'; b.innerHTML = '🎉 Parabenizar';
+        (function (tel, anos) { b.onclick = function () { wha(tel, 'Parabéns pelos ' + anos + ' ano' + (anos > 1 ? 's' : '') + ' de ' + nomeEmpresaSis() + '! 🎉 Obrigado pela dedicação e por fazer parte da nossa história!'); }; })(f.tel, f._anos);
+        card.appendChild(b);
+      }
+      box.appendChild(card);
+    });
+  };
+  window.exportarTempoCasa = function () {
+    var R = _tcLista(); if (!R.lista.length) { alert('Nenhum aniversário de empresa para exportar com esses filtros.'); return; }
+    var cab = ['Nome', 'Cargo', 'Empresa', 'Data base', 'Aniversário', 'Anos de casa'];
+    var linhas = R.lista.map(function (f) { return [f.n, f.car || '', f._emp, fd(f._dt), String(f._d).padStart(2, '0') + '/' + String(f._m).padStart(2, '0') + '/' + f._prox.getFullYear(), f._anos]; });
+    var nome = 'Aniversario_de_Empresa_' + (R.filtro === 'mes' ? MESES[R.hm - 1] : R.filtro === 'prox30' ? 'proximos_30_dias' : 'todos');
+    if (typeof XLSX === 'undefined') {
+      var csv = [cab].concat(linhas).map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = nome + '.csv'; a.click(); return;
+    }
+    var ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas)); ws['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Aniversário de Empresa'); XLSX.writeFile(wb, nome + '.xlsx');
+  };
+  var _funcView = window.funcView;
+  window.funcView = function (view, btn) {
+    var t = el('func-view-tempo');
+    if (view === 'tempo') {
+      _funcView('__nenhuma', btn);
+      if (t) t.style.display = '';
+      document.querySelectorAll('#func-main-tabs .tab').forEach(function (x) { x.classList.toggle('active', x.getAttribute('data-v') === 'tempo'); });
+      rdTempoCasa(); return;
+    }
+    if (t) t.style.display = 'none';
+    return _funcView.apply(this, arguments);
+  };
+  var _rdFuncAtual = window.rdFuncAtual;
+  window.rdFuncAtual = function () {
+    var r = _rdFuncAtual.apply(this, arguments);
+    var t = el('func-view-tempo'); if (t && t.style.display !== 'none') { try { rdTempoCasa(); } catch (e) {} }
+    return r;
+  };
+
+  injetarFormulario(); injetarImportacao(); injetarAniversarioEmpresa();
 })();
 
 </script>
