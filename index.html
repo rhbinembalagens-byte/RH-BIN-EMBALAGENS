@@ -14787,6 +14787,7 @@ function abrirManual() {
       <p>Menu <strong>Cadastros › Funcionários</strong>, com quatro abas:</p>
       <ul>
         <li><strong>👥 Cadastro:</strong> lista por status (Ativos, Afastados, Férias, Desligados), busca e ordenação. <em>+ Novo Funcionário</em> abre o formulário.</li>
+        <li><strong>🏢 Agência</strong> e <strong>📝 Sem registro:</strong> cadastros separados dos CLT (não entram em Férias, Benefícios nem nos relatórios CLT). Têm acompanhamento da experiência de 45/90 dias pela data de início — também no quadro próprio em <em>Período de Experiência</em> — e o botão <em>✅ Efetivar CLT</em>, que cria o cadastro em Funcionários.</li>
         <li><strong>📊 Relatório:</strong> marque os status, filtre por empresa/departamento, escolha a ordem (A→Z) e as colunas, e clique em <em>📥 Exportar para Excel</em>.</li>
         <li><strong>🎂 Aniversariantes:</strong> do mês, da semana, próximos 30 dias ou de qualquer mês, com o template para divulgação.</li>
         <li><strong>🏢 Aniversário de Empresa:</strong> quem completa anos de casa no mês, nos próximos 30 dias ou em qualquer mês (pela admissão ou pela data de início), com filtro por empresa, botão para parabenizar no WhatsApp e exportação para Excel.</li>
@@ -17815,6 +17816,336 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       toast('⏰ ' + L.length + ' férias vencendo em até ' + DIAS + ' dias' + (v ? ' (' + v + ' já vencida' + (v > 1 ? 's' : '') + ')' : '') + ' — veja em Férias.', v ? 'error' : 'warn');
     } catch (e) {}
   }, 2500);
+})();
+
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// COLABORADORES DE AGÊNCIA e SEM REGISTRO — cadastros separados dos CLT
+// eq_colab-ext: [{id, tipo:'agencia'|'semreg', n, cpf, rg, nas, sex, tel, end, cep, emp, dep, car, ini,
+//                 agencia, fimPrev, valor, st:'Ativo'|'Encerrado'|'Efetivado', fimData, obs, cltId}]
+// Ficam fora de Funcionários CLT, Férias, Benefícios e demais módulos.
+// Experiência (45/90 dias) contada pela data de início, num quadro próprio.
+// ════════════════════════════════════════════════════════════
+(function () {
+  var KEY = 'colab-ext';
+  var TIPOS = { agencia: { t: 'Agência', ic: '🏢', novo: '+ Novo colaborador de agência', vazio: 'Nenhum colaborador de agência cadastrado.' },
+                semreg:  { t: 'Sem registro', ic: '📝', novo: '+ Novo colaborador sem registro', vazio: 'Nenhum colaborador sem registro cadastrado.' } };
+  var ST_COR = { 'Ativo': 'badge-green', 'Encerrado': 'badge-gray', 'Efetivado': 'badge-blue' };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function up(s) { return String(s || '').trim().toLocaleUpperCase('pt-BR'); }
+  function lista() { return DB.g(KEY); }
+  function hoje() { return typeof _expHoje === 'function' ? _expHoje() : td(); }
+  function nomeEmp(id) { var e = DB.g('empresas').find(function (x) { return x.id === id; }); return e ? e.razao : ''; }
+  function nomeDep(id) { var d = DB.g('departamentos').find(function (x) { return x.id === id; }); return d ? d.nome : ''; }
+  function brl(v) { var n = parseFloat(String(v || '').replace(/\./g, '').replace(',', '.')); if (/^\d+(\.\d+)?$/.test(String(v))) n = parseFloat(v); return isNaN(n) ? (v || '') : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+
+  if (window.RT && RT.LIST && RT.LIST.indexOf(KEY) === -1) { RT.LIST.push(KEY); if (RT.ALL && RT.ALL.indexOf(KEY) === -1) RT.ALL.push(KEY); }
+
+  // ── situação da experiência (mesma regra dos CLT: 1º período dia 1–45, 2º período dia 46–90) ──
+  function experiencia(c) {
+    if (!c.ini || c.st !== 'Ativo') return null;
+    var p = expPeriodos(c.ini), h = hoje(), dia = _expDif(c.ini, h) + 1;
+    if (dia < 1) return { fase: 0, txt: 'Começa em ' + fd(c.ini), cor: 'badge-gray', dias: null };
+    var per = dia <= 45 ? 45 : dia <= 90 ? 90 : 0;
+    if (!per) return { fase: 3, txt: 'Experiência concluída', cor: 'badge-gray', dias: null };
+    var fim = per === 45 ? p.p45.fim : p.p90.fim, falta = _expDif(h, fim);
+    return { fase: per === 45 ? 1 : 2, per: per, fim: fim, dias: falta, dia: dia,
+             txt: (falta === 0 ? per + ' dias vence HOJE' : per + ' dias · vence em ' + falta + 'd'),
+             cor: falta <= 7 ? 'badge-yellow' : 'badge-green' };
+  }
+
+  // ════════ TELA (abas no menu Funcionários) ════════
+  var _filtro = { agencia: 'Ativo', semreg: 'Ativo' };
+  function injetarAbas() {
+    if (el('func-view-agencia')) return;
+    var tabs = el('func-main-tabs'); if (!tabs) return;
+    var tCad = tabs.querySelector('.tab[data-v="cadastro"]');
+    if (tCad) { tCad.innerHTML = '👥 Cadastro CLT'; }
+    var ref = tCad || tabs.firstElementChild;
+    ref.insertAdjacentHTML('afterend',
+      '<div class="tab" data-v="agencia" onclick="funcView(\'agencia\',this)">🏢 Agência</div>' +
+      '<div class="tab" data-v="semreg" onclick="funcView(\'semreg\',this)">📝 Sem registro</div>');
+    var vCad = el('func-view-cadastro'); if (!vCad) return;
+    ['semreg', 'agencia'].forEach(function (t) {
+      var T = TIPOS[t];
+      vCad.insertAdjacentHTML('afterend',
+        '<div id="func-view-' + t + '" style="display:none;">' +
+        '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><span class="card-title" style="font-size:15px;">' + T.ic + ' Colaboradores ' + (t === 'agencia' ? 'de agência' : 'sem registro') + '</span>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="cxExportar(\'' + t + '\')">📥 Excel</button>' +
+        '<button class="btn btn-primary" onclick="cxNovo(\'' + t + '\')">' + T.novo + '</button></div></div>' +
+        '<div class="alert alert-info" style="font-size:12.5px;margin-bottom:12px;"><div>Cadastro separado dos funcionários CLT — não entra em Férias, Benefícios nem nos relatórios CLT. A experiência (45/90 dias) é contada pela <strong>data de início</strong>' +
+        (t === 'agencia' ? '. Quando o colaborador for contratado, use <strong>✅ Efetivar CLT</strong>.' : '. Ao registrar o colaborador, use <strong>✅ Efetivar CLT</strong>.') + '</div></div>' +
+        '<div class="stats-grid" id="cx-stats-' + t + '" style="margin-bottom:14px;"></div>' +
+        '<div class="tabs" id="cx-tabs-' + t + '"></div>' +
+        '<div class="sort-bar" style="margin-bottom:12px;"><input type="search" id="cx-busca-' + t + '" placeholder="🔍 Buscar por nome, CPF, cargo' + (t === 'agencia' ? ' ou agência' : '') + '..." oninput="rdColabExt(\'' + t + '\')" style="padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;min-width:240px;flex:1;outline:none;"></div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>CPF</th>' + (t === 'agencia' ? '<th>Agência</th>' : '<th>Valor</th>') +
+        '<th>Início</th><th>Experiência</th>' + (t === 'agencia' ? '<th>Fim previsto</th>' : '') + '<th>Status</th><th>Ações</th></tr></thead><tbody id="cx-tb-' + t + '"></tbody></table></div></div>');
+    });
+  }
+  window.cxFiltro = function (t, f) { _filtro[t] = f; rdColabExt(t); };
+  window.rdColabExt = function (t) {
+    injetarAbas();
+    var todos = lista().filter(function (c) { return c.tipo === t; }), T = TIPOS[t];
+    var cont = { Ativo: 0, Encerrado: 0, Efetivado: 0 }, emExp = 0, venc7 = 0;
+    todos.forEach(function (c) { cont[c.st || 'Ativo'] = (cont[c.st || 'Ativo'] || 0) + 1; var e = experiencia(c); if (e && (e.fase === 1 || e.fase === 2)) { emExp++; if (e.dias <= 7) venc7++; } });
+    var stats = el('cx-stats-' + t);
+    if (stats) stats.innerHTML = [['Ativos', cont.Ativo, 'var(--green)'], ['Em experiência', emExp + (venc7 ? ' <span style="font-size:12px;color:#e65100;">(' + venc7 + ' vence em 7d)</span>' : ''), 'var(--accent)'],
+      ['Efetivados CLT', cont.Efetivado, 'var(--blue)'], ['Encerrados', cont.Encerrado, 'var(--gray-500)']].map(function (s) {
+      return '<div class="stat-card" style="border-top:3px solid ' + s[2] + ';"><div class="stat-value" style="font-size:24px;font-weight:700;color:' + s[2] + ';">' + s[1] + '</div><div class="stat-label">' + s[0] + '</div></div>';
+    }).join('');
+    var abas = el('cx-tabs-' + t);
+    if (abas) abas.innerHTML = [['Ativo', '🟢 Ativos', cont.Ativo], ['Efetivado', '🔵 Efetivados CLT', cont.Efetivado], ['Encerrado', '⚪ Encerrados', cont.Encerrado], ['todos', '👥 Todos', todos.length]].map(function (a) {
+      return '<div class="tab' + (_filtro[t] === a[0] ? ' active' : '') + '" onclick="cxFiltro(\'' + t + '\',\'' + a[0] + '\')">' + a[1] + ' <span style="opacity:.7;font-size:11px;">' + a[2] + '</span></div>';
+    }).join('');
+    var q = norm(v('cx-busca-' + t));
+    var linhas = todos.filter(function (c) {
+      if (_filtro[t] !== 'todos' && (c.st || 'Ativo') !== _filtro[t]) return false;
+      return !q || norm([c.n, c.cpf, c.car, c.agencia].join(' ')).indexOf(q) !== -1;
+    }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    var tb = el('cx-tb-' + t); if (!tb) return;
+    var cols = t === 'agencia' ? 8 : 7;
+    if (!linhas.length) { tb.innerHTML = '<tr><td colspan="' + cols + '" style="text-align:center;padding:30px;color:var(--gray-400)">' + (todos.length ? 'Nenhum colaborador neste filtro.' : T.vazio) + '</td></tr>'; return; }
+    var h = hoje();
+    tb.innerHTML = linhas.map(function (c) {
+      var e = experiencia(c), info = [c.car, nomeDep(c.dep), nomeEmp(c.emp)].filter(Boolean).join(' · ');
+      var exp = e ? '<span class="badge ' + e.cor + '">' + esc(e.txt) + '</span>' + (e.dia && e.fase < 3 ? '<div style="font-size:11px;color:var(--gray-400);">' + e.dia + 'º dia</div>' : '') : '<span style="color:var(--gray-400);">—</span>';
+      var fimPrev = '';
+      if (t === 'agencia') {
+        var dd = c.fimPrev ? _expDif(h, c.fimPrev) : null;
+        fimPrev = '<td>' + (c.fimPrev ? fd(c.fimPrev) + (c.st === 'Ativo' && dd !== null && dd <= 15 ? '<div><span class="badge ' + (dd < 0 ? 'badge-red' : 'badge-yellow') + '">' + (dd < 0 ? 'venceu há ' + (-dd) + 'd' : dd === 0 ? 'vence hoje' : 'vence em ' + dd + 'd') + '</span></div>' : '') : '—') + '</td>';
+      }
+      var st = c.st || 'Ativo';
+      return '<tr><td><strong>' + esc(c.n) + '</strong>' + (info ? '<div style="font-size:11px;color:var(--gray-400);">' + esc(info) + '</div>' : '') + '</td>' +
+        '<td>' + esc(c.cpf || '—') + '</td>' +
+        (t === 'agencia' ? '<td>' + esc(c.agencia || '—') + '</td>' : '<td>' + (c.valor ? esc(brl(c.valor)) : '—') + '</td>') +
+        '<td>' + (c.ini ? fd(c.ini) : '—') + '</td><td>' + exp + '</td>' + fimPrev +
+        '<td><span class="badge ' + (ST_COR[st] || 'badge-gray') + '">' + (st === 'Efetivado' ? 'Efetivado CLT' : st) + '</span>' + (c.fimData && st !== 'Ativo' ? '<div style="font-size:11px;color:var(--gray-400);">' + fd(c.fimData) + '</div>' : '') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn-icon" title="Editar" onclick="cxEditar(\'' + c.id + '\')">✏️</button> ' +
+        (st === 'Ativo' ? '<button class="btn-icon" title="Efetivar como CLT (cria o cadastro em Funcionários)" onclick="cxEfetivar(\'' + c.id + '\')">✅</button> ' +
+                          '<button class="btn-icon" title="Encerrar (saiu / fim do contrato)" onclick="cxEncerrar(\'' + c.id + '\')">⏹️</button> ' : '') +
+        (c.tel ? '<button class="btn-icon" title="WhatsApp" onclick="wha(\'' + esc(c.tel) + '\',\'\')">💬</button> ' : '') +
+        '<button class="btn-icon danger" title="Excluir" onclick="cxExcluir(\'' + c.id + '\')">&#128465;</button></td></tr>';
+    }).join('');
+  };
+
+  // ════════ FORMULÁRIO ════════
+  var _editId = null, _tipo = 'agencia';
+  function injetarModal() {
+    if (el('modal-colab-ext')) return;
+    var g = function (id, label, extra, tipo, full) { return '<div class="form-group' + (full ? ' form-full' : '') + '" id="cxg-' + id + '"><label>' + label + '</label><input id="cx-' + id + '" type="' + (tipo || 'text') + '"' + (extra || '') + '></div>'; };
+    var UP = ' style="text-transform:uppercase;"';
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-colab-ext"><div class="modal" style="max-width:780px;">' +
+      '<div class="modal-header"><span class="modal-title" id="cx-titulo">Colaborador</span><button class="modal-close" onclick="closeModal(\'modal-colab-ext\')">×</button></div>' +
+      '<div class="uni-sec-tit">👤 Dados pessoais</div><div class="form-grid">' +
+      g('n', 'Nome completo *', UP, 'text', true) + g('cpf', 'CPF', ' placeholder="000.000.000-00" oninput="mCPF(this)"') + g('rg', 'RG', UP) +
+      g('nas', 'Nascimento', '', 'date') +
+      '<div class="form-group"><label>Sexo</label><select id="cx-sex"><option value="">Selecione</option><option>Masculino</option><option>Feminino</option><option>Outro</option></select></div>' +
+      g('tel', 'Telefone / WhatsApp', ' placeholder="(11) 99999-9999" oninput="mFone(this)"') + g('cep', 'CEP', ' placeholder="00000-000"') +
+      g('end', 'Endereço completo', UP + ' placeholder="Rua, número, bairro, cidade – UF"', 'text', true) + '</div>' +
+      '<div class="uni-sec-tit" style="margin-top:14px;">💼 Trabalho</div><div class="form-grid">' +
+      '<div class="form-group"><label>Empresa / Loja</label><select id="cx-emp" onchange="estFillDepSelect(\'cx-dep\', this.value)"></select></div>' +
+      '<div class="form-group"><label>Departamento</label><select id="cx-dep"></select></div>' +
+      g('car', 'Cargo / Função', UP + ' list="dl-cx-cargos" autocomplete="off"') + g('ini', 'Data de início *', '', 'date') +
+      g('agencia', 'Agência', UP + ' list="dl-cx-agencias" autocomplete="off" placeholder="Nome da agência"') + g('fimPrev', 'Fim previsto do contrato', '', 'date') +
+      g('valor', 'Valor combinado (salário / diária)', ' placeholder="R$ 0,00"') +
+      '<div class="form-group"><label>Status</label><select id="cx-st"><option>Ativo</option><option>Encerrado</option><option>Efetivado</option></select></div>' +
+      g('fimData', 'Data de saída / efetivação', '', 'date') +
+      '<div class="form-group form-full"><label>Observações</label><textarea id="cx-obs" rows="2"></textarea></div></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-colab-ext\')">Cancelar</button><button class="btn btn-primary" onclick="cxSalvar()">💾 Salvar</button></div></div></div>' +
+      '<datalist id="dl-cx-cargos"></datalist><datalist id="dl-cx-agencias"></datalist>');
+  }
+  function prepararForm(t, c) {
+    injetarModal(); _tipo = t; _editId = c ? c.id : null;
+    el('cx-titulo').textContent = (c ? '✏️ Editar' : TIPOS[t].ic + ' Novo') + ' colaborador ' + (t === 'agencia' ? 'de agência' : 'sem registro');
+    fillSel('cx-emp', 'empresas', 'razao');
+    ['n', 'cpf', 'rg', 'nas', 'tel', 'cep', 'end', 'car', 'ini', 'agencia', 'fimPrev', 'valor', 'fimData', 'obs'].forEach(function (k) { el('cx-' + k).value = c && c[k] != null ? c[k] : ''; });
+    el('cx-sex').value = c ? (c.sex || '') : ''; el('cx-st').value = c ? (c.st || 'Ativo') : 'Ativo';
+    el('cx-emp').value = c ? (c.emp || '') : '';
+    if (typeof estFillDepSelect === 'function') estFillDepSelect('cx-dep', el('cx-emp').value);
+    el('cx-dep').value = c ? (c.dep || '') : '';
+    el('cxg-agencia').style.display = el('cxg-fimPrev').style.display = t === 'agencia' ? '' : 'none';
+    var cargos = typeof estCargos === 'function' ? estCargos().map(function (x) { return x.nome; }) : [];
+    el('dl-cx-cargos').innerHTML = cargos.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+    var ags = {}; DB.g('agencias').forEach(function (a) { if (a.nome && a.ativa !== false) ags[up(a.nome)] = 1; });
+    lista().forEach(function (x) { if (x.agencia) ags[x.agencia] = 1; });
+    el('dl-cx-agencias').innerHTML = Object.keys(ags).sort().map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+    el('modal-colab-ext').classList.add('open');
+    setTimeout(function () { el('cx-n').focus(); }, 60);
+  }
+  window.cxNovo = function (t) { prepararForm(t, null); };
+  window.cxEditar = function (id) { var c = lista().find(function (x) { return x.id === id; }); if (c) prepararForm(c.tipo, c); };
+  window.cxSalvar = function () {
+    var d = {};
+    ['n', 'cpf', 'rg', 'nas', 'sex', 'tel', 'cep', 'end', 'emp', 'dep', 'car', 'ini', 'agencia', 'fimPrev', 'valor', 'st', 'fimData', 'obs'].forEach(function (k) { d[k] = (el('cx-' + k).value || '').trim(); });
+    ['n', 'rg', 'end', 'car', 'agencia'].forEach(function (k) { d[k] = up(d[k]); });
+    if (_tipo !== 'agencia') { d.agencia = ''; d.fimPrev = ''; }
+    if (!d.n) { alert('Informe o nome.'); el('cx-n').focus(); return; }
+    if (!d.ini) { alert('Informe a data de início — ela é usada para acompanhar a experiência.'); el('cx-ini').focus(); return; }
+    var l = lista(), cpfD = d.cpf.replace(/\D/g, '');
+    if (cpfD) {
+      var dup = l.find(function (x) { return x.id !== _editId && (x.cpf || '').replace(/\D/g, '') === cpfD && x.st === 'Ativo'; });
+      if (dup && !confirm('Já existe colaborador ativo com este CPF (' + dup.n + ' — ' + TIPOS[dup.tipo].t + ').\n\nSalvar mesmo assim?')) return;
+      var clt = DB.g('funcionarios').find(function (f) { return (f.cpf || '').replace(/\D/g, '') === cpfD && f.st !== 'Desligado'; });
+      if (clt && !_editId && !confirm(clt.n + ' já está cadastrado(a) como funcionário CLT.\n\nCadastrar também aqui?')) return;
+    }
+    if (_editId) { var i = l.findIndex(function (x) { return x.id === _editId; }); if (i >= 0) l[i] = Object.assign({}, l[i], d); }
+    else l.push(Object.assign({ id: uid(), tipo: _tipo, criado: hoje() }, d));
+    DB.s(KEY, l);
+    var t = _tipo; closeModal('modal-colab-ext'); rdColabExt(t);
+    toast(_editId ? 'Cadastro atualizado ✅' : 'Colaborador cadastrado ✅');
+  };
+  window.cxExcluir = function (id) {
+    var c = lista().find(function (x) { return x.id === id; }); if (!c) return;
+    if (!confirm('Excluir o cadastro de ' + c.n + '?\n\nEssa ação não pode ser desfeita.')) return;
+    DB.s(KEY, lista().filter(function (x) { return x.id !== id; })); rdColabExt(c.tipo); toast('Cadastro excluído.');
+  };
+  function pedirData(msg) {
+    var r = prompt(msg + '\n\nInforme a data (dd/mm/aaaa):', fd(hoje())); if (r === null) return null;
+    var m = String(r).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) { alert('Data inválida. Use o formato dd/mm/aaaa.'); return null; }
+    return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  }
+  window.cxEncerrar = function (id) {
+    var l = lista(), i = l.findIndex(function (x) { return x.id === id; }); if (i < 0) return;
+    var dt = pedirData('Encerrar o vínculo de ' + l[i].n + ' (saída ou fim do contrato).'); if (!dt) return;
+    l[i] = Object.assign({}, l[i], { st: 'Encerrado', fimData: dt }); DB.s(KEY, l); rdColabExt(l[i].tipo); toast('Vínculo encerrado.');
+  };
+  window.cxEfetivar = function (id) {
+    var l = lista(), i = l.findIndex(function (x) { return x.id === id; }); if (i < 0) return;
+    var c = l[i];
+    var dt = pedirData('Efetivar ' + c.n + ' como funcionário CLT.\nSerá criado o cadastro em Funcionários com os dados daqui (data de admissão abaixo).'); if (!dt) return;
+    var funcs = DB.g('funcionarios'), cpfD = (c.cpf || '').replace(/\D/g, '');
+    var f = cpfD ? funcs.find(function (x) { return (x.cpf || '').replace(/\D/g, '') === cpfD; }) : null;
+    if (!f) {
+      f = { id: uid(), n: c.n, cpf: c.cpf || '', rg: c.rg || '', nas: c.nas || '', sex: c.sex || '', tel: c.tel || '', end: c.end || '', cep: c.cep || '',
+            emp: c.emp || '', dep: c.dep || '', car: c.car || '', adm: dt, dtIni: c.ini || '', tip: 'CLT', st: 'Ativo', docs: [],
+            origem: c.tipo === 'agencia' ? 'Efetivado de agência' + (c.agencia ? ' (' + c.agencia + ')' : '') : 'Efetivado (antes sem registro)' };
+      funcs.push(f); DB.s('funcionarios', funcs);
+    }
+    l[i] = Object.assign({}, c, { st: 'Efetivado', fimData: dt, cltId: f.id }); DB.s(KEY, l);
+    rdColabExt(c.tipo);
+    toast('✅ ' + c.n + ' efetivado(a) como CLT. Complete o cadastro (CPF, salário, documentos…).');
+    if (typeof editFunc === 'function') setTimeout(function () { editFunc(f.id); }, 300);
+  };
+  window.cxExportar = function (t) {
+    var l = lista().filter(function (c) { return c.tipo === t; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+    if (!l.length) { alert('Nenhum colaborador para exportar.'); return; }
+    var cab = ['Nome', 'CPF', 'RG', 'Nascimento', 'Telefone', 'Endereço', 'Empresa', 'Departamento', 'Cargo', 'Início'].concat(t === 'agencia' ? ['Agência', 'Fim previsto'] : ['Valor']).concat(['Experiência', 'Status', 'Saída/Efetivação', 'Observações']);
+    var linhas = l.map(function (c) {
+      var e = experiencia(c);
+      return [c.n, c.cpf, c.rg, c.nas ? fd(c.nas) : '', c.tel, c.end, nomeEmp(c.emp), nomeDep(c.dep), c.car, c.ini ? fd(c.ini) : '']
+        .concat(t === 'agencia' ? [c.agencia, c.fimPrev ? fd(c.fimPrev) : ''] : [c.valor ? brl(c.valor) : ''])
+        .concat([e ? e.txt : '', c.st || 'Ativo', c.fimData ? fd(c.fimData) : '', c.obs]).map(function (x) { return x == null ? '' : x; });
+    });
+    var nome = 'Colaboradores_' + (t === 'agencia' ? 'Agencia' : 'Sem_registro') + '_' + fd(hoje()).replace(/\//g, '-');
+    if (typeof XLSX === 'undefined') {
+      var csv = [cab].concat(linhas).map(function (r) { return r.map(function (x) { return '"' + String(x).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = nome + '.csv'; a.click(); return;
+    }
+    var ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas)); ws['!cols'] = cab.map(function (c) { return { wch: /Nome|Endere|Empresa/.test(c) ? 32 : 15 }; });
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, TIPOS[t].t); XLSX.writeFile(wb, nome + '.xlsx');
+  };
+
+  // aba no menu Funcionários
+  var _funcView = window.funcView;
+  window.funcView = function (view, btn) {
+    var va = el('func-view-agencia'), vs = el('func-view-semreg');
+    var hdr = document.querySelector('#sec-funcionarios > .card > .card-header > div');
+    if (hdr) hdr.style.display = (view === 'agencia' || view === 'semreg') ? 'none' : '';
+    if (view === 'agencia' || view === 'semreg') {
+      _funcView('__nenhuma', btn);
+      if (va) va.style.display = view === 'agencia' ? '' : 'none';
+      if (vs) vs.style.display = view === 'semreg' ? '' : 'none';
+      document.querySelectorAll('#func-main-tabs .tab').forEach(function (x) { x.classList.toggle('active', x.getAttribute('data-v') === view); });
+      rdColabExt(view); return;
+    }
+    if (va) va.style.display = 'none'; if (vs) vs.style.display = 'none';
+    return _funcView.apply(this, arguments);
+  };
+  var _rdFuncAtual = window.rdFuncAtual;
+  window.rdFuncAtual = function () {
+    var r = _rdFuncAtual.apply(this, arguments);
+    ['agencia', 'semreg'].forEach(function (t) { var x = el('func-view-' + t); if (x && x.style.display !== 'none') rdColabExt(t); });
+    return r;
+  };
+
+  // ════════ PERÍODO DE EXPERIÊNCIA — quadro separado ════════
+  var _expFiltro = 'todos';
+  function injetarExp() {
+    var sec = el('sec-experiencia'); if (!sec || el('cx-exp-card')) return;
+    var card = sec.querySelector('.card');
+    card.insertAdjacentHTML('afterend',
+      '<div class="card" id="cx-exp-card" style="margin-top:18px;"><div class="card-header" style="flex-wrap:wrap;gap:8px;"><span class="card-title">⌛ Experiência — Agência e Sem registro</span>' +
+      '<span style="font-size:12px;color:var(--gray-500);">Separado dos CLT · contado pela data de início</span></div>' +
+      '<div class="tabs" id="cx-exp-tabs"></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Colaborador</th><th>Vínculo</th><th>Início</th><th>Período</th><th>Vencimento</th><th>Prazo</th><th>Status</th><th>Envio ao Gestor</th></tr></thead><tbody id="cx-exp-tb"></tbody></table></div></div>');
+  }
+  window.cxExpFiltro = function (f) { _expFiltro = f; rdExpExt(); };
+  window.cxEnvio = function (id, dias) { var k = 'exp_env_' + id + '_' + dias; localStorage.setItem(k, localStorage.getItem(k) === '1' ? '0' : '1'); rdExpExt(); };
+  function linhasExp() {
+    var h = hoje(), CAR = 5, out = [];
+    lista().forEach(function (c) {
+      if (c.st !== 'Ativo' || !c.ini) return;
+      [45, 90].forEach(function (dias) {
+        var per = expPeriodos(c.ini)[dias === 90 ? 'p90' : 'p45'];
+        var desde = _expDif(per.ini, h), ate = _expDif(h, per.fim);
+        if (desde < 0 || ate < -CAR) return;
+        out.push({ c: c, dias: dias, per: per, ate: ate, dia: _expDif(c.ini, h) + 1 });
+      });
+    });
+    return out.sort(function (a, b) { return a.per.fim.localeCompare(b.per.fim); });
+  }
+  window.rdExpExt = function () {
+    injetarExp();
+    var tb = el('cx-exp-tb'); if (!tb) return;
+    var L = linhasExp(), n = { todos: L.length, agencia: 0, semreg: 0 };
+    L.forEach(function (x) { n[x.c.tipo]++; });
+    el('cx-exp-tabs').innerHTML = [['todos', '👥 Todos'], ['agencia', '🏢 Agência'], ['semreg', '📝 Sem registro']].map(function (a) {
+      return '<div class="tab' + (_expFiltro === a[0] ? ' active' : '') + '" onclick="cxExpFiltro(\'' + a[0] + '\')">' + a[1] + ' <span style="opacity:.7;font-size:11px;">' + n[a[0]] + '</span></div>';
+    }).join('');
+    L = L.filter(function (x) { return _expFiltro === 'todos' || x.c.tipo === _expFiltro; });
+    if (!L.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:26px;color:var(--gray-400)">Nenhum colaborador de agência ou sem registro em período de experiência.</td></tr>'; return; }
+    tb.innerHTML = L.map(function (x) {
+      var c = x.c, d = x.ate, bc, st;
+      if (d < 0) { bc = 'badge-red'; st = 'Vencido há ' + Math.abs(d) + 'd'; }
+      else if (d === 0) { bc = 'badge-yellow'; st = 'Vence HOJE'; }
+      else if (d <= 7) { bc = 'badge-yellow'; st = 'Vence em ' + d + 'd'; }
+      else { bc = 'badge-green'; st = 'Em andamento'; }
+      var prazo = d < 0 ? '<span style="color:var(--red);font-weight:600;">' + Math.abs(d) + 'd atraso</span>' : d === 0 ? '<strong style="color:var(--accent);">HOJE</strong>' : '<strong style="color:var(--green-dark);">' + d + ' dias restantes</strong>';
+      prazo += '<div style="font-size:11px;color:var(--gray-400);">' + (x.dia > x.dias ? 'período de ' + x.dias + ' dias encerrado' : x.dia + 'º dia de ' + x.dias) + '</div>';
+      var env = localStorage.getItem('exp_env_' + c.id + '_' + x.dias) === '1';
+      var info = [c.car, nomeDep(c.dep), nomeEmp(c.emp)].filter(Boolean).join(' · ');
+      return '<tr><td><strong>' + esc(c.n) + '</strong>' + (info ? '<div style="font-size:11px;color:var(--gray-400);">' + esc(info) + '</div>' : '') + '</td>' +
+        '<td><span class="badge ' + (c.tipo === 'agencia' ? 'badge-blue' : 'badge-yellow') + '">' + TIPOS[c.tipo].ic + ' ' + TIPOS[c.tipo].t + '</span>' + (c.agencia ? '<div style="font-size:11px;color:var(--gray-400);">' + esc(c.agencia) + '</div>' : '') + '</td>' +
+        '<td>' + fd(c.ini) + '</td><td style="white-space:nowrap;">' + x.dias + ' dias: ' + fd(x.per.ini) + ' a ' + fd(x.per.fim) + '</td><td><strong>' + fd(x.per.fim) + '</strong></td>' +
+        '<td>' + prazo + '</td><td><span class="badge ' + bc + '">' + st + '</span></td>' +
+        '<td><button onclick="cxEnvio(\'' + c.id + '\',' + x.dias + ')" style="' + (env ? 'background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;' : 'background:#fff3e0;color:#e65100;border:1px solid #ffcc80;') +
+        'border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">' + (env ? '✅ Enviado' : '⏳ Pendente') + '</button></td></tr>';
+    }).join('');
+  };
+  var _rdExp = window.rdExp;
+  window.rdExp = function () { var r = _rdExp.apply(this, arguments); try { rdExpExt(); } catch (e) {} return r; };
+
+  // Dashboard: avisos de experiência (7 dias) identificados como Agência / Sem registro
+  var _updDash = window.updDash;
+  window.updDash = function () {
+    var r = _updDash.apply(this, arguments);
+    try {
+      var a = el('alertas'); if (!a) return r;
+      var avisos = linhasExp().filter(function (x) { return x.ate >= 0 && x.ate <= 7; }).map(function (x) {
+        return '<div class="alert alert-warning">⚠ <strong>' + esc(x.c.n) + '</strong> (' + TIPOS[x.c.tipo].t + '): experiência ' + x.dias + ' dias vence em ' + x.ate + ' dia(s).</div>';
+      });
+      if (avisos.length) { if (!a.querySelector('.alert')) a.innerHTML = ''; a.insertAdjacentHTML('beforeend', avisos.join('')); }
+    } catch (e) {}
+    return r;
+  };
+
+  injetarAbas();
 })();
 
 </script>
