@@ -14833,7 +14833,7 @@ function abrirManual() {
     ['s10', '10. Gerar Documentos e Políticas', `
       <ul><li><strong>Gerar Documentos:</strong> Termo de Responsabilidade (FOR01), Autorização de Imagem e Voz (FOR02), Termo de Adesão – Saúde e Vacinação e Ficha de Presença. A janela traz os dados do colaborador e da empresa para conferir antes de gerar.</li>
       <li><strong>Gerar Documentos para Agência e Sem registro:</strong> a lista de funcionários do topo mostra três grupos — CLT, Agência e Sem registro/Aprendizes — e todos os documentos podem ser gerados para qualquer um deles. Os colaboradores de agência e sem registro não entram no cadastro CLT.</li>
-      <li><strong>Recibos (Gerar Documentos):</strong> Pagamento de Salário, Adiantamento Salarial, 1ª e 2ª parcela do 13º e Bônus por Resultado, no modelo BIN em 2 vias. O <em>Adiantamento</em> já calcula 40% do salário do cadastro (percentual ajustável). O <em>Pagamento de Salário</em> sai como demonstrativo: salário base − adiantamento do mês (puxado do recibo de adiantamento gerado, ou 40% se não houver) − farmácia, vale compra e outros descontos = líquido a pagar. Escolha o funcionário (CLT, agência ou sem registro), confira os dados e preencha valor (o extenso é automático), referência, forma de pagamento e data.</li>
+      <li><strong>Recibos (Gerar Documentos):</strong> Pagamento de Salário, Adiantamento Salarial, 1ª e 2ª parcela do 13º e Bônus por Resultado, no modelo BIN em 2 vias. O <em>Adiantamento</em> já calcula 40% do salário do cadastro (percentual ajustável). O <em>Pagamento de Salário</em> sai como demonstrativo: salário base − adiantamento do mês (puxado do recibo de adiantamento gerado, ou 40% se não houver) − farmácia, vale compra e outros descontos = líquido a pagar. Pode gerar <em>👤 Individual</em> ou <em>👥 Por grupo</em> (CLT, Sem registro, Agência ou todos, com filtro por empresa): no modo grupo aparece uma tabela com todos, valores já calculados e editáveis, e sai um único arquivo com um recibo por página. Escolha o funcionário (CLT, agência ou sem registro), confira os dados e preencha valor (o extenso é automático), referência, forma de pagamento e data.</li>
       <li><strong>Políticas & Normas:</strong> modelo oficial POL01 – Política de Prêmio Assiduidade (com Termo de Ciência) e as políticas que você cadastrar. Qualquer política pode ser excluída (🗑️ — a POL01 pode ser restaurada) e novas podem ser trazidas em <em>📥 Importar política</em>: arquivos Word (.docx) viram documento para gerar por funcionário com Termo de Ciência; PDF e imagens ficam como arquivo para consulta.</li>
       <li><strong>⏰ Vencimento de férias:</strong> 30 dias antes da data limite de saída, as férias ainda não programadas aparecem no quadro do topo de Férias, no Dashboard e com contador no menu.</li></ul>`],
     ['s11', '11. Salvamento e Google Drive', `
@@ -18449,10 +18449,35 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       'table.ass{width:100%;border-collapse:collapse;}table.ass td{width:46.9%;text-align:center;font-size:9pt;padding:0;}table.ass td.gap{width:6.2%;}' +
       'table.ass td div{border-top:.75pt solid #3A2E1A;padding-top:2pt;}table.ass td.gap div{border:0;}' +
       '.corte{text-align:center;font-size:7pt;color:#999;border-bottom:.75pt dashed #999;padding-bottom:4pt;margin:14pt 0;}' +
-      '.ok{display:none;}';
-    var titulo = R.card + (d.nome ? ' - ' + d.nome : '');
-    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (d.demo ? ' class="cp"' : '') + '>' +
-      via(R, d, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, d, 2) + '</body></html>';
+      '.ok{display:none;}.pg+.pg{break-before:page;page-break-before:always;}@media screen{.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}';
+    var lista = Array.isArray(d) ? d : [d];
+    var titulo = R.card + (lista.length > 1 ? ' - ' + lista.length + ' colaboradores' : (lista[0].nome ? ' - ' + lista[0].nome : ''));
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (lista.some(function (x) { return x.demo; }) ? ' class="cp"' : '') + '>' +
+      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + '</body></html>';
+  }
+  // monta os dados de um recibo a partir dos valores informados
+  function montarDados(R, x) {
+    var u = function (v, len) { return v ? '<span class="pre">' + esc(v) + '</span>' : L(len); };
+    var n = x.valor, ok = n > 0, dp = x.dt ? x.dt.split('-') : null;
+    var refTxt = R.ref === 'mes' ? (x.mesIdx !== '' ? MESES[+x.mesIdx].toUpperCase() + (x.ano ? '/' + x.ano : '') : '') : R.ref === 'ano' ? x.ano : x.periodo;
+    var d = {
+      nome: x.nome, mat: x.mat, cargo: x.cargo, cpf: x.cpf, refTxt: refTxt,
+      valor: ok ? brl(n) : '', valorN: ok, forma: x.forma, cidade: x.cidade,
+      dia: dp ? String(+dp[2]).padStart(2, '0') : L(6), mesData: dp ? MESES[+dp[1] - 1] : L(22), anoData: dp ? dp[0] : L(8),
+      html: {
+        emp: esc((x.razao || 'BIN EMBALAGENS').toLocaleUpperCase('pt-BR')),
+        cnpj: u(x.cnpj, 20), valor: u(ok ? brl(n) : '', 14), ext: u(ok ? (x.ext || porExtenso(n)) : '', 48),
+        mes: u(x.mesIdx !== '' ? MESES[+x.mesIdx] : '', 14), ano: u(x.ano, 8), periodo: u(x.periodo, 22)
+      }
+    };
+    if (x.demo && x.demo.sal > 0) d.demo = x.demo;
+    return d;
+  }
+  function guardarLanc(tipo, pk, nome, mesIdx, ano, valor, demo) {
+    if (!pk || !(valor > 0) || (tipo !== 'rec_adi' && tipo !== 'rec_sal') || mesIdx === '' || !ano) return;
+    var lanc = DB.g('recibos-lanc').filter(function (x) { return !(x.tipo === tipo && x.pk === pk && String(x.mes) === String(mesIdx) && String(x.ano) === String(ano)); });
+    lanc.push({ id: uid(), tipo: tipo, pk: pk, nome: nome, mes: +mesIdx, ano: +ano, valor: valor, em: new Date().toISOString(), demo: demo || null });
+    DB.s('recibos-lanc', lanc);
   }
 
   // ── listas ──
@@ -18524,8 +18549,146 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">Campos deixados em branco saem com a linha para preencher à mão. O recibo sai em 2 vias (Empresa e Colaborador) na mesma folha.</div>' +
       '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-recibo\')">Cancelar</button><button class="btn btn-primary" onclick="recGerar()">📄 Gerar recibo</button></div></div></div>');
   }
+  // ── modo por grupo (CLT, Agência, Sem registro) ──
+  var IND_IDS = ['rc-func', 'rc-emp', 'rc-razao', 'rc-cnpj', 'rc-nome', 'rc-mat', 'rc-cpf', 'rc-cargo', 'rc-valor', 'rc-ext'];
+  function injetarGrupo() {
+    if (el('rc-modo-box')) return;
+    var grid = el('modal-recibo').querySelector('.form-grid');
+    grid.insertAdjacentHTML('beforebegin',
+      '<div id="rc-modo-box" style="display:flex;gap:8px;margin-bottom:14px;">' +
+      '<label class="btn btn-outline btn-sm rc-modo" style="cursor:pointer;margin:0;"><input type="radio" name="rc-modo" value="ind" checked style="display:none;" onchange="recModo()">👤 Individual</label>' +
+      '<label class="btn btn-outline btn-sm rc-modo" style="cursor:pointer;margin:0;"><input type="radio" name="rc-modo" value="grp" style="display:none;" onchange="recModo()">👥 Por grupo</label></div>');
+    IND_IDS.forEach(function (id) { var g = el(id).closest('.form-group'); if (g) g.classList.add('rc-ind'); });
+    ['rcg-calc', 'rcg-demo'].forEach(function (id) { el(id).classList.add('rc-ind'); });
+    el('rc-valor').closest('.form-group').insertAdjacentHTML('beforebegin',
+      '<div class="form-full rc-grp" id="rcg-grupo" style="display:none;">' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">' +
+      '<div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>Grupo</label><select id="rc-grupo" onchange="recGrupoLista()">' +
+      '<option value="clt">👥 Colaboradores CLT</option><option value="semreg">📝 Colaboradores sem registro</option><option value="agencia">🏢 Colaboradores de agência</option><option value="todos">Todos os grupos</option></select></div>' +
+      '<div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>Empresa</label><select id="rc-gemp" onchange="recGrupoLista()"></select></div>' +
+      '<div class="form-group" id="rcg-gpct" style="margin:0;width:120px;"><label id="rc-gpct-lbl">% do salário</label><input id="rc-gpct" type="number" min="0" max="100" step="1" oninput="recGrupoPct()"></div></div>' +
+      '<div style="max-height:46vh;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);"><table id="rc-gtab" style="font-size:12.5px;"></table></div>' +
+      '<div id="rc-gtot" style="margin-top:8px;font-size:13px;"></div></div>');
+    var st = document.createElement('style');
+    st.textContent = '.rc-modo:has(input:checked){background:var(--green);color:#fff;border-color:var(--green);}' +
+      '#rc-gtab input[type=text]{padding:4px 6px;font-size:12.5px;min-width:70px;width:100%;}#rc-gtab td,#rc-gtab th{padding:5px 6px;white-space:nowrap;}#rc-gtab td.nm{white-space:normal;min-width:160px;}';
+    document.head.appendChild(st);
+  }
+  function modoGrupo() { var r = document.querySelector('input[name="rc-modo"]:checked'); return r && r.value === 'grp'; }
+  window.recModo = function () {
+    var g = modoGrupo();
+    document.querySelectorAll('#modal-recibo .rc-ind').forEach(function (x) { x.style.display = g ? 'none' : ''; });
+    el('rcg-grupo').style.display = g ? '' : 'none';
+    el('modal-recibo').querySelector('.modal').style.maxWidth = g ? '1180px' : '720px';
+    if (!g) { el('rcg-calc').style.display = _tipo === 'rec_adi' ? '' : 'none'; el('rcg-demo').style.display = _tipo === 'rec_sal' ? '' : 'none'; }
+    else recGrupoLista();
+  };
+  function pctPadrao() { return _tipo === 'rec_adi' ? (parseFloat(ls('rh_rec_pct')) || 40) : _tipo === 'rec_13a' ? 50 : _tipo === 'rec_sal' ? (parseFloat(ls('rh_rec_pct')) || 40) : 0; }
+  window.recGrupoLista = function () {
+    var g = el('rc-grupo').value, emp = el('rc-gemp').value, G = pessoas();
+    var lista = [];
+    G.forEach(function (gr, i) { var k = ['clt', 'agencia', 'semreg'][i]; if (g === 'todos' || g === k) gr[1].forEach(function (p) { lista.push(Object.assign({ grp: gr[0] }, p)); }); });
+    if (emp) lista = lista.filter(function (p) { return p.f.emp === emp; });
+    var t = _tipo, mostraPct = t !== 'rec_bon' && t !== 'rec_13b';
+    el('rcg-gpct').style.display = mostraPct ? '' : 'none';
+    el('rc-gpct-lbl').textContent = t === 'rec_sal' ? '% adiantamento' : t === 'rec_13a' ? '% do salário' : '% do salário';
+    if (!el('rc-gpct').value) el('rc-gpct').value = pctPadrao();
+    var cab = t === 'rec_sal' ? ['Salário', '(−) Adiant.', '(−) Farmácia', '(−) Vale compra', '(−) Outros', 'Descrição outros', 'Líquido'] : ['Salário', 'Valor do recibo'];
+    var tab = el('rc-gtab');
+    if (!lista.length) { tab.innerHTML = '<tr><td style="padding:20px;color:var(--gray-400);text-align:center;">Nenhum colaborador ativo neste grupo' + (emp ? ' / empresa' : '') + '.</td></tr>'; recGrupoTotal(); return; }
+    tab.innerHTML = '<thead><tr><th><input type="checkbox" checked style="width:auto;" onchange="document.querySelectorAll(\'#rc-gtab tbody input.ck\').forEach(function(c){c.checked=this.checked}.bind(this));recGrupoTotal()"></th><th>Colaborador</th>' +
+      cab.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      lista.map(function (p) {
+        var sal = numero(p.f.sal || p.f.valor || '');
+        var cel = function (cls, v) { return '<td><input type="text" class="' + cls + '" value="' + (v > 0 ? brl(v) : (v || '')) + '" placeholder="0,00" oninput="recGrupoLinha(this)"></td>'; };
+        return '<tr data-pk="' + esc(p.k) + '"><td><input type="checkbox" class="ck" checked style="width:auto;" onchange="recGrupoTotal()"></td>' +
+          '<td class="nm"><strong>' + esc(p.n) + '</strong><div style="font-size:11px;color:var(--gray-400);">' + esc([p.f.car, p.grp].filter(Boolean).join(' · ')) + '</div></td>' +
+          cel('g-sal', sal) + (t === 'rec_sal' ? cel('g-adi', '') + cel('g-farm', '') + cel('g-vc', '') + cel('g-out', '') +
+          '<td><input type="text" class="g-outd" placeholder="ex.: UNIFORME" style="text-transform:uppercase;"></td><td class="g-liq" style="font-weight:700;text-align:right;"></td>' : cel('g-val', '')) + '</tr>';
+      }).join('') + '</tbody>';
+    recGrupoPct(true);
+  };
+  // aplica o percentual / adiantamento do mês em todas as linhas
+  window.recGrupoPct = function (refazer) {
+    var pct = parseFloat(el('rc-gpct').value) || 0, t = _tipo;
+    if (pct > 0 && (t === 'rec_adi' || t === 'rec_sal')) ls('rh_rec_pct', String(pct));
+    document.querySelectorAll('#rc-gtab tbody tr').forEach(function (tr) {
+      var sal = numero(tr.querySelector('.g-sal').value) || 0;
+      if (t === 'rec_sal') {
+        var a = tr.querySelector('.g-adi');
+        if (refazer === true || !a.dataset.manual) {
+          var L1 = lancAdiant(tr.getAttribute('data-pk'), el('rc-mes').value, el('rc-ano').value.trim());
+          a.value = L1 ? brl(L1.valor) : (sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '');
+          a.title = L1 ? 'Puxado do recibo de adiantamento gerado em ' + fd(L1.em.slice(0, 10)) : pct + '% do salário';
+          a.style.background = L1 ? '#e8f5e9' : ''; delete a.dataset.manual;
+        }
+      } else if (t !== 'rec_bon' && t !== 'rec_13b') {
+        var vEl = tr.querySelector('.g-val');
+        if (!vEl.dataset.manual) vEl.value = sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '';
+      }
+      calcLinha(tr);
+    });
+    recGrupoTotal();
+  };
+  function calcLinha(tr) {
+    if (_tipo !== 'rec_sal') return;
+    var v = function (c) { return numero(tr.querySelector(c).value) || 0; };
+    var liq = Math.round((v('.g-sal') - v('.g-adi') - v('.g-farm') - v('.g-vc') - v('.g-out')) * 100) / 100;
+    var td = tr.querySelector('.g-liq'); td.textContent = v('.g-sal') > 0 ? brl(liq) : ''; td.style.color = liq < 0 ? 'var(--red)' : '';
+  }
+  window.recGrupoLinha = function (inp) {
+    if (inp.classList.contains('g-adi') || inp.classList.contains('g-val')) inp.dataset.manual = 1;
+    var tr = inp.closest('tr');
+    if (inp.classList.contains('g-sal') && _tipo !== 'rec_sal' && _tipo !== 'rec_bon' && _tipo !== 'rec_13b') { var vEl = tr.querySelector('.g-val'); delete vEl.dataset.manual; var pct = parseFloat(el('rc-gpct').value) || 0, sal = numero(inp.value) || 0; vEl.value = sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : ''; }
+    if (inp.classList.contains('g-sal') && _tipo === 'rec_sal') { var a = tr.querySelector('.g-adi'); if (!a.dataset.manual && !a.style.background) { var p2 = parseFloat(el('rc-gpct').value) || 0, s2 = numero(inp.value) || 0; a.value = s2 > 0 && p2 > 0 ? brl(Math.round(s2 * p2) / 100) : ''; } }
+    calcLinha(tr); recGrupoTotal();
+  };
+  function valorLinha(tr) {
+    if (_tipo === 'rec_sal') { var t = tr.querySelector('.g-liq').textContent; return numero(t) || 0; }
+    return numero(tr.querySelector('.g-val').value) || 0;
+  }
+  window.recGrupoTotal = function () {
+    var linhas = Array.prototype.filter.call(document.querySelectorAll('#rc-gtab tbody tr'), function (tr) { var c = tr.querySelector('input.ck'); return c && c.checked; });
+    var tot = linhas.reduce(function (s, tr) { return s + valorLinha(tr); }, 0), semValor = linhas.filter(function (tr) { return !(valorLinha(tr) > 0); }).length;
+    el('rc-gtot').innerHTML = '<strong>' + linhas.length + '</strong> recibo(s) selecionado(s) · total <strong>R$ ' + brl(tot) + '</strong>' +
+      (semValor ? ' · <span style="color:#e65100;">' + semValor + ' sem valor (sai com a linha em branco)</span>' : '');
+  };
+  function recGerarGrupo() {
+    var R = REC[_tipo];
+    var linhas = Array.prototype.filter.call(document.querySelectorAll('#rc-gtab tbody tr'), function (tr) { var c = tr.querySelector('input.ck'); return c && c.checked; });
+    if (!linhas.length) { alert('Selecione pelo menos um colaborador.'); return; }
+    var mesIdx = el('rc-mes').value, ano = el('rc-ano').value.trim(), periodo = el('rc-periodo').value.trim();
+    var forma = (document.querySelector('input[name="rc-forma"]:checked') || {}).value || '';
+    var cidade = el('rc-cidade').value.trim() || 'Guarulhos – SP'; ls('rh_rec_cidade', cidade);
+    var dt = el('rc-data').value, padraoEmp = el('rc-gemp').value || (el('rc-emp').options[0] ? el('rc-emp').options[0].value : '__perfil');
+    var dados = linhas.map(function (tr) {
+      var pk = tr.getAttribute('data-pk'), p = acharPessoa(pk) || {};
+      var e = empresaDados(p.emp || padraoEmp), v = valorLinha(tr), demo = null;
+      if (_tipo === 'rec_sal') {
+        var nv = function (c) { return numero(tr.querySelector(c).value) || 0; }, itens = [];
+        var a = tr.querySelector('.g-adi');
+        if (nv('.g-adi') > 0) itens.push({ d: 'ADIANTAMENTO SALARIAL', r: a.style.background ? '' : (parseFloat(el('rc-gpct').value) || '') + '%', v: nv('.g-adi') });
+        if (nv('.g-farm') > 0) itens.push({ d: 'FARMÁCIA', r: '', v: nv('.g-farm') });
+        if (nv('.g-vc') > 0) itens.push({ d: 'VALE COMPRA', r: '', v: nv('.g-vc') });
+        if (nv('.g-out') > 0) itens.push({ d: (tr.querySelector('.g-outd').value || '').trim().toLocaleUpperCase('pt-BR') || 'OUTROS DESCONTOS', r: '', v: nv('.g-out') });
+        var total = Math.round(itens.reduce(function (s, i) { return s + i.v; }, 0) * 100) / 100;
+        demo = { sal: nv('.g-sal'), itens: itens, total: total, liq: Math.round((nv('.g-sal') - total) * 100) / 100, refSal: '30 dias' };
+      }
+      var nome = (p.n || '').toLocaleUpperCase('pt-BR');
+      guardarLanc(_tipo, pk, nome, mesIdx, ano, v, demo);
+      return montarDados(R, { nome: nome, mat: p.codEpr || '', cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
+        valor: v, ext: '', mesIdx: mesIdx, ano: ano, periodo: periodo, forma: forma, cidade: cidade, dt: dt, demo: demo });
+    });
+    closeModal('modal-recibo');
+    var g = el('rc-grupo'); var gn = g.options[g.selectedIndex].text.replace(/^[^A-Za-zÀ-ú]+/, '');
+    _abrirDocSimples(pagina(R, dados), (R.card + '_' + gn).replace(/\s+/g, '_'));
+  }
+
   window.recAbrir = function (tipo) {
-    injetarModal(); _tipo = tipo; var R = REC[tipo];
+    injetarModal(); injetarGrupo(); _tipo = tipo; var R = REC[tipo];
+    document.querySelector('input[name="rc-modo"][value="ind"]').checked = true;
+    el('rc-gpct').value = '';
+    var gse = el('rc-gemp'); gse.innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('');
     el('rc-tit').textContent = R.ic + ' ' + R.card;
     var s = el('rc-func');
     s.innerHTML = '<option value="">— Em branco (sem funcionário) —</option>' + pessoas().filter(function (g) { return g[1].length; }).map(function (g) {
@@ -18551,6 +18714,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('rc-data').value = typeof td === 'function' ? td() : '';
     document.querySelector('input[name="rc-forma"][value=""]').checked = true;
     recFuncMudou();
+    recModo();
     el('modal-recibo').classList.add('open');
   };
   window.recFuncMudou = function () {
@@ -18602,6 +18766,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   window.recCalc = function (refazerAdiant) {
     if (!el('modal-recibo')) return;
+    if (modoGrupo()) { if (refazerAdiant === true) recGrupoPct(true); return; }
     if (_tipo === 'rec_adi') {
       var sal = numero(el('rc-sal-a').value), pct = parseFloat(el('rc-pct').value) || 0;
       if (pct > 0) ls('rh_rec_pct', String(pct));
@@ -18631,6 +18796,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 
   window.recGerar = function () {
     var R = REC[_tipo]; if (!R) return;
+    if (modoGrupo()) { recGerarGrupo(); return; }
     var n = numero(el('rc-valor').value), valorOk = n > 0;
     var u = function (v, len) { return v ? '<span class="pre">' + esc(v) + '</span>' : L(len); };
     var mesIdx = el('rc-mes').value, ano = el('rc-ano').value.trim(), periodo = el('rc-periodo').value.trim();
