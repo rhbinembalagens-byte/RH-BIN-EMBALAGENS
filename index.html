@@ -14832,7 +14832,8 @@ function abrirManual() {
       <div class="tip">💡 Os arquivos ficam no Drive, na pasta <em>Material de Apoio</em> da empresa. O ✎ e o ✕ também valem para os arquivos de Integração, Treinamentos e Documentos da empresa.</div>`],
     ['s10', '10. Gerar Documentos e Políticas', `
       <ul><li><strong>Gerar Documentos:</strong> Termo de Responsabilidade (FOR01), Autorização de Imagem e Voz (FOR02), Termo de Adesão – Saúde e Vacinação e Ficha de Presença. A janela traz os dados do colaborador e da empresa para conferir antes de gerar.</li>
-      <li><strong>Recibos (Gerar Documentos):</strong> Pagamento de Salário, Adiantamento Salarial, 1ª e 2ª parcela do 13º e Bônus por Resultado, no modelo BIN em 2 vias. Escolha o funcionário (CLT, agência ou sem registro), confira os dados e preencha valor (o extenso é automático), referência, forma de pagamento e data.</li>
+      <li><strong>Gerar Documentos para Agência e Sem registro:</strong> a lista de funcionários do topo mostra três grupos — CLT, Agência e Sem registro/Aprendizes — e todos os documentos podem ser gerados para qualquer um deles. Os colaboradores de agência e sem registro não entram no cadastro CLT.</li>
+      <li><strong>Recibos (Gerar Documentos):</strong> Pagamento de Salário, Adiantamento Salarial, 1ª e 2ª parcela do 13º e Bônus por Resultado, no modelo BIN em 2 vias. O <em>Adiantamento</em> já calcula 40% do salário do cadastro (percentual ajustável). O <em>Pagamento de Salário</em> sai como demonstrativo: salário base − adiantamento do mês (puxado do recibo de adiantamento gerado, ou 40% se não houver) − farmácia, vale compra e outros descontos = líquido a pagar. Escolha o funcionário (CLT, agência ou sem registro), confira os dados e preencha valor (o extenso é automático), referência, forma de pagamento e data.</li>
       <li><strong>Políticas & Normas:</strong> modelo oficial POL01 – Política de Prêmio Assiduidade (com Termo de Ciência) e as políticas que você cadastrar. Qualquer política pode ser excluída (🗑️ — a POL01 pode ser restaurada) e novas podem ser trazidas em <em>📥 Importar política</em>: arquivos Word (.docx) viram documento para gerar por funcionário com Termo de Ciência; PDF e imagens ficam como arquivo para consulta.</li>
       <li><strong>⏰ Vencimento de férias:</strong> 30 dias antes da data limite de saída, as férias ainda não programadas aparecem no quadro do topo de Férias, no Dashboard e com contador no menu.</li></ul>`],
     ['s11', '11. Salvamento e Google Drive', `
@@ -18338,10 +18339,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   var L = function (n) { return new Array(n + 1).join('_'); };
   var REC = {
     rec_sal: { titulo: 'RECIBO DE PAGAMENTO DE SALÁRIO', card: 'Recibo de Pagamento de Salário', ic: '💵', cor: '#B8862B', ref: 'mes', rot: 'MÊS DE REFERÊNCIA',
-      desc: 'Pagamento do salário do mês (valor líquido, conforme holerite).',
+      desc: 'Demonstrativo: salário − adiantamento − farmácia, vale compra e outros descontos = líquido a pagar.',
       texto: function (d) { return 'Recebi da empresa <b>' + d.emp + '</b>, inscrita no CNPJ nº ' + d.cnpj + ', a importância líquida de R$ ' + d.valor + ' (' + d.ext + '), referente ao <b>pagamento do meu salário</b> do mês de ' + d.mes + ' de ' + d.ano + ', já deduzidos os descontos legais e eventuais adiantamentos, conforme demonstrativo de pagamento (holerite), dando plena quitação dos valores aqui recebidos.'; } },
     rec_adi: { titulo: 'RECIBO DE ADIANTAMENTO SALARIAL', card: 'Recibo de Adiantamento Salarial', ic: '💸', cor: '#a0522d', ref: 'mes', rot: 'MÊS DE REFERÊNCIA',
-      desc: 'Adiantamento (vale) descontado na folha do mês — art. 462 da CLT.',
+      desc: 'Adiantamento calculado automaticamente (40% do salário), descontado na folha — art. 462 da CLT.',
       texto: function (d) { return 'Recebi da empresa <b>' + d.emp + '</b>, inscrita no CNPJ nº ' + d.cnpj + ', a importância de R$ ' + d.valor + ' (' + d.ext + '), referente a <b>adiantamento salarial</b> do mês de ' + d.mes + ' de ' + d.ano + ', valor que autorizo seja descontado integralmente do meu salário na folha de pagamento do respectivo mês, nos termos do art. 462 da CLT.'; } },
     rec_13a: { titulo: 'RECIBO DA 1ª PARCELA DO 13º SALÁRIO', card: 'Recibo 1ª Parcela do 13º', ic: '🎄', cor: '#2e7d32', ref: 'ano', rot: 'ANO DE REFERÊNCIA',
       desc: '1ª parcela (50% da remuneração, sem descontos) — Lei 4.749/1965.',
@@ -18409,6 +18410,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<tr>' + cel('NOME DO COLABORADOR', d.nome) + cel('MATRÍCULA', d.mat) + '</tr>' +
       '<tr>' + cel('CARGO / FUNÇÃO', d.cargo) + cel('CPF', d.cpf) + '</tr>' +
       '<tr>' + cel(R.rot, d.refTxt) + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (d.valorN ? esc(d.valor) : '') + '</div></td></tr></table>' +
+      (d.demo ? demonstrativo(d.demo) : '') +
       '<p class="txt">' + R.texto(d.html) + '</p>' +
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + ['Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'].map(function (f) {
         return '(' + (d.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
@@ -18416,8 +18418,24 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table>' +
       '</div>';
   }
+  function demonstrativo(D) {
+    var m = function (v) { return v ? brl(v) : ''; };
+    var n = Math.max(1, D.itens.length), linhas = '';
+    for (var i = 0; i < n; i++) {
+      var it = D.itens[i];
+      linhas += '<tr><td>' + (i === 0 ? 'SALÁRIO BASE' + (D.refSal ? ' <span class="ref">(' + D.refSal + ')</span>' : '') : '') + '</td><td class="n">' + (i === 0 ? m(D.sal) : '') + '</td>' +
+        '<td class="dl">' + (it ? esc(it.d) + (it.r ? ' <span class="ref">(' + esc(it.r) + ')</span>' : '') : '') + '</td><td class="n">' + (it ? m(it.v) : '') + '</td></tr>';
+    }
+    return '<table class="demo"><colgroup><col style="width:31%"><col style="width:15%"><col style="width:39%"><col style="width:15%"></colgroup>' +
+      '<tr class="h"><td>PROVENTOS</td><td class="n">VALOR</td><td class="dl">DESCONTOS</td><td class="n">VALOR</td></tr>' + linhas +
+      '<tr class="l"><td colspan="2">Total proventos: ' + m(D.sal) + ' &nbsp;·&nbsp; Total descontos: ' + (D.total ? brl(D.total) : '0,00') + '</td><td class="dl" style="text-align:right;">LÍQUIDO A RECEBER</td><td class="n">R$ ' + brl(D.liq) + '</td></tr></table>';
+  }
   function pagina(R, d) {
     var css = '@page{size:A4;margin:1cm 2cm;}*{box-sizing:border-box;}' +
+      'table.demo{width:100%;border-collapse:collapse;margin-top:5pt;font-size:8.5pt;}table.demo td{border:.5pt solid #C9A961;padding:1.2pt 5pt;line-height:1.2;}' +
+      'table.demo td.n{text-align:right;}table.demo td.c{text-align:center;}table.demo tr.h td{font-weight:700;color:#B8862B;font-size:7.5pt;}' +
+      'table.demo tr.t td{font-weight:700;}table.demo tr.l td{font-weight:700;background:#F7EFD9;font-size:9pt;}table.demo .ref{font-weight:400;color:#8a7650;font-size:7.5pt;}table.demo td.dl{border-left:1.2pt solid #C9A961;}' +
+      '.cp .logo img{width:2.43cm;height:1.5cm;}.cp .logo{margin-bottom:1pt;}.cp .sub{margin-bottom:4pt;}.cp .txt{margin:5pt 0 4pt;}.cp .local{margin:4pt 0 12pt;}.cp .corte{margin:6pt 0 6pt;}' +
       'body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
       '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;min-height:29.7cm;padding:1cm 2cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}}' +
       'p{margin:0;}.logo{text-align:center;margin-bottom:3pt;}.logo img{width:3.44cm;height:2.12cm;object-fit:contain;}' +
@@ -18433,14 +18451,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '.corte{text-align:center;font-size:7pt;color:#999;border-bottom:.75pt dashed #999;padding-bottom:4pt;margin:14pt 0;}' +
       '.ok{display:none;}';
     var titulo = R.card + (d.nome ? ' - ' + d.nome : '');
-    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body>' +
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (d.demo ? ' class="cp"' : '') + '>' +
       via(R, d, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, d, 2) + '</body></html>';
   }
 
   // ── listas ──
   function pessoas() {
     var g = [];
-    var clt = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+    var clt = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && !f._ext; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
     g.push(['Funcionários CLT', clt.map(function (f) { return { k: 'f:' + f.id, n: f.n, f: f }; })]);
     var ext = DB.g('colab-ext').filter(function (c) { return c.st === 'Ativo'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
     g.push(['Agência', ext.filter(function (c) { return c.tipo === 'agencia'; }).map(function (c) { return { k: 'x:' + c.id, n: c.n, f: c }; })]);
@@ -18450,7 +18468,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function acharPessoa(k) {
     if (!k) return null;
     var id = k.slice(2);
-    return k[0] === 'f' ? DB.g('funcionarios').find(function (x) { return x.id === id; }) : DB.g('colab-ext').find(function (x) { return x.id === id; });
+    return k[0] === 'f' ? DB.g('funcionarios').find(function (x) { return x.id === id && !x._ext; }) : DB.g('colab-ext').find(function (x) { return x.id === id; });
   }
   function empresaDados(id) {
     if (id && id !== '__perfil') { var e = DB.g('empresas').find(function (x) { return x.id === id; }); if (e) return { razao: e.razao, cnpj: e.cnpj }; }
@@ -18474,9 +18492,26 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="form-group"><label>Matrícula</label><input id="rc-mat" type="text"></div>' +
       '<div class="form-group"><label>CPF</label><input id="rc-cpf" type="text" oninput="mCPF(this)"></div>' +
       '<div class="form-group form-full"><label>Cargo / Função</label><input id="rc-cargo" type="text" style="text-transform:uppercase;"></div>' +
-      '<div class="form-group" id="rcg-mes"><label>Mês de referência</label><select id="rc-mes"><option value="">— em branco —</option>' + MESES.map(function (m, i) { return '<option value="' + i + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="form-group" id="rcg-ano"><label>Ano de referência</label><input id="rc-ano" type="number" min="2000" max="2100" value="' + anoAt + '"></div>' +
+      '<div class="form-group" id="rcg-mes"><label>Mês de referência</label><select id="rc-mes" onchange="recCalc(true)"><option value="">— em branco —</option>' + MESES.map(function (m, i) { return '<option value="' + i + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group" id="rcg-ano"><label>Ano de referência</label><input id="rc-ano" type="number" min="2000" max="2100" value="' + anoAt + '" onchange="recCalc(true)"></div>' +
       '<div class="form-group form-full" id="rcg-periodo"><label>Período de referência</label><input id="rc-periodo" type="text" placeholder="ex.: 3º trimestre de 2026, setembro/2026, 01/07 a 30/09/2026"></div>' +
+      '<div class="form-full" id="rcg-calc" style="display:none;background:var(--green-pale);border-radius:var(--radius-sm);padding:10px 12px;">' +
+        '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin-bottom:6px;">🧮 Cálculo do adiantamento</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 110px;gap:10px;">' +
+        '<div class="form-group" style="margin:0;"><label>Salário do funcionário (R$)</label><input id="rc-sal-a" type="text" placeholder="0,00" oninput="recCalc()"></div>' +
+        '<div class="form-group" style="margin:0;"><label>Percentual (%)</label><input id="rc-pct" type="number" min="1" max="100" step="1" value="40" oninput="recCalc()"></div></div>' +
+        '<div id="rc-calc-info" style="font-size:12px;color:var(--gray-600);margin-top:6px;"></div></div>' +
+      '<div class="form-full" id="rcg-demo" style="display:none;background:var(--green-pale);border-radius:var(--radius-sm);padding:10px 12px;">' +
+        '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin-bottom:6px;">🧾 Demonstrativo de pagamento</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">' +
+        '<div class="form-group" style="margin:0;"><label>Salário base (R$)</label><input id="rc-sal" type="text" placeholder="0,00" oninput="recCalc()"></div>' +
+        '<div class="form-group" style="margin:0;"><label>(−) Adiantamento</label><input id="rc-adi" type="text" placeholder="0,00" oninput="this.dataset.manual=1;recCalc()"></div>' +
+        '<div class="form-group" style="margin:0;"><label>(−) Farmácia</label><input id="rc-farm" type="text" placeholder="0,00" oninput="recCalc()"></div>' +
+        '<div class="form-group" style="margin:0;"><label>(−) Vale compra</label><input id="rc-vc" type="text" placeholder="0,00" oninput="recCalc()"></div></div>' +
+        '<div id="rc-adi-info" style="font-size:11.5px;color:var(--gray-600);margin-top:4px;"></div>' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin:10px 0 4px;">(−) Outros descontos</div>' +
+        '<div id="rc-outros"></div><button type="button" class="btn btn-outline btn-sm" onclick="recOutroAdd()">+ Adicionar desconto</button>' +
+        '<div id="rc-liq" style="margin-top:10px;padding:8px 12px;background:#fff;border-radius:var(--radius-sm);border:1.5px solid var(--green);font-size:14px;"></div></div>' +
       '<div class="form-group"><label>Valor (R$)</label><input id="rc-valor" type="text" placeholder="0,00" oninput="recValorMudou()"></div>' +
       '<div class="form-group"><label>Valor por extenso</label><input id="rc-ext" type="text" placeholder="preenchido automaticamente"></div>' +
       '<div class="form-group form-full"><label>Forma de pagamento</label><div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">' +
@@ -18496,7 +18531,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     s.innerHTML = '<option value="">— Em branco (sem funcionário) —</option>' + pessoas().filter(function (g) { return g[1].length; }).map(function (g) {
       return '<optgroup label="' + esc(g[0]) + '">' + g[1].map(function (p) { return '<option value="' + esc(p.k) + '">' + esc(p.n) + '</option>'; }).join('') + '</optgroup>';
     }).join('');
-    var sel = (el('doc-func-sel') || {}).value; s.value = sel ? 'f:' + sel : '';
+    var sel = (el('doc-func-sel') || {}).value;
+    s.value = !sel ? '' : (DB.g('colab-ext').some(function (c) { return c.id === sel; }) ? 'x:' + sel : 'f:' + sel);
     var se = el('rc-emp');
     se.innerHTML = DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('') + '<option value="__perfil">Dados da empresa (⚙️ topo do sistema)</option>';
     el('rcg-mes').style.display = R.ref === 'mes' ? '' : 'none';
@@ -18506,6 +18542,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('rc-mes').value = R.ref === 'mes' ? String(hoje.getMonth()) : '';
     el('rc-ano').value = hoje.getFullYear(); el('rc-periodo').value = '';
     el('rc-valor').value = ''; el('rc-ext').value = '';
+    el('rcg-calc').style.display = tipo === 'rec_adi' ? '' : 'none';
+    el('rcg-demo').style.display = tipo === 'rec_sal' ? '' : 'none';
+    el('rc-pct').value = ls('rh_rec_pct') || '40';
+    ['rc-farm', 'rc-vc', 'rc-adi'].forEach(function (id) { el(id).value = ''; delete el(id).dataset.manual; });
+    el('rc-outros').innerHTML = '';
     el('rc-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP';
     el('rc-data').value = typeof td === 'function' ? td() : '';
     document.querySelector('input[name="rc-forma"][value=""]').checked = true;
@@ -18519,6 +18560,71 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var se = el('rc-emp');
     se.value = p.emp && Array.prototype.some.call(se.options, function (o) { return o.value === p.emp; }) ? p.emp : (se.options[0] ? se.options[0].value : '__perfil');
     recEmpMudou();
+    var sal = numero(p.sal || p.valor || '');
+    el('rc-sal').value = el('rc-sal-a').value = sal > 0 ? brl(sal) : '';
+    delete el('rc-adi').dataset.manual;
+    recCalc(true);
+  };
+
+  // ── cálculos: adiantamento (% do salário) e demonstrativo do pagamento ──
+  if (window.RT && RT.LIST && RT.LIST.indexOf('recibos-lanc') === -1) { RT.LIST.push('recibos-lanc'); if (RT.ALL && RT.ALL.indexOf('recibos-lanc') === -1) RT.ALL.push('recibos-lanc'); }
+  function lancAdiant(pk, mes, ano) {
+    if (!pk || mes === '' || !ano) return null;
+    return DB.g('recibos-lanc').filter(function (x) { return x.tipo === 'rec_adi' && x.pk === pk && String(x.mes) === String(mes) && String(x.ano) === String(ano); })
+      .sort(function (a, b) { return (b.em || '').localeCompare(a.em || ''); })[0] || null;
+  }
+  window.recOutroAdd = function (desc, val) {
+    var box = el('rc-outros'), row = document.createElement('div');
+    row.className = 'rc-outro'; row.style.cssText = 'display:grid;grid-template-columns:1fr 130px 34px;gap:8px;margin-bottom:6px;';
+    row.innerHTML = '<input type="text" placeholder="Descrição (ex.: Uniforme, Empréstimo, Faltas)" style="text-transform:uppercase;" value="' + esc(desc || '') + '">' +
+      '<input type="text" placeholder="0,00" value="' + esc(val || '') + '">' +
+      '<button type="button" class="btn-icon danger" title="Remover">✕</button>';
+    row.querySelectorAll('input').forEach(function (i) { i.addEventListener('input', function () { recCalc(); }); });
+    row.querySelector('button').onclick = function () { row.remove(); recCalc(); };
+    box.appendChild(row);
+    if (!desc) row.querySelector('input').focus();
+  };
+  function outros() {
+    return Array.prototype.map.call(document.querySelectorAll('#rc-outros .rc-outro'), function (r) {
+      var i = r.querySelectorAll('input'); return { d: (i[0].value || '').trim().toLocaleUpperCase('pt-BR') || 'OUTROS DESCONTOS', v: numero(i[1].value) };
+    }).filter(function (o) { return o.v > 0; });
+  }
+  function calcDemo() {
+    var sal = numero(el('rc-sal').value) || 0, pct = parseFloat(ls('rh_rec_pct') || '40') || 40;
+    var adi = numero(el('rc-adi').value) || 0, farm = numero(el('rc-farm').value) || 0, vc = numero(el('rc-vc').value) || 0;
+    var itens = [];
+    if (adi > 0) itens.push({ d: 'ADIANTAMENTO SALARIAL', r: el('rc-adi').dataset.ref || '', v: adi });
+    if (farm > 0) itens.push({ d: 'FARMÁCIA', r: '', v: farm });
+    if (vc > 0) itens.push({ d: 'VALE COMPRA', r: '', v: vc });
+    outros().forEach(function (o) { itens.push({ d: o.d, r: '', v: o.v }); });
+    var total = Math.round(itens.reduce(function (s, i) { return s + i.v; }, 0) * 100) / 100;
+    return { sal: sal, itens: itens, total: total, liq: Math.round((sal - total) * 100) / 100, refSal: '30 dias' };
+  }
+  window.recCalc = function (refazerAdiant) {
+    if (!el('modal-recibo')) return;
+    if (_tipo === 'rec_adi') {
+      var sal = numero(el('rc-sal-a').value), pct = parseFloat(el('rc-pct').value) || 0;
+      if (pct > 0) ls('rh_rec_pct', String(pct));
+      if (sal > 0 && pct > 0) {
+        var v = Math.round(sal * pct) / 100;
+        el('rc-valor').value = brl(v); recValorMudou();
+        el('rc-calc-info').innerHTML = pct + '% de R$ ' + brl(sal) + ' = <strong>R$ ' + brl(v) + '</strong> (o valor pode ser ajustado no campo Valor).';
+      } else el('rc-calc-info').textContent = 'Informe o salário para calcular o adiantamento.';
+    }
+    if (_tipo === 'rec_sal') {
+      var a = el('rc-adi');
+      if (refazerAdiant || !a.dataset.manual) {
+        var L1 = lancAdiant(el('rc-func').value, el('rc-mes').value, el('rc-ano').value.trim());
+        var s2 = numero(el('rc-sal').value) || 0, pct2 = parseFloat(ls('rh_rec_pct') || '40') || 40;
+        if (L1) { a.value = brl(L1.valor); a.dataset.ref = ''; el('rc-adi-info').innerHTML = '✅ Adiantamento puxado do recibo gerado em ' + fd(L1.em.slice(0, 10)) + '.'; }
+        else if (s2 > 0) { a.value = brl(Math.round(s2 * pct2) / 100); a.dataset.ref = pct2 + '%'; el('rc-adi-info').innerHTML = 'Adiantamento calculado em ' + pct2 + '% do salário (nenhum recibo de adiantamento deste mês encontrado). Ajuste se precisar.'; }
+        else { a.value = ''; el('rc-adi-info').textContent = ''; }
+        delete a.dataset.manual;
+      }
+      var D = calcDemo();
+      el('rc-liq').innerHTML = 'Salário R$ ' + brl(D.sal) + ' − descontos R$ ' + brl(D.total) + ' = <strong style="font-size:16px;color:' + (D.liq < 0 ? 'var(--red)' : 'var(--green-dark)') + ';">Líquido a pagar R$ ' + brl(D.liq) + '</strong>';
+      if (D.sal > 0) { el('rc-valor').value = D.liq > 0 ? brl(D.liq) : ''; recValorMudou(); }
+    }
   };
   window.recEmpMudou = function () { var e = empresaDados(el('rc-emp').value); el('rc-razao').value = e.razao || ''; el('rc-cnpj').value = e.cnpj || ''; };
   window.recValorMudou = function () { var n = numero(el('rc-valor').value); el('rc-ext').value = n > 0 ? porExtenso(n) : ''; };
@@ -18543,6 +18649,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         mes: u(mesIdx !== '' ? MESES[+mesIdx] : '', 14), ano: u(ano, 8), periodo: u(periodo, 22)
       }
     };
+    if (_tipo === 'rec_sal') { var D = calcDemo(); if (D.sal > 0) d.demo = D; }
+    // guarda o lançamento (o adiantamento é puxado depois no recibo de pagamento do mesmo mês)
+    var pk = el('rc-func').value;
+    if (pk && valorOk && (_tipo === 'rec_adi' || _tipo === 'rec_sal') && mesIdx !== '' && ano) {
+      var lanc = DB.g('recibos-lanc').filter(function (x) { return !(x.tipo === _tipo && x.pk === pk && String(x.mes) === String(mesIdx) && String(x.ano) === String(ano)); });
+      lanc.push({ id: uid(), tipo: _tipo, pk: pk, nome: nome, mes: +mesIdx, ano: +ano, valor: n, em: new Date().toISOString(), demo: d.demo || null });
+      DB.s('recibos-lanc', lanc);
+    }
     closeModal('modal-recibo');
     _abrirDocSimples(pagina(R, d), (R.card + '_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
   };
@@ -18564,6 +18678,70 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   injetarCards();
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { injetarCards(); return _rd.apply(this, arguments); }; }
+})();
+
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// GERAR DOCUMENTOS — também para colaboradores de Agência e Sem registro (aprendizes)
+// Na tela Gerar Documentos, a lista de funcionários passa a incluir os cadastros de Agência
+// e Sem registro (ativos). Eles NÃO são gravados no cadastro CLT: só aparecem para gerar documentos.
+// ════════════════════════════════════════════════════════════
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function naTelaDocs() { var s = el('sec-documentos'); return !!(s && s.classList.contains('active')); }
+  function externos() {
+    var raw; try { raw = JSON.parse(localStorage.getItem('eq_colab-ext') || '[]'); } catch (e) { raw = []; }
+    return raw.filter(function (c) { return c && c.st === 'Ativo'; }).map(function (c) {
+      return { id: c.id, n: c.n, cpf: c.cpf || '', rg: c.rg || '', nas: c.nas || '', sex: c.sex || '', tel: c.tel || '', end: c.end || '', cep: c.cep || '',
+               emp: c.emp || '', dep: c.dep || '', car: c.car || '', sal: c.valor || '', adm: c.ini || '', dtIni: c.ini || '', st: 'Ativo',
+               tamCamisa: c.tamCamisa || '', conta: c.conta || '', tip: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', docs: [], _ext: c.tipo };
+    });
+  }
+  // leitura: na tela Gerar Documentos, "funcionarios" inclui Agência e Sem registro
+  var _g = DB.g;
+  DB.g = function (k) {
+    var v = _g.apply(this, arguments);
+    if (k === 'funcionarios' && naTelaDocs() && Array.isArray(v)) {
+      var ids = {}; v.forEach(function (f) { ids[f.id] = 1; });
+      return v.concat(externos().filter(function (x) { return !ids[x.id]; }));
+    }
+    return v;
+  };
+  // gravação: nunca deixa esses registros entrarem no cadastro CLT
+  var _s = DB.s;
+  DB.s = function (k, v) {
+    if (k === 'funcionarios' && Array.isArray(v) && v.some(function (f) { return f && f._ext; })) v = v.filter(function (f) { return !(f && f._ext); });
+    return _s.call(this, k, v);
+  };
+
+  // lista do topo com grupos: CLT / Agência / Sem registro
+  function montarSelect() {
+    var s = el('doc-func-sel'); if (!s) return;
+    var atual = s.value;
+    var clt = _g.call(DB, 'funcionarios').filter(function (f) { return f.st !== 'Desligado'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+    var ext = externos().sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+    var grupo = function (rot, l) { return l.length ? '<optgroup label="' + rot + '">' + l.map(function (f) { return '<option value="' + esc(f.id) + '">' + esc(f.n) + '</option>'; }).join('') + '</optgroup>' : ''; };
+    s.innerHTML = '<option value="">Selecione o funcionário</option>' + grupo('👥 Funcionários CLT', clt) +
+      grupo('🏢 Agência', ext.filter(function (x) { return x._ext === 'agencia'; })) +
+      grupo('📝 Sem registro / Aprendizes', ext.filter(function (x) { return x._ext === 'semreg'; }));
+    if (atual && Array.prototype.some.call(s.options, function (o) { return o.value === atual; })) s.value = atual;
+  }
+  var _rdDocs = window.rdDocs;
+  window.rdDocs = function () { var r = _rdDocs.apply(this, arguments); try { montarSelect(); } catch (e) {} return r; };
+  var _onChange = window.onDocFuncChange;
+  window.onDocFuncChange = function () {
+    var r = _onChange.apply(this, arguments);
+    try {
+      var x = externos().find(function (c) { return c.id === (el('doc-func-sel') || {}).value; });
+      var card = el('doc-func-card');
+      if (x && card) card.insertAdjacentHTML('afterbegin', '<span class="badge ' + (x._ext === 'agencia' ? 'badge-blue' : 'badge-yellow') + '" style="margin-right:6px;">' + (x._ext === 'agencia' ? '🏢 Agência' : '📝 Sem registro') + '</span>');
+    } catch (e) {}
+    return r;
+  };
+  if (naTelaDocs()) montarSelect();
 })();
 
 </script>
