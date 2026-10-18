@@ -14788,7 +14788,8 @@ function abrirManual() {
       <ul>
         <li><strong>👥 Cadastro:</strong> lista por status (Ativos, Afastados, Férias, Desligados), busca e ordenação. <em>+ Novo Funcionário</em> abre o formulário.</li>
         <li><strong>🏢 Agência</strong> e <strong>📝 Sem registro:</strong> cadastros separados dos CLT (não entram em Férias, Benefícios nem nos relatórios CLT), com <em>📥 Importar planilha</em> (aba Funcionários do Controle de Colaboradores). Têm acompanhamento da experiência de 45/90 dias pela data de início — também no quadro próprio em <em>Período de Experiência</em> — e o botão <em>✅ Efetivar CLT</em>, que cria o cadastro em Funcionários.</li>
-        <li><strong>📊 Relatório:</strong> marque os status, filtre por empresa/departamento, escolha a ordem (A→Z) e as colunas, e clique em <em>📥 Exportar para Excel</em>.</li>
+        <li><strong>👥 Funcionários Ativos (Dashboard):</strong> soma CLT + Agência + Sem registro, com a divisão logo abaixo do número.</li>
+        <li><strong>📊 Relatório:</strong> inclui CLT, Agência e Sem registro (filtro <em>Vínculo</em> e coluna Vínculo; encerrados entram como Desligados). Marque os status, filtre por empresa/departamento, escolha a ordem (A→Z) e as colunas, e clique em <em>📥 Exportar para Excel</em>.</li>
         <li><strong>🎂 Aniversariantes:</strong> do mês, da semana, próximos 30 dias ou de qualquer mês, com o template para divulgação.</li>
         <li><strong>🏢 Aniversário de Empresa:</strong> quem completa anos de casa no mês, nos próximos 30 dias ou em qualquer mês (pela admissão ou pela data de início), com filtro por empresa, botão para parabenizar no WhatsApp e exportação para Excel.</li>
         <li><strong>📥 Importar planilha:</strong> lê a planilha de funcionários (.xls/.xlsx). Quem já está cadastrado (mesmo CPF, ou mesmo nome sem CPF) só recebe o que estiver faltando; os demais entram como novos. Há uma prévia antes de confirmar e o botão <em>↩️ Desfazer última importação</em>.</li>
@@ -18858,11 +18859,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function naTelaDocs() { var s = el('sec-documentos'); return !!(s && s.classList.contains('active')); }
-  function externos() {
+  function externos(comEncerrados) {
     var raw; try { raw = JSON.parse(localStorage.getItem('eq_colab-ext') || '[]'); } catch (e) { raw = []; }
-    return raw.filter(function (c) { return c && c.st === 'Ativo'; }).map(function (c) {
+    return raw.filter(function (c) { return c && (c.st === 'Ativo' || (comEncerrados && c.st === 'Encerrado')); }).map(function (c) {
       return { id: c.id, n: c.n, cpf: c.cpf || '', rg: c.rg || '', nas: c.nas || '', sex: c.sex || '', tel: c.tel || '', end: c.end || '', cep: c.cep || '',
-               emp: c.emp || '', dep: c.dep || '', car: c.car || '', sal: c.valor || '', adm: c.ini || '', dtIni: c.ini || '', st: 'Ativo',
+               emp: c.emp || '', dep: c.dep || '', car: c.car || '', sal: c.valor || '', adm: c.ini || '', dtIni: c.ini || '', st: c.st === 'Encerrado' ? 'Desligado' : 'Ativo',
+               escala: '', folga: c.escala || '', vt: c.vt || '', bonif: c.bonif || '', qCaixa: c.qCaixa || '', conv: c.conv || '', agencia: c.agencia || '',
                tamCamisa: c.tamCamisa || '', conta: c.conta || '', tip: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', docs: [], _ext: c.tipo };
     });
   }
@@ -18870,9 +18872,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   var _g = DB.g;
   DB.g = function (k) {
     var v = _g.apply(this, arguments);
-    if (k === 'funcionarios' && naTelaDocs() && Array.isArray(v)) {
+    if (k === 'funcionarios' && (naTelaDocs() || window._rhIncluirExt) && Array.isArray(v)) {
       var ids = {}; v.forEach(function (f) { ids[f.id] = 1; });
-      return v.concat(externos().filter(function (x) { return !ids[x.id]; }));
+      return v.concat(externos(!!window._rhIncluirExt).filter(function (x) { return !ids[x.id]; }));
     }
     return v;
   };
@@ -18908,6 +18910,77 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return r;
   };
   if (naTelaDocs()) montarSelect();
+})();
+
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// DASHBOARD e RELATÓRIO considerando CLT + Agência + Sem registro
+// ════════════════════════════════════════════════════════════
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function ext() { try { return JSON.parse(localStorage.getItem('eq_colab-ext') || '[]'); } catch (e) { return []; } }
+
+  // ── Dashboard: Funcionários Ativos = CLT + Agência + Sem registro ──
+  function cardAtivos() {
+    var s = el('s-func'); if (!s) return;
+    var clt = 0; try { clt = JSON.parse(localStorage.getItem('eq_funcionarios') || '[]').filter(function (f) { return f.st === 'Ativo'; }).length; } catch (e) {}
+    var E = ext().filter(function (c) { return c.st === 'Ativo'; });
+    var ag = E.filter(function (c) { return c.tipo === 'agencia'; }).length, sr = E.filter(function (c) { return c.tipo === 'semreg'; }).length;
+    s.textContent = clt + ag + sr;
+    var lbl = s.parentNode.querySelector('.stat-label');
+    if (lbl) lbl.innerHTML = 'Funcionários Ativos<div style="font-size:11px;opacity:.75;margin-top:2px;">CLT: ' + clt + ' · Agência: ' + ag + ' · Sem registro: ' + sr + '</div>';
+  }
+  var _upd = window.updDash;
+  window.updDash = function () { var r = _upd.apply(this, arguments); try { cardAtivos(); } catch (e) {} return r; };
+
+  // ── Relatório: inclui Agência e Sem registro, com filtro e coluna Vínculo ──
+  var VINC = { clt: 'CLT', agencia: 'Agência', semreg: 'Sem registro' };
+  function vincDe(f) { return f._ext ? VINC[f._ext] : 'CLT'; }
+  if (typeof FR_COLS !== 'undefined' && !FR_COLS.some(function (c) { return c.k === 'vinc'; })) {
+    var i = FR_COLS.findIndex(function (c) { return c.k === 'n'; });
+    FR_COLS.splice(i + 1, 0, { k: 'vinc', t: 'Vínculo', on: 1, w: 13 });
+    try {
+      if (!localStorage.getItem('rh_rel_vinc_ok')) {
+        var sv = JSON.parse(localStorage.getItem('eq_rel_func_cols') || 'null');
+        if (sv && sv.indexOf('vinc') === -1) { sv.splice(1, 0, 'vinc'); localStorage.setItem('eq_rel_func_cols', JSON.stringify(sv)); if (typeof _frCols !== 'undefined') _frCols = null; }
+        localStorage.setItem('rh_rel_vinc_ok', '1');
+      }
+    } catch (e) {}
+  }
+  var _valor = window._frValor;
+  window._frValor = function (f, k) { if (k === 'vinc') return vincDe(f); return _valor.apply(this, arguments); };
+  function vincMarcados() { return Array.prototype.map.call(document.querySelectorAll('#fr-vinc input:checked'), function (i) { return i.value; }); }
+  var _filt = window._frFiltrados;
+  window._frFiltrados = function () {
+    window._rhIncluirExt = true;
+    var R;
+    try { R = _filt.apply(this, arguments); } finally { window._rhIncluirExt = false; }
+    var v = vincMarcados();
+    if (el('fr-vinc')) R.list = R.list.filter(function (f) { return v.indexOf(f._ext || 'clt') !== -1; });
+    return R;
+  };
+  function injetarFiltro() {
+    if (el('fr-vinc')) return;
+    var g = el('fr-status'); g = g && g.closest('.fr-grupo'); if (!g) return;
+    g.insertAdjacentHTML('afterend', '<div class="fr-grupo"><div class="fr-label">Vínculo</div><div id="fr-vinc" class="fr-status">' +
+      ['clt', 'agencia', 'semreg'].map(function (k) { return '<label><input type="checkbox" value="' + k + '" checked onchange="rdFuncRelTabela()"> ' + { clt: '👥 CLT', agencia: '🏢 Agência', semreg: '📝 Sem registro' }[k] + '</label>'; }).join('') + '</div></div>');
+  }
+  var _rel = window.rdFuncRel;
+  window.rdFuncRel = function () { injetarFiltro(); return _rel.apply(this, arguments); };
+  // resumo por vínculo
+  var _tab = window.rdFuncRelTabela;
+  window.rdFuncRelTabela = function () {
+    var r = _tab.apply(this, arguments);
+    try {
+      var R = _frFiltrados(), c = { CLT: 0, 'Agência': 0, 'Sem registro': 0 };
+      R.list.forEach(function (f) { c[vincDe(f)]++; });
+      var res = el('fr-resumo'); if (res) res.insertAdjacentHTML('beforeend', ' &nbsp;|&nbsp; CLT: ' + c.CLT + ' · Agência: ' + c['Agência'] + ' · Sem registro: ' + c['Sem registro']);
+    } catch (e) {}
+    return r;
+  };
+  injetarFiltro(); cardAtivos();
 })();
 
 </script>
