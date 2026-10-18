@@ -19613,9 +19613,24 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
           '<td><span class="badge ' + cor[x.sit] + '">' + x.sit + '</span></td></tr>';
       }).join('') + '</tbody></table></div>';
   }
+  // card "Em Férias" do topo: colaboradores com férias no mês atual
+  function cardFer() {
+    var v = document.getElementById('s-fer'); if (!v) return;
+    var h = new Date(), ini = new Date(h.getFullYear(), h.getMonth(), 1), fim = new Date(h.getFullYear(), h.getMonth() + 1, 0), hoje = dt(iso(h));
+    var funcs = DB.g('funcionarios'), mes = {}, agora = {};
+    DB.g('ferias').forEach(function (r) {
+      var i = dt(r.ini), f = fimFerias(r); if (!i || !f || i > fim || f < ini) return;
+      var p = funcs.find(function (x) { return x.id === r.fid; }); if (!p || p._ext) return;
+      mes[p.id] = 1; if (hoje >= i && hoje <= f) agora[p.id] = 1;
+    });
+    var nm = Object.keys(mes).length, na = Object.keys(agora).length;
+    v.textContent = nm;
+    var lb = v.parentNode.querySelector('.stat-label');
+    if (lb) lb.innerHTML = 'Em Férias <span style="font-size:11px;opacity:.75;">(' + MES[h.getMonth()].toLowerCase() + ')</span>' + (nm ? '<div style="font-size:11px;opacity:.75;margin-top:2px;">' + na + ' em férias hoje</div>' : '');
+  }
   var _u = window.updDash;
-  window.updDash = function () { var r = _u ? _u.apply(this, arguments) : undefined; try { rdFerMes(); } catch (e) { console.error(e); } return r; };
-  if (document.readyState !== 'loading') { try { rdFerMes(); } catch (e) {} } else document.addEventListener('DOMContentLoaded', function () { try { rdFerMes(); } catch (e) {} });
+  window.updDash = function () { var r = _u ? _u.apply(this, arguments) : undefined; try { rdFerMes(); cardFer(); } catch (e) { console.error(e); } return r; };
+  if (document.readyState !== 'loading') { try { rdFerMes(); cardFer(); } catch (e) {} } else document.addEventListener('DOMContentLoaded', function () { try { rdFerMes(); cardFer(); } catch (e) {} });
 })();
 </script>
 
