@@ -19550,5 +19550,74 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ DASHBOARD: colaboradores de férias no mês ═══════ */
+(function () {
+  var MES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var ref = null; // {m, a} mês exibido
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function dt(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? new Date(+p[0], +p[1] - 1, +p[2]) : null; }
+  function br(s) { var p = String(s || '').slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '—'; }
+  function fimFerias(r) {
+    var i = dt(r.ini); if (!i) return null;
+    var d = parseInt(r.dias, 10);
+    if (d > 0) { var f = new Date(i); f.setDate(f.getDate() + d - 1); return f; }
+    var rt = dt(r.ret); if (rt) { rt.setDate(rt.getDate() - 1); return rt; }
+    return i;
+  }
+  function injetar() {
+    if (document.getElementById('dash-fer-mes')) return true;
+    var g = document.querySelector('#sec-dashboard .stats-grid'); if (!g) return false;
+    g.insertAdjacentHTML('afterend',
+      '<div class="card" id="dash-fer-mes" style="margin-bottom:20px;"><div class="card-header" style="flex-wrap:wrap;gap:8px;"><span class="card-title">🏖 Férias no mês</span>' +
+      '<div style="display:flex;align-items:center;gap:6px;"><button class="btn btn-outline" style="padding:4px 10px;" onclick="dashFerMes(-1)" title="Mês anterior">◀</button>' +
+      '<strong id="dash-fer-lbl" style="min-width:140px;text-align:center;font-size:14px;"></strong>' +
+      '<button class="btn btn-outline" style="padding:4px 10px;" onclick="dashFerMes(1)" title="Próximo mês">▶</button>' +
+      '<button class="btn btn-outline" style="padding:4px 10px;font-size:12px;" onclick="dashFerMes(0)">Mês atual</button></div></div>' +
+      '<div id="dash-fer-lista"></div></div>');
+    return true;
+  }
+  window.dashFerMes = function (n) {
+    var h = new Date();
+    if (!ref || n === 0) ref = { m: h.getMonth(), a: h.getFullYear() };
+    if (n) { ref.m += n; if (ref.m < 0) { ref.m = 11; ref.a--; } if (ref.m > 11) { ref.m = 0; ref.a++; } }
+    rdFerMes();
+  };
+  function rdFerMes() {
+    if (!injetar()) return;
+    var h = new Date(); if (!ref) ref = { m: h.getMonth(), a: h.getFullYear() };
+    var ini = new Date(ref.a, ref.m, 1), fim = new Date(ref.a, ref.m + 1, 0), hoje = dt(iso(h));
+    document.getElementById('dash-fer-lbl').textContent = MES[ref.m] + ' / ' + ref.a;
+    var funcs = DB.g('funcionarios'), emps = DB.g('empresas'), deps = DB.g('departamentos') || [];
+    var L = [];
+    DB.g('ferias').forEach(function (r) {
+      var i = dt(r.ini), f = fimFerias(r); if (!i || !f) return;
+      if (i > fim || f < ini) return;
+      var p = funcs.find(function (x) { return x.id === r.fid; }); if (!p || p._ext) return;
+      var sit = hoje < i ? 'Vai sair' : (hoje > f ? 'Já voltou' : 'Em férias agora');
+      L.push({ r: r, p: p, i: i, f: f, sit: sit });
+    });
+    L.sort(function (a, b) { return a.i - b.i || (a.p.n || '').localeCompare(b.p.n || ''); });
+    var cor = { 'Em férias agora': 'badge-green', 'Vai sair': 'badge-blue', 'Já voltou': 'badge-gray' };
+    var agora = L.filter(function (x) { return x.sit === 'Em férias agora'; }).length;
+    var el = document.getElementById('dash-fer-lista');
+    if (!L.length) { el.innerHTML = '<p style="color:var(--gray-400);font-size:13px">Nenhum colaborador de férias em ' + MES[ref.m].toLowerCase() + '.</p>'; return; }
+    el.innerHTML = '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;"><strong>' + L.length + '</strong> colaborador(es) com férias neste mês' + (agora ? ' · <strong>' + agora + '</strong> em férias hoje' : '') + '</div>' +
+      '<div class="table-wrap"><table style="font-size:13px;"><thead><tr><th>Colaborador</th><th>Empresa</th><th>Setor</th><th>Saída</th><th>Último dia</th><th>Retorno</th><th>Dias</th><th>Situação</th></tr></thead><tbody>' +
+      L.map(function (x) {
+        var e = emps.find(function (k) { return k.id === x.p.emp; }) || {}, d = deps.find(function (k) { return k.id === x.p.dep; }) || {};
+        var ret = x.r.ret || iso(new Date(x.f.getFullYear(), x.f.getMonth(), x.f.getDate() + 1));
+        return '<tr><td><strong>' + esc(x.p.n) + '</strong></td><td>' + esc(e.razao || e.nome || '—') + '</td><td>' + esc(d.n || d.nome || x.p.dep || '—') + '</td>' +
+          '<td>' + br(x.r.ini) + '</td><td>' + br(iso(x.f)) + '</td><td>' + br(ret) + '</td><td>' + esc(x.r.dias || '') + '</td>' +
+          '<td><span class="badge ' + cor[x.sit] + '">' + x.sit + '</span></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  var _u = window.updDash;
+  window.updDash = function () { var r = _u ? _u.apply(this, arguments) : undefined; try { rdFerMes(); } catch (e) { console.error(e); } return r; };
+  if (document.readyState !== 'loading') { try { rdFerMes(); } catch (e) {} } else document.addEventListener('DOMContentLoaded', function () { try { rdFerMes(); } catch (e) {} });
+})();
+</script>
+
 </body>
 </html>
