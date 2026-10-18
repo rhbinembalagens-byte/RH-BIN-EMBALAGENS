@@ -19287,5 +19287,268 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 
 </script>
 
+<script>
+/* ═══════ IMPORTAR RELATÓRIO DO CONVÊNIO FARMÁCIA (PDF digital ou digitalizado) → lançamentos da folha ═══════ */
+(function () {
+  var FL_KEY = 'folha-lanc';
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function num(s) { s = String(s == null ? '' : s).replace(/[^\d,.-]/g, ''); if (!s) return null; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isNaN(n) ? null : Math.round(n * 100) / 100; }
+  function novoId() { return (typeof uid === 'function') ? uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var MESES_N = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+  // ── leitura do texto do relatório "Prévia de Fechamento de Convênios" ──
+  function convParse(texto) {
+    var linhas = String(texto || '').split(/\r?\n/);
+    var dinheiro = function (s) { var m = String(s).replace(/\s/g, '').match(/(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})(?!\d)/); if (!m) return null; var t = m[1].replace(/[.,](\d{2})$/, '#$1').replace(/[.,]/g, '').replace('#', '.'); var n = parseFloat(t); return isNaN(n) ? null : n; };
+    var reCPF = /(\d{3})[.,\s]?(\d{3})[.,\s]?(\d{3})[-.,\s]?(\d{2})/;
+    var R = { convenio: '', periodo: '', totalEmpresa: null, blocos: [] }, atual = null, porCpf = {};
+    function bloco(cpf, nome) {
+      if (!porCpf[cpf]) { porCpf[cpf] = { cpf: cpf, nome: nome || '', itens: {}, totais: [] }; R.blocos.push(porCpf[cpf]); }
+      if (nome && nome.length > porCpf[cpf].nome.length) porCpf[cpf].nome = nome;
+      return porCpf[cpf];
+    }
+    linhas.forEach(function (ln) {
+      var l = ln.replace(/\s+/g, ' ').trim(); if (!l) return;
+      var mc = l.match(/conv[eê]nio\s*:?\s*[-—–]?\s*(\d{3,}\s+[A-ZÀ-Ú][A-ZÀ-Ú .&-]+)/i); if (mc && !R.convenio) R.convenio = mc[1].trim();
+      var mp = l.match(/aberto de:?\s*([\d\/-]{8,10}).*?at[eé]:?\s*([\d\/-]{8,10})/i); if (mp && !R.periodo) R.periodo = mp[1] + ' a ' + mp[2];
+      if (/total\s*empresa/i.test(l)) { var te = dinheiro(l.split(/empresa/i)[1] || ''); if (te !== null) R.totalEmpresa = te; return; }
+      if (/total\s*c[o0]nv/i.test(l)) { var tv = dinheiro(l.split(/conv\w*\s*:?/i).pop()); if (atual && tv !== null) atual.totais.push(tv); return; }
+      var m = l.match(reCPF);
+      if (m && l.indexOf(m[0]) < 12) {
+        var cpf = m[1] + m[2] + m[3] + m[4], resto = l.slice(l.indexOf(m[0]) + m[0].length);
+        var nome = (resto.match(/^[^\d]*/) || [''])[0].replace(/[^A-Za-zÀ-ú ]/g, ' ').replace(/\s+/g, ' ').trim();
+        atual = bloco(cpf, nome);
+        var cupom = (resto.match(/\s(\d{3,7})\s/) || [])[1] || '', data = (resto.match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1] || '';
+        var v = dinheiro(resto.replace(/\d{2}\/\d{2}\/\d{4}/g, ' ').slice(-24)), key = cupom + '|' + data;
+        if (!(key in atual.itens) || (atual.itens[key] === null && v !== null)) atual.itens[key] = v;
+      }
+    });
+    R.blocos.forEach(function (b) {
+      var vals = Object.keys(b.itens).map(function (k) { return b.itens[k]; });
+      b.nItens = vals.length; b.lidos = vals.filter(function (v) { return v !== null; }).length;
+      b.somaItens = Math.round(vals.reduce(function (s, v) { return s + (v || 0); }, 0) * 100) / 100;
+      var cont = {}; b.totais.forEach(function (t) { cont[t] = (cont[t] || 0) + 1; });
+      b.total = b.totais.length ? +Object.keys(cont).sort(function (a, c) { return cont[c] - cont[a]; })[0] : null;
+      b.confere = b.total !== null && b.nItens > 0 && b.lidos === b.nItens && Math.abs(b.total - b.somaItens) < 0.01;
+    });
+    return R;
+  }
+  window.convParse = convParse;
+
+  // ── colaboradores (CLT + agência + sem registro) ──
+  function pessoas() {
+    var L = [];
+    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado') L.push({ pk: 'f:' + f.id, n: f.n || '', cpf: String(f.cpf || '').replace(/\D/g, ''), v: 'CLT' }); });
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Desligado' && c.st !== 'Inativo') L.push({ pk: 'x:' + c.id, n: c.n || '', cpf: String(c.cpf || '').replace(/\D/g, ''), v: c.tipo === 'agencia' ? 'Agência' : 'Sem registro' }); });
+    return L.sort(function (a, b) { return a.n.localeCompare(b.n); });
+  }
+  function difDig(a, b) { if (a.length !== b.length) return 99; var d = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d; }
+  function simNome(a, b) {
+    var A = sem(a).split(' ').filter(function (w) { return w.length > 2; }), B = sem(b).split(' ').filter(function (w) { return w.length > 2; });
+    if (!A.length || !B.length) return 0;
+    var hit = A.filter(function (w) { return B.some(function (x) { return x === w || (w.length > 4 && x.length > 4 && difDig(w, x) <= 1); }); }).length;
+    return hit / Math.max(A.length, B.length);
+  }
+  function casar(b, P) {
+    var exato = P.find(function (p) { return p.cpf && p.cpf === b.cpf; });
+    if (exato) return { p: exato, como: 'cpf' };
+    var melhor = null, nota = 0;
+    P.forEach(function (p) {
+      var s = simNome(b.nome, p.n), d = p.cpf ? difDig(p.cpf, b.cpf) : 99;
+      var sc = s + (d <= 2 ? 0.5 : 0);
+      if (sc > nota) { nota = sc; melhor = p; }
+    });
+    if (melhor && nota >= 0.6) return { p: melhor, como: (melhor.cpf && difDig(melhor.cpf, b.cpf) <= 2) ? 'cpf~' : 'nome' };
+    return { p: null, como: '' };
+  }
+
+  // ── bibliotecas (carregadas só quando usar) ──
+  function script(src) { return new Promise(function (ok, er) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { er(new Error('Não foi possível carregar ' + src)); }; document.head.appendChild(s); }); }
+  async function pdfjs() {
+    if (!window.pdfjsLib) await script('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return window.pdfjsLib;
+  }
+  async function tesseract() { if (!window.Tesseract) await script('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js'); return window.Tesseract; }
+  function status(t) { var s = el('cv-status'); if (s) s.innerHTML = t; }
+
+  // texto de um PDF digital, linha a linha (agrupa por altura na página)
+  async function textoPdf(pdf) {
+    var out = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var pg = await pdf.getPage(i), tc = await pg.getTextContent(), lin = {};
+      tc.items.forEach(function (it) { var y = Math.round(it.transform[5] / 3); (lin[y] = lin[y] || []).push(it); });
+      Object.keys(lin).sort(function (a, b) { return b - a; }).forEach(function (y) {
+        out.push(lin[y].sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (it) { return it.str; }).join(' '));
+      });
+    }
+    return out.join('\n');
+  }
+  async function paginasImagem(pdf) {
+    var imgs = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var pg = await pdf.getPage(i), vp = pg.getViewport({ scale: 1 }), esc2 = Math.min(3, 2400 / Math.max(vp.width, vp.height) * 1.0);
+      if (esc2 < 1.5) esc2 = 1.5;
+      var v2 = pg.getViewport({ scale: esc2 }), c = document.createElement('canvas'); c.width = v2.width; c.height = v2.height;
+      await pg.render({ canvasContext: c.getContext('2d'), viewport: v2 }).promise; imgs.push(c);
+    }
+    return imgs;
+  }
+  function arquivoImagem(f) { return new Promise(function (ok, er) { var u = URL.createObjectURL(f), im = new Image(); im.onload = function () { var c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); ok(c); }; im.onerror = er; im.src = u; }); }
+  async function ocr(canvases) {
+    var T = await tesseract(), txt = [];
+    var w = await T.createWorker('por', 1, { logger: function (m) { if (m.status === 'recognizing text') status('🔎 Lendo a imagem (OCR)… ' + Math.round((m.progress || 0) * 100) + '%'); } });
+    for (var i = 0; i < canvases.length; i++) { status('🔎 Lendo a página ' + (i + 1) + ' de ' + canvases.length + ' (OCR)…'); var r = await w.recognize(canvases[i]); txt.push(r.data.text); }
+    await w.terminate();
+    return txt.join('\n');
+  }
+
+  // ── janela ──
+  var ESTADO = null;
+  function injetar() {
+    if (el('modal-conv-imp')) return;
+    var anoAt = new Date().getFullYear();
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-conv-imp"><div class="modal" style="max-width:1240px;">' +
+      '<div class="modal-header"><span class="modal-title">💊 Importar relatório do convênio farmácia</span><button class="modal-close" onclick="closeModal(\'modal-conv-imp\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Anexe o <strong>Relatório de Prévia de Fechamento de Convênios</strong> (PDF ou foto). O sistema lê o <strong>CPF</strong> e o <strong>Total Conveniado</strong> de cada pessoa, vincula ao colaborador pelo CPF e lança como <strong>Convênio farmácia</strong> na competência escolhida — vai para a coluna "Convênio Farmácia" da planilha da folha e para o recibo de pagamento. ' +
+      'PDF digital (gerado pelo sistema da farmácia) é lido com exatidão; foto/scan é lido por OCR e <strong>precisa ser conferido</strong> antes de salvar.</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">' +
+      '<div class="form-group" style="margin:0;flex:2;min-width:260px;"><label>Arquivo do convênio (PDF, JPG ou PNG)</label><input id="cv-arq" type="file" accept=".pdf,image/*" onchange="cvLer()"></div>' +
+      '<div class="form-group" style="margin:0;"><label>Descontar na competência</label><select id="cv-mes">' + MESES_N.map(function (m, i) { return '<option value="' + i + '">' + m + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group" style="margin:0;width:100px;"><label>Ano</label><input id="cv-ano" type="number" min="2000" max="2100" value="' + anoAt + '"></div></div>' +
+      '<div id="cv-status" style="font-size:13px;margin-bottom:8px;"></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">' +
+      '<div style="flex:3;min-width:520px;"><div class="table-wrap" style="max-height:52vh;overflow:auto;"><table id="cv-tab" style="font-size:12.5px;"></table></div>' +
+      '<div id="cv-tot" style="font-size:13px;margin-top:8px;"></div></div>' +
+      '<div id="cv-pags" style="flex:2;min-width:280px;max-height:60vh;overflow:auto;display:none;border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:6px;background:var(--gray-50);"></div></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="cvLinha()">+ Linha manual</button><button class="btn btn-outline" onclick="closeModal(\'modal-conv-imp\')">Cancelar</button>' +
+      '<button class="btn btn-primary" id="cv-salvar" onclick="cvSalvar()" disabled>💾 Lançar descontos na folha</button></div></div></div>');
+  }
+  window.cvAbrir = function () {
+    injetar(); ESTADO = null;
+    el('cv-arq').value = ''; el('cv-tab').innerHTML = ''; el('cv-tot').innerHTML = ''; el('cv-pags').style.display = 'none'; el('cv-pags').innerHTML = ''; el('cv-salvar').disabled = true;
+    var fm = el('fl-mes'), fa = el('fl-ano'), h = new Date();
+    el('cv-mes').value = fm ? fm.value : String(h.getMonth()); el('cv-ano').value = fa ? fa.value : h.getFullYear();
+    status('');
+    el('modal-conv-imp').classList.add('open');
+  };
+  window.cvLer = async function () {
+    var f = el('cv-arq').files[0]; if (!f) return;
+    el('cv-salvar').disabled = true; el('cv-tab').innerHTML = ''; el('cv-tot').innerHTML = '';
+    try {
+      var texto = '', canv = [], modo = 'pdf';
+      if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+        status('⏳ Abrindo o PDF…');
+        var L = await pdfjs(), pdf = await L.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+        texto = await textoPdf(pdf);
+        if ((texto.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g) || []).length < 1) { modo = 'ocr'; status('📷 PDF digitalizado (imagem). Preparando leitura por OCR…'); canv = await paginasImagem(pdf); texto = await ocr(canv); }
+      } else { modo = 'ocr'; canv = [await arquivoImagem(f)]; texto = await ocr(canv); }
+      montar(convParse(texto), modo, canv);
+    } catch (e) { console.error(e); status('<span style="color:var(--red,#c0392b);">❌ Não foi possível ler o arquivo: ' + esc(e.message || e) + '. Verifique a internet (as ferramentas de leitura são carregadas na hora) ou lance os valores manualmente.</span>'); }
+  };
+  window.cvMontar = function (R, modo, canv) { injetar(); montar(R, modo, canv || []); };
+  function montar(R, modo, canv) {
+    var P = pessoas(), linhas = [], porPk = {};
+    R.blocos.forEach(function (b) {
+      var c = casar(b, P), val = b.total !== null ? b.total : (b.nItens && b.lidos === b.nItens ? b.somaItens : null);
+      var chave = c.p ? c.p.pk : '?' + b.cpf;
+      if (porPk[chave]) { var o = porPk[chave]; if (o.valor === null && val !== null) { o.valor = val; o.b = b; } o.dup = true; return; } // página repetida / CPF lido diferente
+      porPk[chave] = { b: b, p: c.p, como: c.como, valor: val, sel: !!c.p && val !== null };
+      linhas.push(porPk[chave]);
+    });
+    ESTADO = { R: R, modo: modo, linhas: linhas, P: P };
+    var pg = el('cv-pags');
+    if (canv && canv.length) {
+      pg.style.display = ''; pg.innerHTML = '<div style="font-size:11.5px;color:var(--gray-600);margin-bottom:4px;">Arquivo original — confira os valores (clique para ampliar)</div>' +
+        canv.map(function (c, i) { var u = c.toDataURL('image/jpeg', 0.8); return '<a href="' + u + '" target="_blank" download="convenio-pagina-' + (i + 1) + '.jpg"><img src="' + u + '" style="width:100%;margin-bottom:6px;border:1px solid var(--gray-200);"></a>'; }).join('');
+    }
+    var pend = linhas.filter(function (x) { return !x.p || x.valor === null || !x.b.confere; }).length;
+    status((modo === 'ocr' ? '📷 Lido por OCR (foto/scan). <strong>Confira cada valor com o relatório</strong> — rasuras e marcações podem atrapalhar a leitura. ' : '📄 PDF digital lido. ') +
+      (R.convenio ? 'Convênio: <strong>' + esc(R.convenio) + '</strong>. ' : '') + (R.periodo ? 'Período: ' + esc(R.periodo) + '. ' : '') +
+      linhas.length + ' pessoa(s) encontradas' + (pend ? ', <strong style="color:#b26a00;">' + pend + ' para conferir</strong>' : '') + '.');
+    desenhar();
+  }
+  function opcoesPessoa(sel) {
+    return '<option value="">— não vincular —</option>' + ESTADO.P.map(function (p) { return '<option value="' + esc(p.pk) + '"' + (sel && sel.pk === p.pk ? ' selected' : '') + '>' + esc(p.n) + ' (' + p.v + ')</option>'; }).join('');
+  }
+  function fmtCpf(c) { c = String(c || ''); return c.length === 11 ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : c; }
+  function desenhar() {
+    var L = ESTADO.linhas;
+    el('cv-tab').innerHTML = '<thead><tr><th></th><th>CPF (relatório)</th><th>Nome (relatório)</th><th>Colaborador no sistema</th><th>Leitura</th><th style="text-align:right;width:120px;">Total conveniado (R$)</th></tr></thead><tbody>' +
+      L.map(function (x, i) {
+        var b = x.b, aviso = [];
+        if (!x.p) aviso.push('<span style="color:#c0392b;">sem vínculo</span>');
+        else if (x.como === 'cpf') aviso.push('<span style="color:var(--green-dark);">CPF ✔</span>');
+        else aviso.push('<span style="color:#b26a00;" title="CPF do relatório diferente do cadastro">' + (x.como === 'cpf~' ? 'CPF parecido' : 'pelo nome') + ' ⚠</span>');
+        if (b.manual) aviso.push('manual');
+        else if (x.valor === null) aviso.push('<span style="color:#c0392b;">total não lido</span>');
+        else if (b.confere) aviso.push('<span style="color:var(--green-dark);">soma confere</span>');
+        else if (ESTADO.modo === 'ocr') aviso.push('<span style="color:#b26a00;">conferir</span>');
+        return '<tr style="' + ((!x.p || x.valor === null) ? 'background:#fff7e6;' : '') + '"><td><input type="checkbox" ' + (x.sel ? 'checked' : '') + ' onchange="cvSet(' + i + ',\'sel\',this.checked)"></td>' +
+          '<td style="white-space:nowrap;">' + esc(fmtCpf(b.cpf)) + '</td><td>' + esc(b.nome) + (x.dup ? ' <span title="Apareceu mais de uma vez (página repetida) — considerado uma vez" style="font-size:10.5px;color:var(--gray-400);">(repetido)</span>' : '') + '</td>' +
+          '<td><select style="max-width:260px;font-size:12px;" onchange="cvSet(' + i + ',\'p\',this.value)">' + opcoesPessoa(x.p) + '</select></td>' +
+          '<td style="font-size:11.5px;">' + aviso.join(' · ') + (b.nItens ? '<div style="color:var(--gray-400);">' + b.nItens + ' compra(s)' + (b.lidos ? ' · soma lida ' + brl(b.somaItens) : '') + '</div>' : '') + '</td>' +
+          '<td style="text-align:right;"><input type="text" value="' + (x.valor === null ? '' : brl(x.valor)) + '" placeholder="0,00" style="width:100px;text-align:right;" onchange="cvSet(' + i + ',\'valor\',this.value)"></td></tr>';
+      }).join('') + '</tbody>';
+    totais();
+  }
+  function totais() {
+    var L = ESTADO.linhas, s = 0, n = 0;
+    L.forEach(function (x) { if (x.sel && x.p && x.valor) { s += x.valor; n++; } });
+    s = Math.round(s * 100) / 100;
+    var te = ESTADO.R.totalEmpresa, tudo = Math.round(L.reduce(function (a, x) { return a + (x.valor || 0); }, 0) * 100) / 100;
+    el('cv-tot').innerHTML = '<strong>' + n + '</strong> desconto(s) a lançar · total <strong>R$ ' + brl(s) + '</strong>' +
+      (te !== null ? ' · <span style="color:' + (Math.abs(te - tudo) < 0.01 ? 'var(--green-dark)' : '#b26a00') + ';">Total Empresa no relatório: R$ ' + brl(te) + (Math.abs(te - tudo) < 0.01 ? ' ✔ confere' : ' — soma da tabela R$ ' + brl(tudo) + ' (diferença R$ ' + brl(te - tudo) + ': confira se alguém não foi lido e use <em>+ Linha manual</em>)') + '</span>' : '');
+    el('cv-salvar').disabled = !n;
+  }
+  window.cvSet = function (i, k, v) {
+    var x = ESTADO.linhas[i];
+    if (k === 'sel') x.sel = v;
+    if (k === 'p') { x.p = ESTADO.P.find(function (p) { return p.pk === v; }) || null; x.como = x.p ? (x.p.cpf === x.b.cpf ? 'cpf' : 'nome') : ''; if (x.p && x.valor) x.sel = true; desenhar(); return; }
+    if (k === 'valor') { x.valor = num(v); if (x.valor && x.p) x.sel = true; desenhar(); return; }
+    totais();
+  };
+  window.cvLinha = function () {
+    if (!ESTADO) ESTADO = { R: { convenio: '', periodo: '', totalEmpresa: null, blocos: [] }, modo: 'manual', linhas: [], P: pessoas() };
+    ESTADO.linhas.push({ b: { cpf: '', nome: '', nItens: 0, lidos: 0, manual: true }, p: null, como: '', valor: null, sel: false });
+    desenhar();
+  };
+  window.cvSalvar = function () {
+    var mes = +el('cv-mes').value, ano = +el('cv-ano').value, num2 = (ESTADO.R.convenio.match(/^\d+/) || [''])[0];
+    var ok = ESTADO.linhas.filter(function (x) { return x.sel && x.p && x.valor > 0; });
+    if (!ok.length) return;
+    var pks = {}; ok.forEach(function (x) { pks[x.p.pk] = 1; });
+    var todos = DB.g(FL_KEY), substit = todos.filter(function (x) { return x.origem === 'convenio' && x.mes === mes && x.ano === ano && pks[x.pk]; }).length;
+    if (!confirm('Lançar ' + ok.length + ' desconto(s) de convênio farmácia em ' + MESES_N[mes] + '/' + ano + '?' + (substit ? '\n\n' + substit + ' lançamento(s) importado(s) antes deste convênio para as mesmas pessoas nesta competência serão substituídos.' : ''))) return;
+    var l = todos.filter(function (x) { return !(x.origem === 'convenio' && x.mes === mes && x.ano === ano && pks[x.pk]); });
+    var hoje = new Date(), dt = hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
+    ok.forEach(function (x) {
+      l.push({ id: novoId(), pk: x.p.pk, nome: x.p.n, cpf: x.p.cpf, mes: mes, ano: ano, tipo: 'farm', valor: Math.round(x.valor * 100) / 100,
+        desc: ('CONVÊNIO FARMÁCIA' + (num2 ? ' ' + num2 : '') + (ESTADO.R.periodo ? ' (' + ESTADO.R.periodo + ')' : '')).toLocaleUpperCase('pt-BR'), data: dt, origem: 'convenio', criado: new Date().toISOString() });
+    });
+    DB.s(FL_KEY, l);
+    closeModal('modal-conv-imp');
+    if (el('fl-mes')) { el('fl-mes').value = String(mes); el('fl-ano').value = ano; if (window.flRender) flRender(); }
+    if (typeof toast === 'function') toast('💊 ' + ok.length + ' desconto(s) de convênio farmácia lançados em ' + MESES_N[mes] + '/' + ano + ' ✅');
+  };
+
+  // botão na janela "Lançamentos da folha do mês"
+  var abrirOrig = window.flAbrir;
+  if (abrirOrig) window.flAbrir = function () {
+    var r = abrirOrig.apply(this, arguments);
+    var m = el('modal-folha-lanc');
+    if (m && !el('fl-btn-conv')) {
+      var bx = m.querySelector('button[onclick="flExportar()"]');
+      if (bx) bx.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="fl-btn-conv" onclick="cvAbrir()" title="Importar o relatório do convênio farmácia (desconto por CPF)">💊 Importar convênio farmácia</button>');
+    }
+    return r;
+  };
+})();
+</script>
+
 </body>
 </html>
