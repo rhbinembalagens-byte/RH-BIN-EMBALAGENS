@@ -19634,5 +19634,120 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ DEPARTAMENTOS: faturamento do mês × teto de colaboradores (tabela "Bonificação e dimensionamento de equipe") ═══════ */
+(function () {
+  var K_FAT = 'dep-fat', K_TAB = 'dim-faixas';
+  if (window.RT && RT.LIST) [K_FAT, K_TAB].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  // faixas da planilha: faturamento a partir de → porte → teto de colaboradores por unidade (com sub gerente)
+  var PADRAO = [[160000,'P',3],[200000,'P',4],[240000,'P',5],[300000,'M',6],[350000,'M',7],[400000,'M',8],[450000,'M',9],[500000,'M',10],[550000,'M',11],[600000,'M',12],[650000,'M',13],
+    [700000,'G',14],[800000,'G',16],[900000,'G',16],[1000000,'G',20],[1100000,'G',22],[1200000,'GG',24],[1300000,'GG',26],[1400000,'GG',28],[1500000,'GG',30],[1600000,'GG',32],[1700000,'GG',34],[1800000,'GG',36],[1900000,'GG',38],[2000000,'GG',40]]
+    .map(function (x) { return { fat: x[0], porte: x[1], teto: x[2] }; });
+  var MES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function num(s) { s = String(s == null ? '' : s).replace(/[^\d,.-]/g, ''); if (!s) return null; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); var n = parseFloat(s); return isNaN(n) ? null : Math.round(n * 100) / 100; }
+  function rs(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+  function faixas() { var t = DB.g(K_TAB); return (t && t.length ? t : PADRAO).slice().sort(function (a, b) { return a.fat - b.fat; }); }
+  window.dimFaixa = function (fat) {
+    var F = faixas(); if (fat === null || fat === undefined || fat === '') return null;
+    var f = null; F.forEach(function (x) { if (fat >= x.fat) f = x; });
+    return f ? { porte: f.porte, teto: f.teto, de: f.fat, abaixo: false } : { porte: F[0].porte, teto: F[0].teto, de: F[0].fat, abaixo: true };
+  };
+  var comp = null;
+  function cp() { if (!comp) { var h = new Date(); comp = { m: h.getMonth(), a: h.getFullYear() }; } return comp; }
+  function fatDe(dep, m, a) { var r = DB.g(K_FAT).find(function (x) { return x.dep === dep && x.mes === m && x.ano === a; }); return r ? r.valor : null; }
+  window.dimSetFat = function (dep, v) {
+    var c = cp(), n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === c.m && x.ano === c.a); });
+    if (n !== null && n > 0) L.push({ id: (typeof uid === 'function' ? uid() : Date.now().toString(36)), dep: dep, mes: c.m, ano: c.a, valor: n, em: new Date().toISOString() });
+    DB.s(K_FAT, L); rdEstDeps();
+  };
+  window.dimComp = function (n) {
+    var c = cp();
+    if (n === 'sel') { c.m = +el('dim-mes').value; c.a = +el('dim-ano').value; }
+    else if (n) { c.m += n; if (c.m < 0) { c.m = 11; c.a--; } if (c.m > 11) { c.m = 0; c.a++; } }
+    rdEstDeps();
+  };
+  function contar(dep) {
+    var clt = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado' && f.dep === dep; }).length;
+    var ag = 0, sr = 0;
+    DB.g('colab-ext').forEach(function (c) { if (c.dep === dep && c.st === 'Ativo') { if (c.tipo === 'agencia') ag++; else sr++; } });
+    return { clt: clt, ag: ag, sr: sr, tot: clt + ag + sr };
+  }
+  function barra() {
+    var v = el('est-view-dep'); if (!v || el('dim-bar')) return;
+    var c = cp();
+    v.querySelector('.table-wrap').insertAdjacentHTML('beforebegin',
+      '<div id="dim-bar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--green-pale,#fdf3e6);border-radius:var(--radius-sm,8px);padding:8px 12px;margin-bottom:10px;font-size:13px;">' +
+      '<strong>📈 Dimensionamento de equipe</strong><span style="color:var(--gray-600);">— faturamento do mês de:</span>' +
+      '<button class="btn btn-outline" style="padding:3px 9px;" onclick="dimComp(-1)">◀</button>' +
+      '<select id="dim-mes" onchange="dimComp(\'sel\')" style="padding:4px 6px;">' + MES.map(function (m, i) { return '<option value="' + i + '">' + m + '</option>'; }).join('') + '</select>' +
+      '<input id="dim-ano" type="number" min="2000" max="2100" onchange="dimComp(\'sel\')" style="width:80px;padding:4px 6px;">' +
+      '<button class="btn btn-outline" style="padding:3px 9px;" onclick="dimComp(1)">▶</button>' +
+      '<span id="dim-resumo" style="margin-left:6px;"></span>' +
+      '<button class="btn btn-outline" style="margin-left:auto;padding:4px 10px;" onclick="dimTabela()">⚙️ Tabela de dimensionamento</button></div>');
+  }
+  var _rd = window.rdEstDeps;
+  window.rdEstDeps = function () {
+    var r = _rd.apply(this, arguments);
+    try { completar(); } catch (e) { console.error(e); }
+    return r;
+  };
+  function completar() {
+    var tb = el('est-tb-dep'); if (!tb) return;
+    barra();
+    var c = cp(); el('dim-mes').value = String(c.m); el('dim-ano').value = c.a;
+    var thead = tb.parentNode.querySelector('thead tr');
+    if (thead && !thead.querySelector('.dim-th')) {
+      var ths = thead.querySelectorAll('th'), vinc = ths[4];
+      vinc.insertAdjacentHTML('beforebegin', '<th class="dim-th">Faturamento do mês</th><th class="dim-th">Limite de colaboradores</th>');
+      vinc.insertAdjacentHTML('afterend', '<th class="dim-th">Vínculos × Limite</th>');
+    }
+    var acima = 0, dentro = 0, semFat = 0;
+    Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+      var tds = tr.querySelectorAll('td');
+      if (tds.length === 1) { tds[0].colSpan = 9; return; }
+      if (tds.length < 6 || tr.querySelector('.dim-td')) return;
+      var b = tr.querySelector('button[onclick^="estEditar(\'dep\'"]'); if (!b) return;
+      var id = (b.getAttribute('onclick').match(/'dep','([^']+)'/) || [])[1]; if (!id) return;
+      var fat = fatDe(id, c.m, c.a), f = window.dimFaixa(fat), n = contar(id);
+      var tip = 'CLT: ' + n.clt + ' · Agência: ' + n.ag + ' · Sem registro: ' + n.sr;
+      tds[4].insertAdjacentHTML('beforebegin',
+        '<td class="dim-td"><input type="text" value="' + (fat ? fat.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') + '" placeholder="R$ 0,00" title="Faturamento realizado em ' + MES[c.m] + '/' + c.a + '" ' +
+        'onchange="dimSetFat(\'' + id + '\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()" style="width:120px;text-align:right;padding:5px 7px;border:1.5px solid var(--gray-200);border-radius:6px;"></td>' +
+        '<td class="dim-td">' + (f ? '<strong style="font-size:15px;">' + f.teto + '</strong> pessoas <div class="est-sub">porte ' + esc(f.porte) + (f.abaixo ? ' · fat. abaixo de ' + rs(f.de) : ' · a partir de ' + rs(f.de)) + ' · c/ sub</div>' : '<span class="est-sub">informe o faturamento</span>') + '</td>');
+      var sit;
+      if (!f) { sit = '<span class="est-sub">—</span>'; semFat++; }
+      else {
+        var d = n.tot - f.teto;
+        if (d > 0) { acima++; sit = '<span class="badge badge-red" style="background:#ffebee;color:#c62828;">⚠ ' + d + ' acima do limite</span>'; }
+        else { dentro++; sit = d === 0 ? '<span class="badge badge-yellow">No limite</span>' : '<span class="badge badge-green">✔ Dentro · ' + (-d) + ' vaga(s)</span>'; }
+      }
+      tds[4].insertAdjacentHTML('afterend', '<td class="dim-td" style="white-space:nowrap;"><div title="' + tip + '"><strong>' + n.tot + '</strong> / ' + (f ? f.teto : '—') + '</div>' + sit + '<div class="est-sub" style="white-space:nowrap;">CLT ' + n.clt + ' · Ag. ' + n.ag + ' · S/reg. ' + n.sr + '</div></td>');
+    });
+    el('dim-resumo').innerHTML = (dentro ? '<span class="badge badge-green">' + dentro + ' dentro</span> ' : '') + (acima ? '<span class="badge" style="background:#ffebee;color:#c62828;">' + acima + ' acima do limite</span> ' : '') + (semFat ? '<span class="est-sub">' + semFat + ' sem faturamento lançado</span>' : '');
+  }
+  // tabela de faixas (visualizar / ajustar)
+  window.dimTabela = function () {
+    if (!el('modal-dim')) document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-dim"><div class="modal" style="max-width:620px;"><div class="modal-header"><span class="modal-title">⚙️ Tabela de dimensionamento de equipe</span><button class="modal-close" onclick="closeModal(\'modal-dim\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;">Faturamento do mês a partir de → teto de colaboradores por unidade (com sub gerente). Fonte: planilha "Bonificação e dimensionamento de equipe". Ajuste se a regra mudar.</div>' +
+      '<div class="table-wrap" style="max-height:55vh;overflow:auto;"><table style="font-size:13px;"><thead><tr><th>Faturamento a partir de (R$)</th><th>Porte</th><th>Teto de colaboradores</th><th></th></tr></thead><tbody id="dim-tb"></tbody></table></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="dimLinha()">+ Faixa</button><button class="btn btn-outline" onclick="dimPadrao()">Restaurar planilha</button><button class="btn btn-primary" onclick="dimSalvarTab()">💾 Salvar</button></div></div></div>');
+    desenharTab(faixas()); el('modal-dim').classList.add('open');
+  };
+  function desenharTab(F) {
+    el('dim-tb').innerHTML = F.map(function (x) {
+      return '<tr><td><input class="dim-f" type="text" value="' + x.fat.toLocaleString('pt-BR') + '" style="width:130px;text-align:right;"></td><td><input class="dim-p" type="text" value="' + esc(x.porte) + '" style="width:60px;"></td>' +
+        '<td><input class="dim-t" type="number" min="0" value="' + x.teto + '" style="width:80px;"></td><td><button class="btn-icon danger" onclick="this.closest(\'tr\').remove()">🗑</button></td></tr>';
+    }).join('');
+  }
+  function lerTab() { return Array.prototype.map.call(el('dim-tb').querySelectorAll('tr'), function (tr) { return { fat: num(tr.querySelector('.dim-f').value), porte: (tr.querySelector('.dim-p').value || '').trim().toUpperCase(), teto: parseInt(tr.querySelector('.dim-t').value, 10) }; }).filter(function (x) { return x.fat !== null && x.teto >= 0; }); }
+  window.dimLinha = function () { var F = lerTab(); var u = F[F.length - 1] || { fat: 0, porte: 'P', teto: 0 }; F.push({ fat: u.fat + 100000, porte: u.porte, teto: u.teto + 2 }); desenharTab(F); };
+  window.dimPadrao = function () { if (confirm('Voltar para os valores da planilha?')) desenharTab(PADRAO); };
+  window.dimSalvarTab = function () { var F = lerTab(); if (!F.length) { alert('Inclua ao menos uma faixa.'); return; } DB.s(K_TAB, F.sort(function (a, b) { return a.fat - b.fat; })); closeModal('modal-dim'); rdEstDeps(); if (typeof toast === 'function') toast('Tabela de dimensionamento salva ✅'); };
+})();
+</script>
+
 </body>
 </html>
