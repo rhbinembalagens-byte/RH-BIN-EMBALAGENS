@@ -19953,5 +19953,27 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ RECIBOS: "Data do recibo" em destaque no topo da janela (todos os recibos, individual e por grupo) ═══════ */
+(function () {
+  function mover() {
+    var box = document.getElementById('rc-modo-box'), inp = document.getElementById('rc-data');
+    if (!box || !inp || document.getElementById('rc-data-top')) return;
+    var g = inp.closest('.form-group');
+    box.style.alignItems = 'flex-end'; box.style.flexWrap = 'wrap';
+    box.insertAdjacentHTML('beforeend',
+      '<div id="rc-data-top" style="margin-left:auto;display:flex;align-items:flex-end;gap:6px;background:var(--green-pale,#fdf3e6);border:1.5px solid var(--gold,#C9A961);border-radius:var(--radius-sm,8px);padding:6px 10px;">' +
+      '<div style="font-size:12px;font-weight:700;color:var(--green-dark);line-height:1.2;">📅 Data do recibo<div style="font-weight:400;font-size:10.5px;color:var(--gray-600);">vazio = preencher à mão</div></div></div>');
+    var top = document.getElementById('rc-data-top');
+    inp.style.width = '150px'; inp.style.padding = '5px 8px';
+    top.appendChild(inp);
+    top.insertAdjacentHTML('beforeend', '<button type="button" class="btn btn-outline btn-sm" title="Usar a data de hoje" onclick="document.getElementById(\'rc-data\').value=(typeof td===\'function\'?td():\'\')">Hoje</button>');
+    if (g) g.style.display = 'none';
+  }
+  var _abrir = window.recAbrir;
+  if (_abrir) window.recAbrir = function () { var r = _abrir.apply(this, arguments); try { mover(); } catch (e) {} return r; };
+})();
+</script>
+
 </body>
 </html>
