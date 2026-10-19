@@ -20249,5 +20249,68 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ AGÊNCIA / SEM REGISTRO: coluna Departamento + departamentos das planilhas de 19/10/2026 ═══════ */
+(function () {
+  var KEY = 'colab-ext', FLAG = 'eq_mig_dep_ext_20261019';
+  // departamento por colaborador (CPF/nome guardados só como código, sem dados pessoais no arquivo)
+  var MAPA = {"agencia:cd276706e":"L3","agencia:n528488f4":"L3","agencia:ca7a3c3d5":"L10","agencia:ncaec1703":"L10","agencia:c7ca0cc00":"L8","agencia:ndda39daa":"L8","agencia:c357b64a8":"L4","agencia:n09977629":"L4","agencia:c855d8cad":"L2","agencia:nc3f38624":"L2","agencia:c0ec00449":"L3","agencia:ne62ebd4f":"L3","agencia:c4a425a7e":"L3","agencia:n367cb9de":"L3","agencia:ca64f71db":"L8","agencia:n2f6aa826":"L8","agencia:cb63ba3d3":"L3","agencia:n64a63ffe":"L3","agencia:cb09611ff":"L3","agencia:nc65e0aa2":"L3","agencia:c38f323e3":"L3","agencia:n8cb19afb":"L3","agencia:c7a018383":"L8","agencia:n80d1fc79":"L8","semreg:c2bdc519a":"L3","semreg:ne74a1120":"L3","semreg:cedb28ba9":"L3","semreg:n645dd1da":"L3","semreg:c5186e417":"L3","semreg:nc9554216":"L3","semreg:c3fc723a0":"L2","semreg:n10a432d0":"L2","semreg:c9c7208dd":"L3","semreg:nb6678aca":"L3","semreg:c44cd9891":"L3","semreg:n071ccddd":"L3","semreg:c87a72ff7":"L2","semreg:n14b060bf":"L2","semreg:cc96e9858":"L3","semreg:nc72f5b39":"L3","semreg:c5974ceb1":"L9","semreg:nb96adbc1":"L9","semreg:c67620222":"L5","semreg:n97177247":"L5","semreg:ca7c98d78":"L2","semreg:n6129c763":"L2"};
+  function fnv(s) { var h = 0x811c9dc5, b = new TextEncoder().encode(s); for (var i = 0; i < b.length; i++) { h ^= b[i]; h = Math.imul(h, 0x01000193) >>> 0; } return ('0000000' + h.toString(16)).slice(-8); }
+  function nn(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function chaveLoja(s) { var n = norm(s).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(), m = n.match(/^(?:l|loja)\s*0*(\d+)(?:\D|$)/); return m ? 'loja' + m[1] : n.replace(/\s/g, ''); }
+  // acha o departamento pelo código da planilha (L3 = LOJA 3); se não existir, cria
+  function depId(cod, criar) {
+    var alvo = chaveLoja(cod), deps = DB.g('departamentos');
+    var d = deps.find(function (x) { return chaveLoja(x.nome) === alvo; });
+    if (d) return d.id;
+    if (!criar) return '';
+    var novo = { id: (typeof uid === 'function' ? uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), nome: String(cod).toUpperCase(), resp: '', emp: '', desc: 'Criado a partir da planilha de colaboradores (agência / sem registro)' };
+    deps.push(novo); DB.s('departamentos', deps); return novo.id;
+  }
+  function nomeDep(v) { if (!v) return ''; var d = DB.g('departamentos').find(function (x) { return x.id === v; }); return d ? d.nome : (/^[a-z0-9]{8,}$/i.test(v) ? '' : v); }
+  function migrar() {
+    try {
+      if (localStorage.getItem(FLAG)) return;
+      var L = DB.g(KEY); if (!L.length) return; // dados ainda não carregados: tenta de novo depois
+      var mud = 0, achou = 0;
+      L.forEach(function (c) {
+        var t = c.tipo === 'agencia' ? 'agencia' : 'semreg', d = String(c.cpf || '').replace(/\D/g, '');
+        var cod = (d.length === 11 && MAPA[t + ':c' + fnv('bin-rh|' + d)]) || MAPA[t + ':n' + fnv('bin-rh|' + nn(c.n))];
+        if (!cod) return; achou++;
+        var id = depId(cod, true);
+        if (id && c.dep !== id) { c.dep = id; mud++; }
+      });
+      if (!achou) return;
+      if (mud) DB.s(KEY, L);
+      localStorage.setItem(FLAG, new Date().toISOString());
+      if (mud && typeof toast === 'function') toast('🏢 Departamento preenchido em ' + mud + ' colaborador(es) de Agência / Sem registro');
+      ['agencia', 'semreg'].forEach(function (t) { try { if (document.getElementById('cx-tb-' + t)) rdColabExt(t); } catch (e) {} });
+    } catch (e) { console.error(e); }
+  }
+  // coluna "Departamento" nas listas de Agência e Sem registro
+  function coluna(t) {
+    var tb = document.getElementById('cx-tb-' + t); if (!tb) return;
+    var thr = tb.parentNode.querySelector('thead tr');
+    if (thr && !thr.querySelector('.cx-th-dep')) { var cpf = thr.children[1]; if (cpf) cpf.insertAdjacentHTML('afterend', '<th class="cx-th-dep">Departamento</th>'); }
+    var L = DB.g(KEY);
+    Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+      if (tr.querySelector('.cx-td-dep')) return;
+      var tds = tr.children;
+      if (tds.length === 1) { tds[0].colSpan = (+tds[0].colSpan || 1) + 1; return; }
+      var b = tr.querySelector('button[onclick^="cxEditar("]'), id = b ? (b.getAttribute('onclick').match(/cxEditar\('([^']+)'/) || [])[1] : null;
+      var c = id ? L.find(function (x) { return x.id === id; }) : null, nd = c ? nomeDep(c.dep) : '';
+      if (tds[1]) tds[1].insertAdjacentHTML('afterend', '<td class="cx-td-dep">' + (nd ? '<strong>' + esc(nd) + '</strong>' : '<span style="color:var(--gray-400);">—</span>') + '</td>');
+    });
+  }
+  var _rd = window.rdColabExt;
+  if (_rd) window.rdColabExt = function (t) { var r = _rd.apply(this, arguments); try { coluna(t); } catch (e) { console.error(e); } return r; };
+  window.cxDepId = depId;
+  function iniciar() { migrar(); setTimeout(migrar, 4000); setTimeout(migrar, 15000); }
+  if (document.readyState !== 'loading') iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
+})();
+</script>
+
 </body>
 </html>
