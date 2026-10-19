@@ -19868,7 +19868,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<input id="lq-pdfs" type="file" accept=".pdf" multiple onchange="liqLerPdfs()"><div id="lq-status" style="font-size:12.5px;margin-top:6px;"></div></div></div>' +
       '<div id="lq-resumo" style="font-size:13px;margin-bottom:6px;"></div>' +
       '<div class="table-wrap" style="max-height:48vh;overflow:auto;"><table id="lq-tab" style="font-size:12.5px;"></table></div>' +
-      '<div class="modal-footer" style="flex-wrap:wrap;gap:8px;"><span style="font-size:12.5px;color:var(--gray-600);margin-right:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">A planilha sai igual à lista do banco (colunas A–E), com o <strong>código na coluna F</strong>: <input id="lq-cod" type="number" min="0" step="1" style="width:64px;padding:4px 6px;" title="Código do tipo de pagamento (coluna F)"> e o <strong>valor na coluna G</strong>.</span>' +
+      '<div class="modal-footer" style="flex-wrap:wrap;gap:8px;"><span style="font-size:12.5px;color:var(--gray-600);margin-right:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">Layout da lista do banco (colunas A–E), <strong>código na coluna F</strong>: <input id="lq-cod" type="number" min="0" step="1" style="width:64px;padding:4px 6px;" title="Código do tipo de pagamento (coluna F)"> e <strong>valor na coluna G</strong>. Exportar: <select id="lq-emp" style="padding:4px 6px;max-width:330px;"><option value="__cada">Uma planilha para cada empresa</option><option value="__todas">Todas as empresas juntas</option></select></span>' +
       '<button class="btn btn-outline" onclick="closeModal(\'modal-liq\')">Fechar</button><button class="btn btn-outline" id="lq-gerar-xls" onclick="liqGerar(\'xls\')" disabled title="Formato antigo do Excel (97-2003), igual ao arquivo original da lista">📥 Excel 97-2003 (.xls)</button><button class="btn btn-primary" id="lq-gerar" onclick="liqGerar(\'xlsx\')" disabled>📥 Gerar planilha Excel (.xlsx)</button></div></div></div>');
   }
   // tipo de recibo → título, código da coluna F e nome do arquivo
@@ -19908,7 +19908,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var soma = Math.round(R.itens.reduce(function (s, x) { return s + (x.valor || 0); }, 0) * 100) / 100, ok = R.total === null || Math.abs(soma - R.total) < 0.01;
       return '<div>' + (ok ? '✅' : '⚠️') + ' ' + esc(R.empresa || R.arq) + ' — ' + R.itens.length + ' func. · R$ ' + brl(soma) + (R.calculo ? ' · ' + esc(R.calculo) : '') + (R.comp ? ' · ' + R.comp : '') + (ok ? '' : ' <strong>(total do PDF R$ ' + brl(R.total) + ')</strong>') + '</div>';
     }).join('') + (erros && erros.length ? '<div style="color:#c0392b;">❌ ' + erros.map(esc).join('<br>❌ ') + '</div>' : '') + (comps.length > 1 ? '<div style="color:#b26a00;">⚠ PDFs de competências diferentes: ' + comps.join(', ') + '</div>' : '');
-    casarTudo();
+    preencherEmpresas(); casarTudo();
   };
   function casarTudo() { ESTADO.linhas.forEach(function (x) { if (!x.manual) { var c = casar(x.it); x.l = c.l; x.como = c.como; } }); desenhar(); }
   function opcoes(sel) { return '<option value="">— não está na lista —</option>' + lista().slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); }).map(function (l) { return '<option value="' + esc(l.id) + '"' + (sel && sel.id === l.id ? ' selected' : '') + '>' + esc(l.nome) + ' · ' + esc(fmtCpf(l.cpf)) + '</option>'; }).join(''); }
@@ -20097,33 +20097,58 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return out;
   }
   window.xlsBiff8 = xlsBiff8;
+  function baixar(bytes, nome, xls) {
+    var blob = new Blob([bytes], { type: xls ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), a2 = document.createElement('a');
+    a2.href = URL.createObjectURL(blob); a2.download = nome; document.body.appendChild(a2); a2.click();
+    setTimeout(function () { URL.revokeObjectURL(a2.href); a2.remove(); }, 4000);
+  }
+  function nomeEmp(R) { return String(R.empresa || R.arq || 'EMPRESA').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function empresasRel() { var vistos = {}, out = []; (ESTADO ? ESTADO.rel : []).forEach(function (R, i) { var k = (R.cnpj || '').replace(/\D/g, '') || nomeEmp(R); if (!vistos[k]) { vistos[k] = 1; out.push({ k: k, nome: nomeEmp(R), cnpj: R.cnpj || '', rels: [R] }); } else out.find(function (e) { return e.k === k; }).rels.push(R); }); return out; }
+  function preencherEmpresas() {
+    var s = el('lq-emp'); if (!s) return; var E = empresasRel(), ant = s.value;
+    s.innerHTML = '<option value="__cada">Uma planilha para cada empresa (' + E.length + ' arquivo' + (E.length > 1 ? 's' : '') + ')</option>' +
+      E.map(function (e) { return '<option value="' + esc(e.k) + '">Só ' + esc(e.nome) + (e.cnpj ? ' · ' + esc(e.cnpj) : '') + '</option>'; }).join('') +
+      '<option value="__todas">Todas as empresas juntas (lista completa do banco)</option>';
+    if (ant && Array.prototype.some.call(s.options, function (o) { return o.value === ant; })) s.value = ant;
+  }
   window.liqGerar = function (fmt) {
     try {
-      var L = ESTADO.linhas.filter(function (x) { return x.sel && x.l; }), val = {};
-      L.forEach(function (x) { val[x.l.id] = Math.round(((val[x.l.id] || 0) + (x.it.valor || 0)) * 100) / 100; });
       var T = LQ_TIPOS[LQ_TIPO], cod = String(el('lq-cod').value || '').trim();
       if (!/^\d+$/.test(cod)) { alert('Informe o código da coluna F (só números).'); el('lq-cod').focus(); return; }
       var pc = DB.g('pag-cod').filter(function (x) { return x.id !== LQ_TIPO; }); pc.push({ id: LQ_TIPO, cod: cod }); DB.s('pag-cod', pc);
       var calcs = ESTADO.rel.map(function (R) { return R.calculo || ''; }).filter(function (c) { return c && !T.re.test(c); });
       if (calcs.length && !confirm('Atenção: o PDF é de "' + calcs[0] + '", mas você está gerando a planilha de ' + T.t + '. Gerar mesmo assim?')) return;
       var comp = (ESTADO.rel.find(function (R) { return R.comp; }) || {}).comp || '', calc = (ESTADO.rel[0] || {}).calculo || T.t;
-      var nomeArq = 'lista funcionários para pagamento - ' + T.arq + (comp ? ' ' + comp.replace('/', '-') : '');
+      var base = 'lista funcionários para pagamento - ' + T.arq + (comp ? ' ' + comp.replace('/', '-') : '');
+      var xls = fmt === 'xls', cfg = { aba: ABA, larguras: [8.99, 0, 6.7, 57.14, 16.42], fonte: 'Arial', tamanho: 10 };
       var lis = lista(), num = function (v) { return /^\d+$/.test(String(v).trim()) ? { t: 'n', v: +v } : { t: 's', v: String(v) }; };
-      // mesmo layout da lista do banco: A agência, B conta, C dígito, D nome, E CPF (mesmas linhas e ordem) + F = 1 e G = valor
-      var linhas = lis.map(function (l, i) {
-        var cs = [], a = num(l.ag), b = num(l.conta), c = num(l.dig);
-        cs.push({ c: 0, t: a.t, v: a.v }, { c: 1, t: b.t, v: b.v }, { c: 2, t: c.t, v: c.v }, { c: 3, t: 's', v: l.nome }, { c: 4, t: 's', v: l.cpf }, { c: 5, t: 'n', v: +cod });
-        if (val[l.id]) cs.push({ c: 6, t: 'n', v: val[l.id], moeda: true });
-        return { r: l.lin !== undefined ? l.lin : i, cells: cs };
-      }).sort(function (x, y) { return x.r - y.r; });
-      var cfg = { aba: ABA, larguras: [8.99, 0, 6.7, 57.14, 16.42], fonte: 'Arial', tamanho: 10 }, xls = fmt === 'xls';
-      var bytes = xls ? xlsBiff8(linhas, cfg) : xlsxSimples(linhas, cfg);
-      var blob = new Blob([bytes], { type: xls ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), a2 = document.createElement('a');
-      a2.href = URL.createObjectURL(blob); a2.download = nomeArq + (xls ? '.xls' : '.xlsx'); document.body.appendChild(a2); a2.click();
-      setTimeout(function () { URL.revokeObjectURL(a2.href); a2.remove(); }, 2000);
-      var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), comp: comp, calc: calc, n: L.length, total: Math.round(L.reduce(function (s2, x) { return s2 + x.it.valor; }, 0) * 100) / 100, itens: L.map(function (x) { return { nome: x.l.nome, cpf: x.l.cpf, valor: x.it.valor, empresa: x.R.empresa }; }) });
+      var TODAS = ESTADO.linhas.filter(function (x) { return x.sel && x.l; });
+      // monta um arquivo: A agência, B conta, C dígito, D nome, E CPF (mesma ordem da lista do banco) + F código e G valor
+      function arquivo(L, completa) {
+        var val = {}; L.forEach(function (x) { val[x.l.id] = Math.round(((val[x.l.id] || 0) + (x.it.valor || 0)) * 100) / 100; });
+        var usar = completa ? lis : lis.filter(function (l) { return val[l.id]; });
+        var linhas = usar.map(function (l, i) {
+          var cs = [], a = num(l.ag), b = num(l.conta), c = num(l.dig);
+          cs.push({ c: 0, t: a.t, v: a.v }, { c: 1, t: b.t, v: b.v }, { c: 2, t: c.t, v: c.v }, { c: 3, t: 's', v: l.nome }, { c: 4, t: 's', v: l.cpf }, { c: 5, t: 'n', v: +cod });
+          if (val[l.id]) cs.push({ c: 6, t: 'n', v: val[l.id], moeda: true });
+          return { ord: l.lin !== undefined ? l.lin : i, cells: cs };
+        }).sort(function (x, y) { return x.ord - y.ord; }).map(function (o, i) { return { r: completa ? o.ord : i, cells: o.cells }; });
+        return { bytes: xls ? xlsBiff8(linhas, cfg) : xlsxSimples(linhas, cfg), n: linhas.length, nv: Object.keys(val).length, total: Math.round(L.reduce(function (s2, x) { return s2 + x.it.valor; }, 0) * 100) / 100 };
+      }
+      var esc2 = el('lq-emp') ? el('lq-emp').value : '__todas', ext = xls ? '.xls' : '.xlsx', feitos = [];
+      if (esc2 === '__todas') { var A = arquivo(TODAS, true); baixar(A.bytes, base + ext, xls); feitos.push(A); }
+      else {
+        var E = empresasRel().filter(function (e) { return esc2 === '__cada' || e.k === esc2; });
+        E.forEach(function (e, n) {
+          var L = TODAS.filter(function (x) { return e.rels.indexOf(x.R) !== -1; }); if (!L.length) return;
+          var A = arquivo(L, false); A.emp = e.nome; feitos.push(A);
+          setTimeout(function () { baixar(A.bytes, base + ' - ' + e.nome + ext, xls); }, n * 700);
+        });
+      }
+      if (!feitos.length) { alert('Nenhum colaborador com conta na lista para esta seleção.'); return; }
+      var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), tipo: LQ_TIPO, comp: comp, calc: calc, n: TODAS.length, total: Math.round(TODAS.reduce(function (s2, x) { return s2 + x.it.valor; }, 0) * 100) / 100, itens: TODAS.map(function (x) { return { nome: x.l.nome, cpf: x.l.cpf, valor: x.it.valor, empresa: x.R.empresa }; }) });
       DB.s(K_HIST, h.slice(-24));
-      if (typeof toast === 'function') toast('📥 Planilha de pagamento gerada: ' + lis.length + ' linha(s), ' + Object.keys(val).length + ' com valor');
+      if (typeof toast === 'function') toast('📥 ' + feitos.length + ' planilha(s) gerada(s)' + (feitos.length > 1 ? ' — se o navegador perguntar, permita baixar vários arquivos' : ''));
     } catch (e) { console.error(e); alert('Não foi possível gerar a planilha: ' + (e.message || e)); }
   };
   // botão no cartão "Recibo de Adiantamento Salarial"
