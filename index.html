@@ -18484,10 +18484,22 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var Rr = REC[_tipo]; if (!Rr) return;
     var mesIdx = el('rc-mes').value, ano = el('rc-ano').value.trim(), periodo = el('rc-periodo').value.trim();
     var ref = Rr.ref === 'mes' ? (mesIdx !== '' ? mesIdx + '/' + ano : '') : Rr.ref === 'ano' ? ano : periodo;
-    if (!ref) { alert('Escolha a referência (mês/ano ou período) para montar a relação.'); return; }
-    var L = DB.g('recibos-hist').filter(function (y) { return y.tipo === _tipo && y.ref === ref; });
-    if (!L.length) { alert('Nenhum recibo de ' + Rr.card + ' gerado nesta referência ainda.'); return; }
-    var refTxt = Rr.ref === 'mes' ? MESES[+mesIdx].toUpperCase() + '/' + ano : ref;
+    var refTxt = Rr.ref === 'mes' ? (mesIdx !== '' ? MESES[+mesIdx].toUpperCase() + '/' + ano : '') : ref, L;
+    if (modoGrupo()) {
+      // por grupo: usa o que está na tabela agora (grupo e empresa escolhidos, linhas marcadas, valores digitados)
+      var padraoEmp = el('rc-gemp').value || (el('rc-emp').options[0] ? el('rc-emp').options[0].value : '__perfil');
+      L = Array.prototype.filter.call(document.querySelectorAll('#rc-gtab tbody tr'), function (tr) { var c = tr.querySelector('input.ck'); return c && c.checked; }).map(function (tr) {
+        var pk = tr.getAttribute('data-pk'), p = acharPessoa(pk) || {}, e = empresaDados(p.emp || padraoEmp);
+        return { pk: pk, nome: (p.n || '').toLocaleUpperCase('pt-BR'), razao: e.razao, cnpjN: e.cnpj, vN: valorLinha(tr) };
+      }).filter(function (x) { return x.vN > 0; });
+      if (!L.length) { alert('Nenhum colaborador marcado com valor nesta lista. Confira o grupo, a empresa e os valores.'); return; }
+      var g = el('rc-grupo'), ge = el('rc-gemp');
+      refTxt = [refTxt, g ? g.options[g.selectedIndex].text.replace(/^[^A-Za-zÀ-ú]+/, '') : '', ge && ge.value ? ge.options[ge.selectedIndex].text : ''].filter(Boolean).join(' · ');
+    } else {
+      if (!ref) { alert('Escolha a referência (mês/ano ou período) para montar a relação.'); return; }
+      L = DB.g('recibos-hist').filter(function (y) { return y.tipo === _tipo && y.ref === ref; });
+      if (!L.length) { alert('Nenhum recibo de ' + Rr.card + ' gerado nesta referência ainda. Para ver a relação antes de gerar, use o modo 👥 Por grupo.'); return; }
+    }
     var html = pagina(Rr, []).replace('</body></html>', '<div class="pg">' + relacaoEmpDep(Rr, L, refTxt) + '</div></body></html>').replace(/<title>[^<]*<\/title>/, '<title>' + esc('Relação ' + Rr.card + ' ' + refTxt) + '</title>');
     _abrirDocSimples(html, ('Relacao_' + Rr.card + '_' + refTxt).replace(/[\s\/]+/g, '_'));
   };
@@ -18514,7 +18526,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var lista = Array.isArray(d) ? d : [d];
     var titulo = R.card + (lista.length > 1 ? ' - ' + lista.length + ' colaboradores' : ((lista[0] || {}).nome ? ' - ' + lista[0].nome : ''));
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (lista.some(function (x) { return x.demo; }) ? ' class="cp"' : '') + '>' +
-      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + (lista.length > 1 ? '<div class="pg">' + relacaoEmpDep(R, lista) + '</div>' : '') + '</body></html>';
+      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + ((Array.isArray(d) && lista.length) ? '<div class="pg">' + relacaoEmpDep(R, lista) + '</div>' : '') + '</body></html>';
   }
   // monta os dados de um recibo a partir dos valores informados
   function montarDados(R, x) {
