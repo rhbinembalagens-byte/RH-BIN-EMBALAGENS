@@ -18425,7 +18425,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var n = Math.max(1, D.itens.length), linhas = '';
     for (var i = 0; i < n; i++) {
       var it = D.itens[i];
-      linhas += '<tr><td>' + (i === 0 ? 'SALÁRIO BASE' + (D.refSal ? ' <span class="ref">(' + D.refSal + ')</span>' : '') : '') + '</td><td class="n">' + (i === 0 ? m(D.sal) : '') + '</td>' +
+      linhas += '<tr><td>' + (i === 0 ? (D.prov || 'SALÁRIO BASE') + (D.refSal ? ' <span class="ref">(' + D.refSal + ')</span>' : '') : '') + '</td><td class="n">' + (i === 0 ? m(D.sal) : '') + '</td>' +
         '<td class="dl">' + (it ? esc(it.d) + (it.r ? ' <span class="ref">(' + esc(it.r) + ')</span>' : '') : '') + '</td><td class="n">' + (it ? m(it.v) : '') + '</td></tr>';
     }
     return '<table class="demo"><colgroup><col style="width:31%"><col style="width:15%"><col style="width:39%"><col style="width:15%"></colgroup>' +
@@ -18527,6 +18527,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         '<div style="display:grid;grid-template-columns:1fr 110px;gap:10px;">' +
         '<div class="form-group" style="margin:0;"><label>Salário do funcionário (R$)</label><input id="rc-sal-a" type="text" placeholder="0,00" oninput="recCalc()"></div>' +
         '<div class="form-group" style="margin:0;"><label>Percentual (%)</label><input id="rc-pct" type="number" min="1" max="100" step="1" value="40" oninput="recCalc()"></div></div>' +
+        '<div style="display:grid;grid-template-columns:150px 1fr;gap:10px;margin-top:8px;">' +
+        '<div class="form-group" style="margin:0;"><label>(−) Desconto (R$)</label><input id="rc-adi-desc" type="text" placeholder="0,00" oninput="recCalc()"></div>' +
+        '<div class="form-group" style="margin:0;"><label>Descrição do desconto</label><input id="rc-adi-descd" type="text" placeholder="ex.: FARMÁCIA, VALE, UNIFORME" style="text-transform:uppercase;"></div></div>' +
         '<div id="rc-calc-info" style="font-size:12px;color:var(--gray-600);margin-top:6px;"></div></div>' +
       '<div class="form-full" id="rcg-demo" style="display:none;background:var(--green-pale);border-radius:var(--radius-sm);padding:10px 12px;">' +
         '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin-bottom:6px;">🧾 Demonstrativo de pagamento</div>' +
@@ -18595,7 +18598,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('rcg-gpct').style.display = mostraPct ? '' : 'none';
     el('rc-gpct-lbl').textContent = t === 'rec_sal' ? '% adiantamento' : t === 'rec_13a' ? '% do salário' : '% do salário';
     if (!el('rc-gpct').value) el('rc-gpct').value = pctPadrao();
-    var cab = t === 'rec_sal' ? ['Salário', '(−) Adiant.', '(−) Farmácia', '(−) Vale compra', '(−) Outros', 'Descrição outros', 'Líquido'] : ['Salário', 'Valor do recibo'];
+    var cab = t === 'rec_sal' ? ['Salário', '(−) Adiant.', '(−) Farmácia', '(−) Vale compra', '(−) Outros', 'Descrição outros', 'Líquido'] : t === 'rec_adi' ? ['Salário', 'Adiantamento', '(−) Desconto', 'Descrição do desconto', 'Líquido'] : ['Salário', 'Valor do recibo'];
     var tab = el('rc-gtab');
     if (!lista.length) { tab.innerHTML = '<tr><td style="padding:20px;color:var(--gray-400);text-align:center;">Nenhum colaborador ativo neste grupo' + (emp ? ' / empresa' : '') + '.</td></tr>'; recGrupoTotal(); return; }
     tab.innerHTML = '<thead><tr><th><input type="checkbox" checked style="width:auto;" onchange="document.querySelectorAll(\'#rc-gtab tbody input.ck\').forEach(function(c){c.checked=this.checked}.bind(this));recGrupoTotal()"></th><th>Colaborador</th>' +
@@ -18606,7 +18609,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         return '<tr data-pk="' + esc(p.k) + '"><td><input type="checkbox" class="ck" checked style="width:auto;" onchange="recGrupoTotal()"></td>' +
           '<td class="nm"><strong>' + esc(p.n) + '</strong><div style="font-size:11px;color:var(--gray-400);">' + esc([p.f.car, p.grp].filter(Boolean).join(' · ')) + '</div></td>' +
           cel('g-sal', sal) + (t === 'rec_sal' ? cel('g-adi', '') + cel('g-farm', '') + cel('g-vc', '') + cel('g-out', '') +
-          '<td><input type="text" class="g-outd" placeholder="ex.: UNIFORME" style="text-transform:uppercase;"></td><td class="g-liq" style="font-weight:700;text-align:right;"></td>' : cel('g-val', '')) + '</tr>';
+          '<td><input type="text" class="g-outd" placeholder="ex.: UNIFORME" style="text-transform:uppercase;"></td><td class="g-liq" style="font-weight:700;text-align:right;"></td>' : cel('g-val', '') + (t === 'rec_adi' ? cel('g-dsc', '') +
+          '<td><input type="text" class="g-dscd" placeholder="ex.: FARMÁCIA" style="text-transform:uppercase;"></td><td class="g-liq" style="font-weight:700;text-align:right;"></td>' : '')) + '</tr>';
       }).join('') + '</tbody>';
     recGrupoPct(true);
   };
@@ -18641,6 +18645,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     recGrupoTotal();
   };
   function calcLinha(tr) {
+    if (_tipo === 'rec_adi') {
+      var va = numero(tr.querySelector('.g-val').value) || 0, vd = numero(tr.querySelector('.g-dsc').value) || 0, lq = Math.round((va - vd) * 100) / 100, tq = tr.querySelector('.g-liq');
+      tq.textContent = va > 0 ? brl(lq) : ''; tq.style.color = lq < 0 ? 'var(--red)' : ''; return;
+    }
     if (_tipo !== 'rec_sal') return;
     var v = function (c) { return numero(tr.querySelector(c).value) || 0; };
     var liq = Math.round((v('.g-sal') - v('.g-adi') - v('.g-farm') - v('.g-vc') - v('.g-out')) * 100) / 100;
@@ -18654,6 +18662,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     calcLinha(tr); recGrupoTotal();
   };
   function valorLinha(tr) {
+    if (_tipo === 'rec_adi') { var ta = tr.querySelector('.g-liq'); return ta ? (numero(ta.textContent) || 0) : 0; }
     if (_tipo === 'rec_sal') { var t = tr.querySelector('.g-liq').textContent; return numero(t) || 0; }
     return numero(tr.querySelector('.g-val').value) || 0;
   }
@@ -18687,8 +18696,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var total = Math.round(itens.reduce(function (s, i) { return s + i.v; }, 0) * 100) / 100;
         demo = { sal: nv('.g-sal'), itens: itens, total: total, liq: Math.round((nv('.g-sal') - total) * 100) / 100, refSal: '30 dias' };
       }
+      if (_tipo === 'rec_adi') {
+        var gb = numero(tr.querySelector('.g-val').value) || 0, gd = numero(tr.querySelector('.g-dsc').value) || 0;
+        if (gd > 0 && gb > 0) demo = { prov: 'ADIANTAMENTO SALARIAL', refSal: (tr.querySelector('.g-val').dataset.manual ? '' : (parseFloat(el('rc-gpct').value) || '') + '%'), sal: gb, itens: [{ d: (tr.querySelector('.g-dscd').value || '').trim().toLocaleUpperCase('pt-BR') || 'DESCONTO', r: '', v: gd }], total: gd, liq: Math.round((gb - gd) * 100) / 100 };
+      }
       var nome = (p.n || '').toLocaleUpperCase('pt-BR');
-      guardarLanc(_tipo, pk, nome, mesIdx, ano, v, demo);
+      guardarLanc(_tipo, pk, nome, mesIdx, ano, (_tipo === 'rec_adi' && demo) ? demo.sal : v, demo);
       return montarDados(R, { nome: nome, mat: p.codEpr || '', cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
         valor: v, ext: '', mesIdx: mesIdx, ano: ano, periodo: periodo, forma: forma, cidade: cidade, dt: dt, demo: demo });
     });
@@ -19002,6 +19015,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('rcg-calc').style.display = tipo === 'rec_adi' ? '' : 'none';
     el('rcg-demo').style.display = tipo === 'rec_sal' ? '' : 'none';
     el('rc-pct').value = ls('rh_rec_pct') || '40';
+    el('rc-adi-desc').value = ''; el('rc-adi-descd').value = '';
     ['rc-farm', 'rc-vc', 'rc-adi'].forEach(function (id) { el(id).value = ''; delete el(id).dataset.manual; });
     el('rc-outros').innerHTML = '';
     el('rc-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP';
@@ -19065,9 +19079,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var sal = numero(el('rc-sal-a').value), pct = parseFloat(el('rc-pct').value) || 0;
       if (pct > 0) ls('rh_rec_pct', String(pct));
       if (sal > 0 && pct > 0) {
-        var v = Math.round(sal * pct) / 100;
-        el('rc-valor').value = brl(v); recValorMudou();
-        el('rc-calc-info').innerHTML = pct + '% de R$ ' + brl(sal) + ' = <strong>R$ ' + brl(v) + '</strong> (o valor pode ser ajustado no campo Valor).';
+        var v = Math.round(sal * pct) / 100, dsc = numero(el('rc-adi-desc').value) || 0, lq = Math.round((v - dsc) * 100) / 100;
+        el('rc-valor').value = lq > 0 ? brl(lq) : ''; recValorMudou();
+        el('rc-calc-info').innerHTML = pct + '% de R$ ' + brl(sal) + ' = <strong>R$ ' + brl(v) + '</strong>' + (dsc > 0 ? ' − desconto R$ ' + brl(dsc) + ' = <strong style="color:' + (lq < 0 ? 'var(--red)' : 'var(--green-dark)') + ';">líquido R$ ' + brl(lq) + '</strong>' : '') + ' (o valor pode ser ajustado no campo Valor).';
       } else el('rc-calc-info').textContent = 'Informe o salário para calcular o adiantamento.';
     }
     if (_tipo === 'rec_sal') {
@@ -19118,11 +19132,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }
     };
     if (_tipo === 'rec_sal') { var D = calcDemo(); if (D.sal > 0) d.demo = D; }
+    var adiDsc = _tipo === 'rec_adi' ? (numero(el('rc-adi-desc').value) || 0) : 0;
+    if (adiDsc > 0 && valorOk) {
+      var adiBr = Math.round((n + adiDsc) * 100) / 100;
+      d.demo = { prov: 'ADIANTAMENTO SALARIAL', refSal: (parseFloat(el('rc-pct').value) || '') + '%', sal: adiBr, itens: [{ d: (el('rc-adi-descd').value || '').trim().toLocaleUpperCase('pt-BR') || 'DESCONTO', r: '', v: adiDsc }], total: adiDsc, liq: n };
+    }
     // guarda o lançamento (o adiantamento é puxado depois no recibo de pagamento do mesmo mês)
     var pk = el('rc-func').value;
     if (pk && valorOk && (_tipo === 'rec_adi' || _tipo === 'rec_sal') && mesIdx !== '' && ano) {
       var lanc = DB.g('recibos-lanc').filter(function (x) { return !(x.tipo === _tipo && x.pk === pk && String(x.mes) === String(mesIdx) && String(x.ano) === String(ano)); });
-      lanc.push({ id: uid(), tipo: _tipo, pk: pk, nome: nome, mes: +mesIdx, ano: +ano, valor: n, em: new Date().toISOString(), demo: d.demo || null });
+      lanc.push({ id: uid(), tipo: _tipo, pk: pk, nome: nome, mes: +mesIdx, ano: +ano, valor: (_tipo === 'rec_adi' && d.demo) ? d.demo.sal : n, em: new Date().toISOString(), demo: d.demo || null });
       DB.s('recibos-lanc', lanc);
     }
     closeModal('modal-recibo');
