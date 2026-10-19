@@ -19749,5 +19749,190 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ ADIANTAMENTO: importar "Relação Geral dos Líquidos" (PDF da contabilidade) → lista de pagamento do banco (Excel) ═══════ */
+(function () {
+  var K_LISTA = 'pag-lista', K_HIST = 'pag-liq';
+  if (window.RT && RT.LIST) [K_LISTA, K_HIST].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  var ABA = 'lista funcionários para pagamen';
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function valor(s) { var t = String(s || '').replace(/\s/g, ''); if (!t) return null; if (t.indexOf(',') !== -1) t = t.replace(/\./g, '').replace(',', '.'); var n = parseFloat(t); return isNaN(n) ? null : Math.round(n * 100) / 100; }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtCpf(c) { c = dig(c); return c.length === 11 ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : c; }
+  function script(src) { return new Promise(function (ok, er) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { er(new Error('sem internet para carregar a leitura de PDF')); }; document.head.appendChild(s); }); }
+  async function pdfjs() {
+    if (!window.pdfjsLib) await script('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return window.pdfjsLib;
+  }
+  async function textoPdf(buf) {
+    var L = await pdfjs(), pdf = await L.getDocument({ data: buf }).promise, out = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var pg = await pdf.getPage(i), tc = await pg.getTextContent(), lin = {};
+      tc.items.forEach(function (it) { if (!it.str || !it.str.trim()) return; var y = Math.round(it.transform[5] / 3); (lin[y] = lin[y] || []).push(it); });
+      Object.keys(lin).sort(function (a, b) { return b - a; }).forEach(function (y) { out.push(lin[y].sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (it) { return it.str.trim(); }).join(' ')); });
+    }
+    return out.join('\n');
+  }
+  // lê a "RELAÇÃO GERAL DOS LÍQUIDOS"
+  function parseLiquidos(texto) {
+    var R = { empresa: '', cnpj: '', calculo: '', comp: '', total: null, itens: [] };
+    String(texto || '').split(/\r?\n/).forEach(function (ln) {
+      var l = ln.replace(/\s+/g, ' ').trim(), m; if (!l) return;
+      if ((m = l.match(/^Empresa:\s*(.+?)(?:\s+P[áa]gina:.*)?$/i))) { R.empresa = m[1].trim(); return; }
+      if ((m = l.match(/CNPJ:\s*([\d./-]+)/i))) { R.cnpj = m[1]; return; }
+      if ((m = l.match(/C[áa]lculo:\s*(.+?)(?:\s+Horas:.*)?$/i))) { R.calculo = m[1].trim(); return; }
+      if ((m = l.match(/Compet[êe]ncia:\s*(\d{2}\/\d{4})/i))) { R.comp = m[1]; return; }
+      if ((m = l.match(/Total da Empresa:\s*([\d.]+,\d{2})/i))) { R.total = valor(m[1]); return; }
+      m = l.match(/^(\d{1,6})\s+([A-Za-zÀ-ÿ'.][A-Za-zÀ-ÿ'. ]*?)\s+(?:([\dXx.\/-]{5,})\s+)?(\d{1,3}(?:\.\d{3})*,\d{2})$/);
+      if (m) R.itens.push({ cod: m[1], nome: m[2].trim(), ident: m[3] || '', valor: valor(m[4]) });
+    });
+    return R;
+  }
+  window.liqParse = parseLiquidos;
+
+  // ── lista do banco (agência, conta, dígito, nome, CPF) ──
+  function lista() { return DB.g(K_LISTA); }
+  async function lerPlanilha(f) {
+    if (!window.XLSX) throw new Error('leitor de planilha não carregado (verifique a internet)');
+    var wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    return rows.filter(function (r) { return r && dig(r[4]).length >= 11 && String(r[3] || '').trim(); })
+      .map(function (r, i) { return { id: 'l' + i + '_' + Date.now().toString(36), ag: r[0], conta: r[1], dig: r[2], nome: String(r[3]).trim(), cpf: String(r[4]).trim() }; });
+  }
+  window.liqImportarLista = async function (inp) {
+    var f = inp.files[0]; if (!f) return;
+    try {
+      var L = await lerPlanilha(f); inp.value = '';
+      if (!L.length) { alert('Não encontrei linhas no formato Agência | Conta | Dígito | Nome | CPF.'); return; }
+      if (lista().length && !confirm('Substituir a lista de contas salva (' + lista().length + ' pessoas) por esta (' + L.length + ' pessoas)?')) return;
+      DB.s(K_LISTA, L); infoLista(); if (ESTADO) casarTudo(); if (typeof toast === 'function') toast('Lista de contas salva: ' + L.length + ' pessoas ✅');
+    } catch (e) { alert('Não foi possível ler a planilha: ' + (e.message || e)); }
+  };
+  function infoLista() { var n = lista().length; el('lq-lista-info').innerHTML = n ? '✅ <strong>' + n + '</strong> pessoas na lista de contas salva no sistema.' : '<span style="color:#c0392b;">Nenhuma lista salva — importe a planilha "lista funcionários para pagamento" (uma vez; fica salva).</span>'; }
+
+  // ── casamento: CPF (da identidade ou do cadastro) → nome ──
+  function simNome(a, b) {
+    var A = sem(a).split(' ').filter(function (w) { return w.length > 2; }), B = sem(b).split(' ').filter(function (w) { return w.length > 2; });
+    if (!A.length || !B.length || A[0] !== B[0]) return 0;
+    return A.filter(function (w) { return B.indexOf(w) !== -1; }).length / Math.min(A.length, B.length);
+  }
+  function cpfCadastro(nome) {
+    var n = sem(nome), p = DB.g('funcionarios').find(function (f) { return !f._ext && sem(f.n) === n; }) || DB.g('colab-ext').find(function (c) { return sem(c.n) === n; });
+    return p ? dig(p.cpf) : '';
+  }
+  function casar(it) {
+    var L = lista(), c1 = dig(it.ident), c2 = cpfCadastro(it.nome), r;
+    if (c1.length === 11 && (r = L.find(function (x) { return dig(x.cpf) === c1; }))) return { l: r, como: 'CPF' };
+    if (c2 && (r = L.find(function (x) { return dig(x.cpf) === c2; }))) return { l: r, como: 'CPF do cadastro' };
+    var best = null, s = 0; L.forEach(function (x) { var k = simNome(it.nome, x.nome); if (k > s) { s = k; best = x; } });
+    return s >= 0.75 ? { l: best, como: s === 1 ? 'nome' : 'nome parecido' } : { l: null, como: '' };
+  }
+
+  var ESTADO = null;
+  function injetar() {
+    if (el('modal-liq')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-liq"><div class="modal" style="max-width:1100px;">' +
+      '<div class="modal-header"><span class="modal-title">💸 Adiantamento · Relação dos líquidos → planilha de pagamento</span><button class="modal-close" onclick="closeModal(\'modal-liq\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Anexe os PDFs <strong>"Relação Geral dos Líquidos"</strong> da contabilidade (pode selecionar todos de uma vez, um por empresa). O sistema localiza cada funcionário na <strong>lista de contas do banco</strong> e gera a planilha <strong>"lista funcionários para pagamento"</strong> no mesmo layout (Agência · Conta · Dígito · Nome · CPF) com o <strong>valor</strong> na coluna seguinte.</div>' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
+      '<div style="flex:1;min-width:300px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">1. Lista de contas do banco</div><div id="lq-lista-info" style="font-size:12.5px;margin-bottom:6px;"></div>' +
+      '<label class="btn btn-outline btn-sm" style="cursor:pointer;">📂 Importar / atualizar lista (.xls/.xlsx)<input type="file" accept=".xls,.xlsx,.csv" style="display:none;" onchange="liqImportarLista(this)"></label></div>' +
+      '<div style="flex:1;min-width:300px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">2. PDFs da relação dos líquidos</div>' +
+      '<input id="lq-pdfs" type="file" accept=".pdf" multiple onchange="liqLerPdfs()"><div id="lq-status" style="font-size:12.5px;margin-top:6px;"></div></div></div>' +
+      '<div id="lq-resumo" style="font-size:13px;margin-bottom:6px;"></div>' +
+      '<div class="table-wrap" style="max-height:48vh;overflow:auto;"><table id="lq-tab" style="font-size:12.5px;"></table></div>' +
+      '<div class="modal-footer" style="flex-wrap:wrap;gap:8px;"><label style="font-size:13px;margin-right:auto;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="lq-so" checked onchange="liqTotais()"> Planilha só com quem tem valor (desmarque para manter todas as linhas da lista)</label>' +
+      '<button class="btn btn-outline" onclick="closeModal(\'modal-liq\')">Fechar</button><button class="btn btn-primary" id="lq-gerar" onclick="liqGerar()" disabled>📥 Gerar planilha de pagamento (Excel)</button></div></div></div>');
+  }
+  window.liqAbrir = function () { injetar(); infoLista(); el('modal-liq').classList.add('open'); };
+  window.liqLerPdfs = async function () {
+    var fs = Array.prototype.slice.call(el('lq-pdfs').files || []); if (!fs.length) return;
+    el('lq-status').textContent = '⏳ Lendo ' + fs.length + ' PDF(s)…';
+    var rel = [], erros = [];
+    for (var i = 0; i < fs.length; i++) {
+      try { var R = parseLiquidos(await textoPdf(new Uint8Array(await fs[i].arrayBuffer()))); R.arq = fs[i].name; if (R.itens.length) rel.push(R); else erros.push(fs[i].name + ' (nenhum funcionário encontrado)'); }
+      catch (e) { erros.push(fs[i].name + ' (' + (e.message || e) + ')'); }
+    }
+    liqMontar(rel, erros);
+  };
+  window.liqMontar = function (rel, erros) {
+    injetar(); infoLista();
+    var linhas = [];
+    rel.forEach(function (R) { R.itens.forEach(function (it) { linhas.push({ it: it, R: R, sel: true }); }); });
+    ESTADO = { rel: rel, linhas: linhas };
+    var comps = rel.map(function (R) { return R.comp; }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
+    el('lq-status').innerHTML = rel.map(function (R) {
+      var soma = Math.round(R.itens.reduce(function (s, x) { return s + (x.valor || 0); }, 0) * 100) / 100, ok = R.total === null || Math.abs(soma - R.total) < 0.01;
+      return '<div>' + (ok ? '✅' : '⚠️') + ' ' + esc(R.empresa || R.arq) + ' — ' + R.itens.length + ' func. · R$ ' + brl(soma) + (R.calculo ? ' · ' + esc(R.calculo) : '') + (R.comp ? ' · ' + R.comp : '') + (ok ? '' : ' <strong>(total do PDF R$ ' + brl(R.total) + ')</strong>') + '</div>';
+    }).join('') + (erros && erros.length ? '<div style="color:#c0392b;">❌ ' + erros.map(esc).join('<br>❌ ') + '</div>' : '') + (comps.length > 1 ? '<div style="color:#b26a00;">⚠ PDFs de competências diferentes: ' + comps.join(', ') + '</div>' : '');
+    casarTudo();
+  };
+  function casarTudo() { ESTADO.linhas.forEach(function (x) { if (!x.manual) { var c = casar(x.it); x.l = c.l; x.como = c.como; } }); desenhar(); }
+  function opcoes(sel) { return '<option value="">— não está na lista —</option>' + lista().slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); }).map(function (l) { return '<option value="' + esc(l.id) + '"' + (sel && sel.id === l.id ? ' selected' : '') + '>' + esc(l.nome) + ' · ' + esc(fmtCpf(l.cpf)) + '</option>'; }).join(''); }
+  function desenhar() {
+    var L = ESTADO.linhas;
+    el('lq-tab').innerHTML = '<thead><tr><th></th><th>Empresa</th><th>Cód.</th><th>Funcionário (PDF)</th><th style="text-align:right;">Valor</th><th>Conta na lista do banco</th><th>Ag. / Conta</th><th>Vínculo</th></tr></thead><tbody>' +
+      L.map(function (x, i) {
+        var l = x.l;
+        return '<tr style="' + (l ? '' : 'background:#fff7e6;') + '"><td><input type="checkbox" ' + (x.sel ? 'checked' : '') + ' onchange="liqSet(' + i + ',\'sel\',this.checked)"></td>' +
+          '<td style="font-size:11.5px;">' + esc((x.R.empresa || '').replace(/ LTDA.*$/i, '')) + '</td><td>' + esc(x.it.cod) + '</td><td><strong>' + esc(x.it.nome) + '</strong></td>' +
+          '<td style="text-align:right;white-space:nowrap;">R$ ' + brl(x.it.valor) + '</td>' +
+          '<td><select style="max-width:280px;font-size:12px;" onchange="liqSet(' + i + ',\'l\',this.value)">' + opcoes(l) + '</select></td>' +
+          '<td style="white-space:nowrap;">' + (l ? esc(l.ag) + ' / ' + esc(l.conta) + '-' + esc(l.dig) : '—') + '</td>' +
+          '<td style="font-size:11.5px;">' + (l ? '<span style="color:var(--green-dark);">✔ ' + esc(x.como) + '</span>' : '<span style="color:#c0392b;">sem conta na lista</span>') + '</td></tr>';
+      }).join('') + '</tbody>';
+    liqTotais();
+  }
+  window.liqTotais = function () {
+    if (!ESTADO) return;
+    var L = ESTADO.linhas, ok = L.filter(function (x) { return x.sel && x.l; }), sem2 = L.filter(function (x) { return x.sel && !x.l; });
+    var soma = Math.round(ok.reduce(function (s, x) { return s + (x.it.valor || 0); }, 0) * 100) / 100;
+    var dup = {}, dups = []; ok.forEach(function (x) { if (dup[x.l.id]) dups.push(x.l.nome); dup[x.l.id] = 1; });
+    el('lq-resumo').innerHTML = '<strong>' + ok.length + '</strong> pagamento(s) · total <strong>R$ ' + brl(soma) + '</strong>' +
+      (sem2.length ? ' · <span style="color:#c0392b;">' + sem2.length + ' sem conta na lista (não entram na planilha): ' + esc(sem2.map(function (x) { return x.it.nome; }).join(', ')) + '</span>' : '') +
+      (dups.length ? ' · <span style="color:#b26a00;">⚠ mesma conta em mais de um PDF (valores somados): ' + esc(dups.join(', ')) + '</span>' : '');
+    el('lq-gerar').disabled = !ok.length;
+  };
+  window.liqSet = function (i, k, v) {
+    var x = ESTADO.linhas[i];
+    if (k === 'sel') { x.sel = v; liqTotais(); return; }
+    if (k === 'l') { x.l = lista().find(function (l) { return l.id === v; }) || null; x.como = x.l ? 'escolhido' : ''; x.manual = true; desenhar(); }
+  };
+  // ── planilha: mesmo layout (A agência, B conta, C dígito, D nome, E CPF) + F valor ──
+  window.liqGerar = function () {
+    var L = ESTADO.linhas.filter(function (x) { return x.sel && x.l; }), val = {};
+    L.forEach(function (x) { val[x.l.id] = Math.round(((val[x.l.id] || 0) + (x.it.valor || 0)) * 100) / 100; });
+    var so = el('lq-so').checked;
+    var rows = lista().filter(function (l) { return !so || val[l.id]; }).map(function (l) {
+      var n = function (v) { return /^\d+$/.test(String(v).trim()) ? +v : v; };
+      var r = [n(l.ag), n(l.conta), n(l.dig), l.nome, l.cpf]; if (val[l.id]) r.push(val[l.id]); return r;
+    });
+    var comp = (ESTADO.rel.find(function (R) { return R.comp; }) || {}).comp || '', calc = (ESTADO.rel[0] || {}).calculo || 'Adiantamento';
+    var nomeArq = 'lista funcionários para pagamento - ' + (calc || 'Adiantamento').toUpperCase() + (comp ? ' ' + comp.replace('/', '-') : '');
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    rows.forEach(function (r, i) { var c = ws[XLSX.utils.encode_cell({ r: i, c: 5 })]; if (c) c.z = '#,##0.00'; });
+    ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 5 }, { wch: 38 }, { wch: 16 }, { wch: 12 }];
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, ABA);
+    XLSX.writeFile(wb, nomeArq + '.xls', { bookType: 'xls' });
+    var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), comp: comp, calc: calc, n: L.length, total: Math.round(L.reduce(function (s, x) { return s + x.it.valor; }, 0) * 100) / 100, itens: L.map(function (x) { return { nome: x.l.nome, cpf: x.l.cpf, valor: x.it.valor, empresa: x.R.empresa }; }) });
+    DB.s(K_HIST, h.slice(-24));
+    if (typeof toast === 'function') toast('📥 Planilha de pagamento gerada: ' + rows.length + ' linha(s)');
+  };
+  // botão no cartão "Recibo de Adiantamento Salarial"
+  function botao() {
+    var c = document.querySelector('[data-docbase="rec_adi"]'); if (!c || c.querySelector('.lq-btn')) return;
+    var b = c.querySelector('button[onclick="recAbrir(\'rec_adi\')"]'); if (!b) return;
+    b.insertAdjacentHTML('afterend', '<button class="btn btn-outline btn-sm lq-btn" onclick="liqAbrir()">📥 Importar líquidos (PDF) → planilha</button>');
+  }
+  botao();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); try { botao(); } catch (e) {} return r; }; }
+})();
+</script>
+
 </body>
 </html>
