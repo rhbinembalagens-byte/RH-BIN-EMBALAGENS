@@ -19771,8 +19771,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ═══════ ADIANTAMENTO: importar "Relação Geral dos Líquidos" (PDF da contabilidade) → lista de pagamento do banco (Excel) ═══════ */
 (function () {
-  var K_LISTA = 'pag-lista', K_HIST = 'pag-liq';
-  if (window.RT && RT.LIST) [K_LISTA, K_HIST].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  var K_LISTA = 'pag-lista', K_HIST = 'pag-liq', K_ARQ = 'pag-lista-arq';
+  if (window.RT && RT.LIST) [K_LISTA, K_HIST, K_ARQ].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
   var ABA = 'lista funcionários para pagamen';
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -19818,9 +19818,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   async function lerPlanilha(f) {
     if (!window.XLSX) throw new Error('leitor de planilha não carregado (verifique a internet)');
     var wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-    return rows.filter(function (r) { return r && dig(r[4]).length >= 11 && String(r[3] || '').trim(); })
-      .map(function (r, i) { return { id: 'l' + i + '_' + Date.now().toString(36), ag: r[0], conta: r[1], dig: r[2], nome: String(r[3]).trim(), cpf: String(r[4]).trim() }; });
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true });
+    var ini = 0; try { ini = XLSX.utils.decode_range(ws['!ref']).s.r; } catch (e) {}
+    return rows.map(function (r, i) { return { r: r, lin: ini + i }; }).filter(function (o) { return o.r && dig(o.r[4]).length >= 11 && String(o.r[3] || '').trim(); })
+      .map(function (o, i) { var r = o.r; return { id: 'l' + i + '_' + Date.now().toString(36), lin: o.lin, ag: r[0], conta: r[1], dig: r[2], nome: String(r[3]).trim(), cpf: String(r[4]).trim() }; });
   }
   window.liqImportarLista = async function (inp) {
     var f = inp.files[0]; if (!f) return;
@@ -19828,10 +19829,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var L = await lerPlanilha(f); inp.value = '';
       if (!L.length) { alert('Não encontrei linhas no formato Agência | Conta | Dígito | Nome | CPF.'); return; }
       if (lista().length && !confirm('Substituir a lista de contas salva (' + lista().length + ' pessoas) por esta (' + L.length + ' pessoas)?')) return;
-      DB.s(K_LISTA, L); infoLista(); if (ESTADO) casarTudo(); if (typeof toast === 'function') toast('Lista de contas salva: ' + L.length + ' pessoas ✅');
+      DB.s(K_LISTA, L);
+      try { var u8 = new Uint8Array(await f.arrayBuffer()), s = ''; for (var k = 0; k < u8.length; k += 8192) s += String.fromCharCode.apply(null, u8.subarray(k, k + 8192)); DB.s(K_ARQ, [{ id: 'arq', nome: f.name, b64: btoa(s), em: new Date().toISOString() }]); } catch (e) { console.error(e); }
+      infoLista(); if (ESTADO) casarTudo(); if (typeof toast === 'function') toast('Lista de contas salva: ' + L.length + ' pessoas ✅');
     } catch (e) { alert('Não foi possível ler a planilha: ' + (e.message || e)); }
   };
-  function infoLista() { var n = lista().length; el('lq-lista-info').innerHTML = n ? '✅ <strong>' + n + '</strong> pessoas na lista de contas salva no sistema.' : '<span style="color:#c0392b;">Nenhuma lista salva — importe a planilha "lista funcionários para pagamento" (uma vez; fica salva).</span>'; }
+  function infoLista() { var n = lista().length, arq = DB.g(K_ARQ)[0]; el('lq-lista-info').innerHTML = n ? '✅ <strong>' + n + '</strong> pessoas na lista de contas salva no sistema.' + (arq && lista().every(function (l) { return l.lin !== undefined; }) ? ' <span style="color:var(--gray-400);">(arquivo original: ' + esc(arq.nome) + ')</span>' : ' <span style="color:#b26a00;">Importe a lista novamente para a planilha sair com o layout original do arquivo.</span>') : '<span style="color:#c0392b;">Nenhuma lista salva — importe a planilha "lista funcionários para pagamento" (uma vez; fica salva).</span>'; }
 
   // ── casamento: CPF (da identidade ou do cadastro) → nome ──
   function simNome(a, b) {
@@ -19865,7 +19868,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<input id="lq-pdfs" type="file" accept=".pdf" multiple onchange="liqLerPdfs()"><div id="lq-status" style="font-size:12.5px;margin-top:6px;"></div></div></div>' +
       '<div id="lq-resumo" style="font-size:13px;margin-bottom:6px;"></div>' +
       '<div class="table-wrap" style="max-height:48vh;overflow:auto;"><table id="lq-tab" style="font-size:12.5px;"></table></div>' +
-      '<div class="modal-footer" style="flex-wrap:wrap;gap:8px;"><label style="font-size:13px;margin-right:auto;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="lq-so" checked onchange="liqTotais()"> Planilha só com quem tem valor (desmarque para manter todas as linhas da lista)</label>' +
+      '<div class="modal-footer" style="flex-wrap:wrap;gap:8px;"><span style="font-size:12.5px;color:var(--gray-600);margin-right:auto;">A planilha sai igual à lista do banco (mesmas linhas e colunas A–E), com <strong>1 na coluna F</strong> e o <strong>valor na coluna G</strong>.</span>' +
       '<button class="btn btn-outline" onclick="closeModal(\'modal-liq\')">Fechar</button><button class="btn btn-primary" id="lq-gerar" onclick="liqGerar()" disabled>📥 Gerar planilha de pagamento (Excel)</button></div></div></div>');
   }
   window.liqAbrir = function () { injetar(); infoLista(); el('modal-liq').classList.add('open'); };
@@ -19926,21 +19929,29 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.liqGerar = function () {
     var L = ESTADO.linhas.filter(function (x) { return x.sel && x.l; }), val = {};
     L.forEach(function (x) { val[x.l.id] = Math.round(((val[x.l.id] || 0) + (x.it.valor || 0)) * 100) / 100; });
-    var so = el('lq-so').checked;
-    var rows = lista().filter(function (l) { return !so || val[l.id]; }).map(function (l) {
-      var n = function (v) { return /^\d+$/.test(String(v).trim()) ? +v : v; };
-      var r = [n(l.ag), n(l.conta), n(l.dig), l.nome, l.cpf]; if (val[l.id]) r.push(val[l.id]); return r;
-    });
     var comp = (ESTADO.rel.find(function (R) { return R.comp; }) || {}).comp || '', calc = (ESTADO.rel[0] || {}).calculo || 'Adiantamento';
     var nomeArq = 'lista funcionários para pagamento - ' + (calc || 'Adiantamento').toUpperCase() + (comp ? ' ' + comp.replace('/', '-') : '');
-    var ws = XLSX.utils.aoa_to_sheet(rows);
-    rows.forEach(function (r, i) { var c = ws[XLSX.utils.encode_cell({ r: i, c: 5 })]; if (c) c.z = '#,##0.00'; });
-    ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 5 }, { wch: 38 }, { wch: 16 }, { wch: 12 }];
-    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, ABA);
-    XLSX.writeFile(wb, nomeArq + '.xls', { bookType: 'xls' });
-    var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), comp: comp, calc: calc, n: L.length, total: Math.round(L.reduce(function (s, x) { return s + x.it.valor; }, 0) * 100) / 100, itens: L.map(function (x) { return { nome: x.l.nome, cpf: x.l.cpf, valor: x.it.valor, empresa: x.R.empresa }; }) });
+    var arq = DB.g(K_ARQ)[0], wb, ws, aba = ABA, lis = lista();
+    var porLin = {}; lis.forEach(function (l) { if (l.lin !== undefined) porLin[l.lin] = l; });
+    var put = function (r, c, v) { var ref = XLSX.utils.encode_cell({ r: r, c: c }); if (v === '' || v === null || v === undefined) { delete ws[ref]; return; } ws[ref] = { t: 'n', v: v }; if (c === 6) ws[ref].z = '#,##0.00'; };
+    if (arq && arq.b64 && lis.length && lis.every(function (l) { return l.lin !== undefined; })) {
+      // arquivo original da lista: só as colunas F e G são preenchidas; o resto fica como está
+      var s = atob(arq.b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+      wb = XLSX.read(u, { type: 'array', cellStyles: true }); aba = wb.SheetNames[0]; ws = wb.Sheets[aba];
+      var rg = XLSX.utils.decode_range(ws['!ref']);
+      for (var r = rg.s.r; r <= rg.e.r; r++) { var l = porLin[r]; if (!l) continue; put(r, 5, 1); put(r, 6, val[l.id] || ''); }
+      if (rg.e.c < 6) rg.e.c = 6; ws['!ref'] = XLSX.utils.encode_range(rg);
+    } else {
+      var n = function (v) { return /^\d+$/.test(String(v).trim()) ? +v : v; };
+      ws = XLSX.utils.aoa_to_sheet(lis.map(function (l) { return [n(l.ag), n(l.conta), n(l.dig), l.nome, l.cpf, 1, val[l.id] || '']; }));
+      lis.forEach(function (l, i) { if (val[l.id]) put(i, 6, val[l.id]); });
+      ws['!cols'] = [{ wch: 8.99 }, { wch: 8.43 }, { wch: 6.7 }, { wch: 57.14 }, { wch: 16.42 }];
+      wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, ABA);
+    }
+    XLSX.writeFile(wb, nomeArq + '.xls', { bookType: 'xls', cellStyles: true });
+    var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), comp: comp, calc: calc, n: L.length, total: Math.round(L.reduce(function (s2, x) { return s2 + x.it.valor; }, 0) * 100) / 100, itens: L.map(function (x) { return { nome: x.l.nome, cpf: x.l.cpf, valor: x.it.valor, empresa: x.R.empresa }; }) });
     DB.s(K_HIST, h.slice(-24));
-    if (typeof toast === 'function') toast('📥 Planilha de pagamento gerada: ' + rows.length + ' linha(s)');
+    if (typeof toast === 'function') toast('📥 Planilha de pagamento gerada: ' + lis.length + ' linha(s), ' + Object.keys(val).length + ' com valor');
   };
   // botão no cartão "Recibo de Adiantamento Salarial"
   function botao() {
