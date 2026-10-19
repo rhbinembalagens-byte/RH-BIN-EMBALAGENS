@@ -18432,6 +18432,65 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<tr class="h"><td>PROVENTOS</td><td class="n">VALOR</td><td class="dl">DESCONTOS</td><td class="n">VALOR</td></tr>' + linhas +
       '<tr class="l"><td colspan="2">Total proventos: ' + m(D.sal) + ' &nbsp;·&nbsp; Total descontos: ' + (D.total ? brl(D.total) : '0,00') + '</td><td class="dl" style="text-align:right;">LÍQUIDO A RECEBER</td><td class="n">R$ ' + brl(D.liq) + '</td></tr></table>';
   }
+  // ── relação de valores por empresa e por departamento ──
+  function depNome(pk) {
+    var p = acharPessoa(pk) || {}, d = p.dep ? DB.g('departamentos').find(function (x) { return x.id === p.dep || x.nome === p.dep; }) : null;
+    return (d ? d.nome : (p.dep && !/^[a-z0-9]{8,}$/i.test(p.dep) ? p.dep : '')) || 'SEM DEPARTAMENTO';
+  }
+  function relacaoEmpDep(R, lista, refTxt) {
+    var m = function (v) { return 'R$ ' + brl(v || 0); }, emps = {}, deps = {}, tot = 0, n = 0;
+    lista.forEach(function (x) {
+      var v = x.vN || 0, ek = (x.razao || 'SEM EMPRESA').toLocaleUpperCase('pt-BR'), dk = x.pk ? depNome(x.pk).toLocaleUpperCase('pt-BR') : 'SEM DEPARTAMENTO';
+      var E = emps[ek] = emps[ek] || { cnpj: x.cnpjN || '', q: 0, t: 0, deps: {} }; E.q++; E.t += v;
+      var ED = E.deps[dk] = E.deps[dk] || { q: 0, t: 0, p: [] }; ED.q++; ED.t += v; ED.p.push({ n: x.nome, v: v });
+      var D = deps[dk] = deps[dk] || { q: 0, t: 0 }; D.q++; D.t += v; tot += v; n++;
+    });
+    var ord = function (o) { return Object.keys(o).sort(function (a, b) { return a.localeCompare(b); }); };
+    var css = 'table.rel{width:100%;border-collapse:collapse;font-size:9.5pt;margin:4pt 0 10pt;}table.rel td,table.rel th{border:.5pt solid #C9A961;padding:2.5pt 6pt;}table.rel th{background:#F7EFD9;color:#8a6420;text-align:left;font-size:8.5pt;}table.rel td.n,table.rel th.n{text-align:right;}table.rel tr.t td{font-weight:700;background:#F7EFD9;}table.rel tr.e td{font-weight:700;background:#fbf6ea;}h3.rel{font-size:11pt;color:#8a6420;margin:10pt 0 2pt;}';
+    var ref = refTxt || (lista[0] && lista[0].refTxt) || '';
+    var h = '<style>' + css + '</style><div class="tit">RELAÇÃO DE VALORES · ' + esc(R.card.toUpperCase()) + '</div><div class="sub">' + (ref ? 'Referência: ' + esc(ref) + ' · ' : '') + n + ' recibo(s) · total ' + m(tot) + '</div>';
+    h += '<h3 class="rel">Total por empresa</h3><table class="rel"><tr><th>Empresa</th><th>CNPJ</th><th class="n">Recibos</th><th class="n">Valor total</th></tr>' +
+      ord(emps).map(function (k) { var E = emps[k]; return '<tr><td>' + esc(k) + '</td><td>' + esc(E.cnpj) + '</td><td class="n">' + E.q + '</td><td class="n">' + m(E.t) + '</td></tr>'; }).join('') +
+      '<tr class="t"><td colspan="2">TOTAL GERAL</td><td class="n">' + n + '</td><td class="n">' + m(tot) + '</td></tr></table>';
+    h += '<h3 class="rel">Total por departamento</h3><table class="rel"><tr><th>Departamento</th><th class="n">Recibos</th><th class="n">Valor total</th></tr>' +
+      ord(deps).map(function (k) { var D = deps[k]; return '<tr><td>' + esc(k) + '</td><td class="n">' + D.q + '</td><td class="n">' + m(D.t) + '</td></tr>'; }).join('') +
+      '<tr class="t"><td>TOTAL GERAL</td><td class="n">' + n + '</td><td class="n">' + m(tot) + '</td></tr></table>';
+    h += '<h3 class="rel">Detalhamento: empresa › departamento › colaborador</h3><table class="rel"><tr><th>Empresa / Departamento / Colaborador</th><th class="n">Valor</th></tr>' +
+      ord(emps).map(function (k) {
+        var E = emps[k];
+        return '<tr class="e"><td>' + esc(k) + (E.cnpj ? ' · ' + esc(E.cnpj) : '') + ' (' + E.q + ')</td><td class="n">' + m(E.t) + '</td></tr>' +
+          ord(E.deps).map(function (dk) {
+            var D = E.deps[dk];
+            return '<tr><td style="padding-left:14pt;font-weight:700;">' + esc(dk) + ' (' + D.q + ')</td><td class="n" style="font-weight:700;">' + m(D.t) + '</td></tr>' +
+              D.p.sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); }).map(function (p) { return '<tr><td style="padding-left:28pt;">' + esc(p.n || '—') + '</td><td class="n">' + m(p.v) + '</td></tr>'; }).join('');
+          }).join('');
+      }).join('') + '<tr class="t"><td>TOTAL GERAL</td><td class="n">' + m(tot) + '</td></tr></table>';
+    return h;
+  }
+  // histórico de todos os recibos gerados (individual e por grupo) para a relação
+  function recHist(R, lista, mesIdx, ano, periodo) {
+    var tipo = _tipo, ref = R.ref === 'mes' ? (mesIdx !== '' ? mesIdx + '/' + ano : '') : R.ref === 'ano' ? String(ano || '') : (periodo || '');
+    var H = DB.g('recibos-hist'), em = new Date().toISOString();
+    lista.forEach(function (x) {
+      if (!(x.vN > 0)) return;
+      var chave = x.pk || x.nome;
+      H = H.filter(function (y) { return !(y.tipo === tipo && y.ref === ref && (y.pk || y.nome) === chave); });
+      H.push({ id: uid(), tipo: tipo, ref: ref, refTxt: x.refTxt || '', pk: x.pk || '', nome: x.nome || '', razao: x.razao || '', cnpjN: x.cnpjN || '', vN: x.vN, em: em });
+    });
+    DB.s('recibos-hist', H);
+  }
+  if (window.RT && RT.LIST && RT.LIST.indexOf('recibos-hist') === -1) { RT.LIST.push('recibos-hist'); if (RT.ALL && RT.ALL.indexOf('recibos-hist') === -1) RT.ALL.push('recibos-hist'); }
+  window.recRelacao = function () {
+    var Rr = REC[_tipo]; if (!Rr) return;
+    var mesIdx = el('rc-mes').value, ano = el('rc-ano').value.trim(), periodo = el('rc-periodo').value.trim();
+    var ref = Rr.ref === 'mes' ? (mesIdx !== '' ? mesIdx + '/' + ano : '') : Rr.ref === 'ano' ? ano : periodo;
+    if (!ref) { alert('Escolha a referência (mês/ano ou período) para montar a relação.'); return; }
+    var L = DB.g('recibos-hist').filter(function (y) { return y.tipo === _tipo && y.ref === ref; });
+    if (!L.length) { alert('Nenhum recibo de ' + Rr.card + ' gerado nesta referência ainda.'); return; }
+    var refTxt = Rr.ref === 'mes' ? MESES[+mesIdx].toUpperCase() + '/' + ano : ref;
+    var html = pagina(Rr, []).replace('</body></html>', '<div class="pg">' + relacaoEmpDep(Rr, L, refTxt) + '</div></body></html>').replace(/<title>[^<]*<\/title>/, '<title>' + esc('Relação ' + Rr.card + ' ' + refTxt) + '</title>');
+    _abrirDocSimples(html, ('Relacao_' + Rr.card + '_' + refTxt).replace(/[\s\/]+/g, '_'));
+  };
   function pagina(R, d) {
     var css = '@page{size:A4;margin:1cm 2cm;}*{box-sizing:border-box;}' +
       'table.demo{width:100%;border-collapse:collapse;margin-top:5pt;font-size:8.5pt;}table.demo td{border:.5pt solid #C9A961;padding:1.2pt 5pt;line-height:1.2;}' +
@@ -18453,9 +18512,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '.corte{text-align:center;font-size:7pt;color:#999;border-bottom:.75pt dashed #999;padding-bottom:4pt;margin:14pt 0;}' +
       '.ok{display:none;}.pg+.pg{break-before:page;page-break-before:always;}@media screen{.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}';
     var lista = Array.isArray(d) ? d : [d];
-    var titulo = R.card + (lista.length > 1 ? ' - ' + lista.length + ' colaboradores' : (lista[0].nome ? ' - ' + lista[0].nome : ''));
+    var titulo = R.card + (lista.length > 1 ? ' - ' + lista.length + ' colaboradores' : ((lista[0] || {}).nome ? ' - ' + lista[0].nome : ''));
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (lista.some(function (x) { return x.demo; }) ? ' class="cp"' : '') + '>' +
-      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + '</body></html>';
+      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + (lista.length > 1 ? '<div class="pg">' + relacaoEmpDep(R, lista) + '</div>' : '') + '</body></html>';
   }
   // monta os dados de um recibo a partir dos valores informados
   function montarDados(R, x) {
@@ -18473,6 +18532,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }
     };
     if (x.demo && x.demo.sal > 0) d.demo = x.demo;
+    d.razao = x.razao || ''; d.cnpjN = x.cnpj || ''; d.vN = ok ? n : 0; d.pk = x.pk || '';
     return d;
   }
   function guardarLanc(tipo, pk, nome, mesIdx, ano, valor, demo) {
@@ -18552,7 +18612,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="form-group"><label>Data do recibo <span style="font-weight:400;text-transform:none;">(vazio = preencher à mão)</span></label><input id="rc-data" type="date"></div>' +
       '</div>' +
       '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;">Campos deixados em branco saem com a linha para preencher à mão. O recibo sai em 2 vias (Empresa e Colaborador) na mesma folha.</div>' +
-      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-recibo\')">Cancelar</button><button class="btn btn-primary" onclick="recGerar()">📄 Gerar recibo</button></div></div></div>');
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="recRelacao()" title="Valor total por empresa e por departamento dos recibos gerados nesta referência" style="margin-right:auto;">📊 Relação por empresa / departamento</button><button class="btn btn-outline" onclick="closeModal(\'modal-recibo\')">Cancelar</button><button class="btn btn-primary" onclick="recGerar()">📄 Gerar recibo</button></div></div></div>');
   }
   // ── modo por grupo (CLT, Agência, Sem registro) ──
   var IND_IDS = ['rc-func', 'rc-emp', 'rc-razao', 'rc-cnpj', 'rc-nome', 'rc-mat', 'rc-cpf', 'rc-cargo', 'rc-valor', 'rc-ext'];
@@ -18702,9 +18762,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }
       var nome = (p.n || '').toLocaleUpperCase('pt-BR');
       guardarLanc(_tipo, pk, nome, mesIdx, ano, (_tipo === 'rec_adi' && demo) ? demo.sal : v, demo);
-      return montarDados(R, { nome: nome, mat: p.codEpr || '', cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
+      return montarDados(R, { pk: pk, nome: nome, mat: p.codEpr || '', cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
         valor: v, ext: '', mesIdx: mesIdx, ano: ano, periodo: periodo, forma: forma, cidade: cidade, dt: dt, demo: demo });
     });
+    try { recHist(R, dados, mesIdx, ano, periodo); } catch (e) { console.error(e); }
     closeModal('modal-recibo');
     var g = el('rc-grupo'); var gn = g.options[g.selectedIndex].text.replace(/^[^A-Za-zÀ-ú]+/, '');
     _abrirDocSimples(pagina(R, dados), (R.card + '_' + gn).replace(/\s+/g, '_'));
@@ -19144,6 +19205,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       lanc.push({ id: uid(), tipo: _tipo, pk: pk, nome: nome, mes: +mesIdx, ano: +ano, valor: (_tipo === 'rec_adi' && d.demo) ? d.demo.sal : n, em: new Date().toISOString(), demo: d.demo || null });
       DB.s('recibos-lanc', lanc);
     }
+    d.razao = el('rc-razao').value.trim(); d.cnpjN = el('rc-cnpj').value.trim(); d.vN = valorOk ? n : 0; d.pk = pk;
+    try { recHist(R, [d], mesIdx, ano, periodo); } catch (e) { console.error(e); }
     closeModal('modal-recibo');
     _abrirDocSimples(pagina(R, d), (R.card + '_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
   };
