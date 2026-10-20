@@ -18691,7 +18691,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var pct = parseFloat(el('rc-gpct').value) || 0, t = _tipo;
     if (pct > 0 && (t === 'rec_adi' || t === 'rec_sal')) ls('rh_rec_pct', String(pct));
     document.querySelectorAll('#rc-gtab tbody tr').forEach(function (tr) {
-      var sal = numero(tr.querySelector('.g-sal').value) || 0;
+      var gs = tr.querySelector('.g-sal'), pp = acharPessoa(tr.getAttribute('data-pk')) || {};
+      if (refazer === true && !gs.dataset.manual) {
+        var integ = numero(pp.sal || pp.valor || '') || 0, prr = integ > 0 ? propAdm(pp, el('rc-mes').value, el('rc-ano').value.trim()) : null;
+        if (integ > 0) gs.value = brl(salProp(integ, prr));
+        tr.dataset.dias = prr ? prr.dias : '';
+        var nmc = tr.querySelector('.nm'), bd = nmc && nmc.querySelector('.rc-prop');
+        if (bd) bd.remove();
+        if (prr && nmc) nmc.insertAdjacentHTML('beforeend', '<div class="rc-prop" style="font-size:10.5px;color:#b26a00;" title="Salário integral R$ ' + brl(integ) + '">📅 adm. ' + fd(prr.adm) + ' · ' + prr.dias + '/30 dias</div>');
+      }
+      var sal = numero(gs.value) || 0;
       if (t === 'rec_sal') {
         var a = tr.querySelector('.g-adi');
         var FRg = flResumo(tr.getAttribute('data-pk'), el('rc-mes').value, el('rc-ano').value.trim());
@@ -18727,6 +18736,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var td = tr.querySelector('.g-liq'); td.textContent = v('.g-sal') > 0 ? brl(liq) : ''; td.style.color = liq < 0 ? 'var(--red)' : '';
   }
   window.recGrupoLinha = function (inp) {
+    if (inp.classList.contains('g-sal')) inp.dataset.manual = 1;
     if (inp.classList.contains('g-adi') || inp.classList.contains('g-val')) inp.dataset.manual = 1;
     var tr = inp.closest('tr');
     if (inp.classList.contains('g-sal') && _tipo !== 'rec_sal' && _tipo !== 'rec_bon' && _tipo !== 'rec_13b') { var vEl = tr.querySelector('.g-val'); delete vEl.dataset.manual; var pct = parseFloat(el('rc-gpct').value) || 0, sal = numero(inp.value) || 0; vEl.value = sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : ''; }
@@ -18766,7 +18776,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         if (oi.length > 1 && Math.abs(somaOi - nv('.g-out')) < 0.005) oi.forEach(function (o) { itens.push({ d: o.d, r: '', v: o.v }); });
         else if (nv('.g-out') > 0) itens.push({ d: (tr.querySelector('.g-outd').value || '').trim().toLocaleUpperCase('pt-BR') || 'OUTROS DESCONTOS', r: '', v: nv('.g-out') });
         var total = Math.round(itens.reduce(function (s, i) { return s + i.v; }, 0) * 100) / 100;
-        demo = { sal: nv('.g-sal'), itens: itens, total: total, liq: Math.round((nv('.g-sal') - total) * 100) / 100, refSal: '30 dias' };
+        demo = { sal: nv('.g-sal'), itens: itens, total: total, liq: Math.round((nv('.g-sal') - total) * 100) / 100, refSal: (tr.dataset.dias || '30') + ' dias' };
       }
       if (_tipo === 'rec_adi') {
         var gb = numero(tr.querySelector('.g-val').value) || 0, gd = numero(tr.querySelector('.g-dsc').value) || 0;
@@ -19098,6 +19108,27 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     recModo();
     el('modal-recibo').classList.add('open');
   };
+  // ── salário proporcional à data de admissão (mês comercial de 30 dias) ──
+  function admDe(p) { return String((p && (p.adm || p.ini || p.dtIni)) || '').slice(0, 10); }
+  function propAdm(p, mesIdx, ano) {
+    if (_tipo !== 'rec_adi' && _tipo !== 'rec_sal') return null;
+    var a = admDe(p), m = a.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || mesIdx === '' || mesIdx === null || mesIdx === undefined || !ano) return null;
+    if (+m[1] !== +ano || +m[2] - 1 !== +mesIdx || +m[3] <= 1) return null;
+    var dias = Math.max(1, 30 - (+m[3]) + 1);
+    return { dias: dias, adm: a };
+  }
+  function salProp(sal, pr) { return pr ? Math.round(sal / 30 * pr.dias * 100) / 100 : sal; }
+  function propTxt(sal, pr) { return '📅 Admissão em ' + fd(pr.adm) + ': salário proporcional a <strong>' + pr.dias + '/30 dias</strong> = R$ ' + brl(salProp(sal, pr)) + ' (integral R$ ' + brl(sal) + ')'; }
+  // individual: recalcula o salário do campo a partir do salário integral do cadastro
+  function aplicarProp() {
+    var s1 = el('rc-sal'), s2 = el('rc-sal-a'), info = el('rc-prop-info'); if (!s1 || !s2) return;
+    if (!info) { el('rcg-ano').insertAdjacentHTML('afterend', '<div class="form-full" id="rc-prop-info" style="display:none;font-size:12.5px;background:#fff7e6;border-left:3px solid #e6a23c;border-radius:6px;padding:7px 10px;"></div>'); info = el('rc-prop-info'); }
+    var integral = parseFloat(s1.dataset.integral || ''), p = acharPessoa(el('rc-func').value);
+    var pr = integral > 0 ? propAdm(p, el('rc-mes').value, el('rc-ano').value.trim()) : null;
+    if (integral > 0) { var v = salProp(integral, pr); s1.value = s2.value = brl(v); }
+    s1.dataset.dias = pr ? pr.dias : '';
+    info.style.display = pr ? '' : 'none'; info.innerHTML = pr ? propTxt(integral, pr) : '';
+  }
   window.recFuncMudou = function () {
     var p = acharPessoa(el('rc-func').value) || {};
     el('rc-nome').value = p.n || ''; el('rc-cpf').value = p.cpf || ''; el('rc-cargo').value = p.car || '';
@@ -19107,6 +19138,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     recEmpMudou();
     var sal = numero(p.sal || p.valor || '');
     el('rc-sal').value = el('rc-sal-a').value = sal > 0 ? brl(sal) : '';
+    el('rc-sal').dataset.integral = sal > 0 ? sal : '';
     delete el('rc-adi').dataset.manual;
     recCalc(true);
   };
@@ -19143,11 +19175,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (vc > 0) itens.push({ d: 'VALE COMPRA', r: '', v: vc });
     outros().forEach(function (o) { itens.push({ d: o.d, r: '', v: o.v }); });
     var total = Math.round(itens.reduce(function (s, i) { return s + i.v; }, 0) * 100) / 100;
-    return { sal: sal, itens: itens, total: total, liq: Math.round((sal - total) * 100) / 100, refSal: '30 dias' };
+    return { sal: sal, itens: itens, total: total, liq: Math.round((sal - total) * 100) / 100, refSal: (el('rc-sal').dataset.dias || '30') + ' dias' };
   }
   window.recCalc = function (refazerAdiant) {
     if (!el('modal-recibo')) return;
     if (modoGrupo()) { if (refazerAdiant === true) recGrupoPct(true); return; }
+    if (refazerAdiant === true) aplicarProp(); else if (el('rc-prop-info') && el('rc-prop-info').style.display !== 'none' && (_tipo !== 'rec_adi' && _tipo !== 'rec_sal')) el('rc-prop-info').style.display = 'none';
     if (_tipo === 'rec_adi') {
       var sal = numero(el('rc-sal-a').value), pct = parseFloat(el('rc-pct').value) || 0;
       if (pct > 0) ls('rh_rec_pct', String(pct));
