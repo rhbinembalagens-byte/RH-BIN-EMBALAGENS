@@ -18576,6 +18576,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 
   // ── janela de preenchimento ──
   var _tipo = null;
+  window.recTipoAtual = function () { return _tipo; };
   function injetarModal() {
     if (el('modal-recibo')) return;
     var anoAt = new Date().getFullYear();
@@ -18713,13 +18714,19 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         if (refazer === true || !a.dataset.manual) {
           var L1 = lancAdiant(tr.getAttribute('data-pk'), el('rc-mes').value, el('rc-ano').value.trim());
           if (FRg.adi > 0) L1 = { valor: FRg.adi, em: new Date().toISOString() };
-          a.value = L1 ? brl(L1.valor) : (sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '');
-          a.title = L1 ? 'Puxado do recibo de adiantamento gerado em ' + fd(L1.em.slice(0, 10)) : pct + '% do salário';
+          var sa = !L1 && semAdi(pp, el('rc-mes').value, el('rc-ano').value.trim());
+          a.value = L1 ? brl(L1.valor) : sa ? '' : (sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '');
+          a.title = L1 ? 'Puxado do recibo de adiantamento gerado em ' + fd(L1.em.slice(0, 10)) : sa ? 'Sem adiantamento: admissão a partir do dia ' + DIA_CORTE_ADI : pct + '% do salário';
           a.style.background = L1 ? '#e8f5e9' : ''; delete a.dataset.manual;
         }
       } else if (t !== 'rec_bon' && t !== 'rec_13b') {
         var vEl = tr.querySelector('.g-val');
-        if (!vEl.dataset.manual) vEl.value = sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '';
+        var semA = t === 'rec_adi' && semAdi(pp, el('rc-mes').value, el('rc-ano').value.trim());
+        if (!vEl.dataset.manual) vEl.value = semA ? '' : (sal > 0 && pct > 0 ? brl(Math.round(sal * pct) / 100) : '');
+        if (semA && refazer === true) {
+          var ckA = tr.querySelector('input.ck'); if (ckA) ckA.checked = false;
+          var nmA = tr.querySelector('.nm'); if (nmA && !nmA.querySelector('.rc-semadi')) nmA.insertAdjacentHTML('beforeend', '<div class="rc-semadi" style="font-size:10.5px;color:#c0392b;">sem adiantamento (admissão a partir do dia ' + DIA_CORTE_ADI + ')</div>');
+        } else if (!semA) { var sx = tr.querySelector('.rc-semadi'); if (sx) sx.remove(); }
       }
       calcLinha(tr);
     });
@@ -19117,6 +19124,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var dias = Math.max(1, 30 - (+m[3]) + 1);
     return { dias: dias, adm: a };
   }
+  // admitido a partir do dia 15 do mês de referência: não recebe adiantamento nesse mês
+  var DIA_CORTE_ADI = 15;
+  function semAdi(p, mesIdx, ano) {
+    var m = admDe(p).match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || mesIdx === '' || mesIdx === null || mesIdx === undefined || !ano) return false;
+    return +m[1] === +ano && +m[2] - 1 === +mesIdx && +m[3] >= DIA_CORTE_ADI;
+  }
   function salProp(sal, pr) { return pr ? Math.round(sal / 30 * pr.dias * 100) / 100 : sal; }
   function propTxt(sal, pr) { return '📅 Admissão em ' + fd(pr.adm) + ': salário proporcional a <strong>' + pr.dias + '/30 dias</strong> = R$ ' + brl(salProp(sal, pr)) + ' (integral R$ ' + brl(sal) + ')'; }
   // individual: recalcula o salário do campo a partir do salário integral do cadastro
@@ -19186,6 +19199,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (pct > 0) ls('rh_rec_pct', String(pct));
       if (sal > 0 && pct > 0) {
         var v = Math.round(sal * pct) / 100, dsc = numero(el('rc-adi-desc').value) || 0, lq = Math.round((v - dsc) * 100) / 100;
+        var pAdi = acharPessoa(el('rc-func').value);
+        if (pAdi && semAdi(pAdi, el('rc-mes').value, el('rc-ano').value.trim())) {
+          el('rc-valor').value = ''; recValorMudou();
+          el('rc-calc-info').innerHTML = '<strong style="color:#c0392b;">Sem adiantamento neste mês:</strong> admissão em ' + fd(admDe(pAdi)) + ' (a partir do dia ' + DIA_CORTE_ADI + ' não recebe adiantamento).';
+          return;
+        }
         el('rc-valor').value = lq > 0 ? brl(lq) : ''; recValorMudou();
         el('rc-calc-info').innerHTML = pct + '% de R$ ' + brl(sal) + ' = <strong>R$ ' + brl(v) + '</strong>' + (dsc > 0 ? ' − desconto R$ ' + brl(dsc) + ' = <strong style="color:' + (lq < 0 ? 'var(--red)' : 'var(--green-dark)') + ';">líquido R$ ' + brl(lq) + '</strong>' : '') + ' (o valor pode ser ajustado no campo Valor).';
       } else el('rc-calc-info').textContent = 'Informe o salário para calcular o adiantamento.';
@@ -19204,6 +19223,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var s2 = numero(el('rc-sal').value) || 0, pct2 = parseFloat(ls('rh_rec_pct') || '40') || 40;
         if (FR.adi > 0) { a.value = brl(FR.adi); a.dataset.ref = ''; el('rc-adi-info').innerHTML = '📌 Adiantamento dos lançamentos do mês.'; }
         else if (L1) { a.value = brl(L1.valor); a.dataset.ref = ''; el('rc-adi-info').innerHTML = '✅ Adiantamento puxado do recibo gerado em ' + fd(L1.em.slice(0, 10)) + '.'; }
+        else if (s2 > 0 && semAdi(acharPessoa(el('rc-func').value), el('rc-mes').value, el('rc-ano').value.trim())) { a.value = ''; a.dataset.ref = ''; el('rc-adi-info').innerHTML = 'Sem adiantamento: admissão a partir do dia ' + DIA_CORTE_ADI + ' do mês.'; }
         else if (s2 > 0) { a.value = brl(Math.round(s2 * pct2) / 100); a.dataset.ref = pct2 + '%'; el('rc-adi-info').innerHTML = 'Adiantamento calculado em ' + pct2 + '% do salário (nenhum recibo de adiantamento deste mês encontrado). Ajuste se precisar.'; }
         else { a.value = ''; el('rc-adi-info').textContent = ''; }
         delete a.dataset.manual;
@@ -20354,6 +20374,128 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.cxDepId = depId;
   function iniciar() { migrar(); setTimeout(migrar, 4000); setTimeout(migrar, 15000); }
   if (document.readyState !== 'loading') iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
+})();
+</script>
+
+<script>
+/* ═══════ RECIBOS: alterações manuais ficam salvas no histórico do mês (por tipo de recibo, referência e colaborador) ═══════ */
+(function () {
+  var KEY = 'recibos-rasc';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(KEY) === -1) { RT.LIST.push(KEY); if (RT.ALL && RT.ALL.indexOf(KEY) === -1) RT.ALL.push(KEY); }
+  function el(id) { return document.getElementById(id); }
+  function tipo() { return window.recTipoAtual ? window.recTipoAtual() : ''; }
+  function grupo() { var r = document.querySelector('input[name="rc-modo"]:checked'); return !!(r && r.value === 'grp'); }
+  function ref() { var m = el('rc-mes'), a = el('rc-ano'), p = el('rc-periodo'); return [m ? m.value : '', a ? a.value.trim() : '', p ? p.value.trim().toUpperCase() : ''].join('|'); }
+  function chave(pk, modo) { return [tipo(), ref(), modo, pk].join('#'); }
+  var CAMPOS_G = ['g-sal', 'g-adi', 'g-farm', 'g-vc', 'g-out', 'g-outd', 'g-val', 'g-dsc', 'g-dscd'];
+  var CAMPOS_I = ['rc-sal-a', 'rc-pct', 'rc-adi-desc', 'rc-adi-descd', 'rc-sal', 'rc-adi', 'rc-farm', 'rc-vc', 'rc-valor', 'rc-ext'];
+  var restaurando = false, pend = {}, timer = null;
+  function gravar(k, v) { pend[k] = v; clearTimeout(timer); timer = setTimeout(flush, 500); }
+  function flush() {
+    var L = DB.g(KEY), em = new Date().toISOString();
+    Object.keys(pend).forEach(function (k) { L = L.filter(function (x) { return x.id !== k; }); if (pend[k]) L.push({ id: k, v: pend[k], em: em }); });
+    pend = {}; DB.s(KEY, L); aviso();
+  }
+  function salvo(k) { if (k in pend) return pend[k] ? { v: pend[k] } : null; return DB.g(KEY).find(function (x) { return x.id === k; }) || null; }
+  // ── por grupo ──
+  function linhaVals(tr) { var o = { ck: !!(tr.querySelector('input.ck') || {}).checked }; CAMPOS_G.forEach(function (c) { var i = tr.querySelector('.' + c); if (i) o[c] = i.value; }); return o; }
+  function salvarLinha(tr) { if (restaurando || !tr || !tr.getAttribute('data-pk')) return; gravar(chave(tr.getAttribute('data-pk'), 'g'), linhaVals(tr)); }
+  function restaurarGrupo() {
+    if (!grupo()) return;
+    restaurando = true;
+    try {
+      document.querySelectorAll('#rc-gtab tbody tr[data-pk]').forEach(function (tr) {
+        var s = salvo(chave(tr.getAttribute('data-pk'), 'g')); if (!s) return;
+        var v = s.v, ult = null;
+        CAMPOS_G.forEach(function (c) { var i = tr.querySelector('.' + c); if (i && c in v) { i.value = v[c]; if (c === 'g-sal' || c === 'g-adi' || c === 'g-val') i.dataset.manual = 1; ult = i; } });
+        var ck = tr.querySelector('input.ck'); if (ck && 'ck' in v) ck.checked = v.ck;
+        tr.classList.add('rc-rasc'); tr.style.background = '#fffbea'; tr.title = 'Alterado manualmente — salvo no histórico do mês';
+        if (ult && window.recGrupoLinha) window.recGrupoLinha(ult);
+      });
+      if (window.recGrupoTotal) recGrupoTotal();
+    } finally { restaurando = false; }
+    aviso();
+  }
+  // ── individual ──
+  function indVals() {
+    var o = {}; CAMPOS_I.forEach(function (c) { var i = el(c); if (i) o[c] = i.value; });
+    o.outros = Array.prototype.map.call(document.querySelectorAll('#rc-outros .rc-outro'), function (r) { var i = r.querySelectorAll('input'); return [i[0].value, i[1].value]; });
+    return o;
+  }
+  function salvarInd() { var pk = el('rc-func') && el('rc-func').value; if (restaurando || grupo() || !pk) return; gravar(chave(pk, 'i'), indVals()); }
+  function restaurarInd() {
+    var pk = el('rc-func') && el('rc-func').value; if (grupo() || !pk) return;
+    var s = salvo(chave(pk, 'i'));
+    if (!s) {
+      // sem alteração salva para esta pessoa/mês: não carrega desconto digitado para outra pessoa
+      if ((el('rc-adi-desc') && el('rc-adi-desc').value) || (el('rc-adi-descd') && el('rc-adi-descd').value)) { restaurando = true; try { el('rc-adi-desc').value = ''; el('rc-adi-descd').value = ''; _calc.call(window); } finally { restaurando = false; } }
+      aviso(); return;
+    }
+    restaurando = true;
+    try {
+      var v = s.v;
+      ['rc-sal-a', 'rc-pct', 'rc-adi-desc', 'rc-adi-descd', 'rc-sal', 'rc-adi', 'rc-farm', 'rc-vc'].forEach(function (c) { if (el(c) && c in v) el(c).value = v[c]; });
+      if (el('rc-adi') && 'rc-adi' in v) el('rc-adi').dataset.manual = 1;
+      if (el('rc-outros') && v.outros) { el('rc-outros').innerHTML = ''; v.outros.forEach(function (o) { if (o[0] || o[1]) recOutroAdd(o[0], o[1]); }); }
+      _calc.call(window);                      // recalcula com os valores salvos
+      if (el('rc-valor') && 'rc-valor' in v) el('rc-valor').value = v['rc-valor'];
+      if (el('rc-ext') && 'rc-ext' in v) el('rc-ext').value = v['rc-ext'];
+    } finally { restaurando = false; }
+    aviso();
+  }
+  // ── aviso + desfazer ──
+  function aviso() {
+    var m = el('modal-recibo'); if (!m) return;
+    var box = el('rc-rasc-info');
+    if (!box) { var mb = el('rc-modo-box'); if (!mb) return; mb.insertAdjacentHTML('afterend', '<div id="rc-rasc-info" style="display:none;font-size:12px;background:#fffbea;border:1px solid #f0d58c;border-radius:6px;padding:6px 10px;margin:-6px 0 10px;"></div>'); box = el('rc-rasc-info'); }
+    var pre = tipo() + '#' + ref() + '#', L = DB.g(KEY).filter(function (x) { return x.id.indexOf(pre) === 0; });
+    Object.keys(pend).forEach(function (k) { if (k.indexOf(pre) === 0 && !L.some(function (x) { return x.id === k; })) L.push({ id: k }); });
+    if (!L.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML = '✏️ <strong>' + L.length + '</strong> alteração(ões) manual(is) salva(s) no histórico deste mês para este recibo. <a href="#" onclick="recRascLimpar();return false;" style="margin-left:6px;">↺ voltar aos valores calculados</a>';
+  }
+  window.recRascLimpar = function () {
+    if (!confirm('Apagar as alterações manuais salvas deste recibo nesta referência e voltar aos valores calculados?')) return;
+    var pre = tipo() + '#' + ref() + '#'; pend = {}; clearTimeout(timer);
+    DB.s(KEY, DB.g(KEY).filter(function (x) { return x.id.indexOf(pre) !== 0; }));
+    if (grupo()) { if (window.recGrupoLista) recGrupoLista(); } else if (window.recFuncMudou && el('rc-func').value) recFuncMudou();
+    aviso();
+  };
+  // ── ganchos ──
+  var _calc = window.recCalc, _lista = window.recGrupoLista, _pct = window.recGrupoPct, _abrir = window.recAbrir, _modo = window.recModo, _gerar = window.recGerar;
+  window.recCalc = function (refazer) { var r = _calc.apply(this, arguments); if (refazer === true && !restaurando) { try { if (grupo()) restaurarGrupo(); else restaurarInd(); } catch (e) { console.error(e); } } return r; };
+  window.recGrupoPct = function (refazer) {
+    if (refazer === true && !restaurando) document.querySelectorAll('#rc-gtab tbody tr.rc-rasc').forEach(function (tr) {
+      // linha que tinha alteração de outro mês: volta ao cálculo normal antes de aplicar as alterações deste mês
+      tr.classList.remove('rc-rasc'); tr.style.background = ''; tr.title = '';
+      ['g-sal', 'g-adi', 'g-val'].forEach(function (c) { var i = tr.querySelector('.' + c); if (i) delete i.dataset.manual; });
+      var ck = tr.querySelector('input.ck'); if (ck) ck.checked = true;
+    });
+    var r = _pct.apply(this, arguments); if (refazer === true && !restaurando) { try { restaurarGrupo(); } catch (e) { console.error(e); } } return r; };
+  window.recModo = function () { var r = _modo.apply(this, arguments); try { aviso(); } catch (e) {} return r; };
+  window.recAbrir = function () {
+    var r = _abrir.apply(this, arguments);
+    try {
+      var m = el('modal-recibo');
+      if (m && !m.dataset.rasc) {
+        m.dataset.rasc = 1;
+        m.addEventListener('input', function (e) {
+          var t = e.target; if (!t || restaurando) return;
+          var tr = t.closest && t.closest('#rc-gtab tbody tr'); if (tr) { salvarLinha(tr); return; }
+          if (t.closest && (t.closest('#rcg-calc') || t.closest('#rcg-demo') || t.id === 'rc-valor' || t.id === 'rc-ext')) salvarInd();
+        });
+        m.addEventListener('change', function (e) {
+          var t = e.target; if (!t || restaurando) return;
+          if (t.classList && t.classList.contains('ck')) { var tr = t.closest('tr'); if (tr) salvarLinha(tr); }
+          if (t.id === 'rc-mes' || t.id === 'rc-ano' || t.id === 'rc-periodo') aviso();
+        });
+        m.addEventListener('click', function (e) { var b = e.target; if (b && b.closest && b.closest('#rc-outros .btn-icon')) setTimeout(salvarInd, 0); });
+      }
+      aviso();
+    } catch (e) { console.error(e); }
+    return r;
+  };
+  window.recGerar = function () { if (timer) { clearTimeout(timer); flush(); } return _gerar.apply(this, arguments); };
 })();
 </script>
 
