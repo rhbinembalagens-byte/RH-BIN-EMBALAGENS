@@ -19276,6 +19276,122 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     _abrirDocSimples(pagina(R, d), (R.card + '_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
   };
 
+  // ════════ TERMO DE RECEBIMENTO E RESPONSABILIDADE DE UNIFORME (modelo BIN, 1 página) ════════
+  var TU_UNID = ['Guarulhos', 'Guaianases', 'São Matheus', 'Itaim Paulista'];
+  var TU_END = 'Guarulhos – (11) 2480-0684 – Estrada Juscelino K. de Oliveira, 2904 – Pimentas · Guaianases – (11) 2508-2982 – Estrada do Lageado Velho, 638 · São Matheus – (11) 2010-0463 – Avenida Mateo Bei, 1376 · Itaim Paulista – (11) 2010-0463 – Avenida Marechal Tito, 4165';
+  function tuNorm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  function tuInjetar() {
+    if (el('modal-termo-uni')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-termo-uni"><div class="modal" style="max-width:760px;">' +
+      '<div class="modal-header"><span class="modal-title">👕 Termo de Recebimento de Uniforme</span><button class="modal-close" onclick="closeModal(\'modal-termo-uni\')">×</button></div>' +
+      '<div class="form-grid">' +
+      '<div class="form-group form-full"><label>Colaborador</label><select id="tu-func" onchange="tuFuncMudou()"></select></div>' +
+      '<div class="form-group form-full"><label>Empresa (empregador)</label><select id="tu-emp" onchange="tuEmpMudou()"></select></div>' +
+      '<div class="form-group"><label>Razão social</label><input id="tu-razao" type="text"></div>' +
+      '<div class="form-group"><label>CNPJ</label><input id="tu-cnpj" type="text"></div>' +
+      '<div class="form-group form-full"><label>Nome do colaborador</label><input id="tu-nome" type="text" style="text-transform:uppercase;"></div>' +
+      '<div class="form-group"><label>CPF</label><input id="tu-cpf" type="text" oninput="mCPF(this)"></div>' +
+      '<div class="form-group"><label>Função</label><input id="tu-cargo" type="text" style="text-transform:uppercase;"></div>' +
+      '<div class="form-group form-full"><label>Unidade</label><div id="tu-unid" style="display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px;">' +
+        TU_UNID.map(function (u, i) { return '<label style="display:flex;gap:5px;align-items:center;font-weight:400;text-transform:none;margin:0;"><input type="radio" name="tu-un" value="' + i + '" style="width:auto;"> ' + u + '</label>'; }).join('') +
+        '<label style="display:flex;gap:5px;align-items:center;font-weight:400;text-transform:none;margin:0;"><input type="radio" name="tu-un" value="" checked style="width:auto;"> em branco</label></div></div>' +
+      '<div class="form-full"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:13px;">Itens entregues</strong><span id="tu-itens-info" style="font-size:11.5px;color:var(--gray-400);"></span>' +
+        '<button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="tuLinha()">+ Item</button></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 90px 90px 130px 30px;gap:6px;font-size:11px;font-weight:700;color:var(--gray-600);margin-bottom:4px;"><span>ITEM</span><span>TAMANHO</span><span>QUANTIDADE</span><span>VALOR UNIT. (R$)</span><span></span></div>' +
+        '<div id="tu-itens"></div><datalist id="tu-dl-itens"></datalist></div>' +
+      '<div class="form-group"><label>Cidade (local)</label><input id="tu-cidade" type="text"></div>' +
+      '<div class="form-group"><label>Data <span style="font-weight:400;text-transform:none;">(vazio = preencher à mão)</span></label><input id="tu-data" type="date"></div>' +
+      '<div class="form-group form-full"><label>Empregador – nome e cargo de quem entrega</label><input id="tu-resp" type="text" placeholder="ex.: MARIA SILVA – RH" style="text-transform:uppercase;"></div>' +
+      '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-termo-uni\')">Cancelar</button><button class="btn btn-primary" onclick="tuGerar()">📄 Gerar termo</button></div></div></div>');
+  }
+  window.tuLinha = function (it, tam, qtd, val) {
+    var box = el('tu-itens'), row = document.createElement('div');
+    row.className = 'tu-it'; row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 90px 130px 30px;gap:6px;margin-bottom:5px;';
+    row.innerHTML = '<input type="text" list="tu-dl-itens" style="text-transform:uppercase;" value="' + esc(it || '') + '" onchange="tuValorItem(this)">' +
+      '<input type="text" style="text-transform:uppercase;" value="' + esc(tam || '') + '"><input type="number" min="0" step="1" value="' + esc(qtd || '') + '">' +
+      '<input type="text" placeholder="0,00" value="' + esc(val || '') + '"><button type="button" class="btn-icon danger" title="Remover" onclick="this.parentNode.remove()">✕</button>';
+    box.appendChild(row);
+  };
+  // lembra o último valor unitário usado em cada item
+  window.tuValorItem = function (inp) { var r = inp.parentNode, v = r.querySelectorAll('input')[3]; if (!v.value) { var p = ls('rh_tu_val_' + tuNorm(inp.value)); if (p) v.value = p; } };
+  window.tuEmpMudou = function () { var e = empresaDados(el('tu-emp').value); el('tu-razao').value = e.razao || ''; el('tu-cnpj').value = e.cnpj || ''; };
+  function tuUnidadePalpite(p) {
+    // procura primeiro no departamento/loja, depois na empresa
+    var fontes = [p.dep ? (DB.g('departamentos').find(function (d) { return d.id === p.dep; }) || {}).nome || p.dep : '', p.uni || p.loja || '', p.emp ? (DB.g('empresas').find(function (e) { return e.id === p.emp; }) || {}).razao : ''];
+    for (var f = 0; f < fontes.length; f++) { var txt = tuNorm(fontes[f]), i = TU_UNID.findIndex(function (u) { return txt && txt.indexOf(tuNorm(u)) !== -1; }); if (i >= 0) return i; }
+    return -1;
+  }
+  window.tuFuncMudou = function () {
+    var p = acharPessoa(el('tu-func').value) || {};
+    el('tu-nome').value = p.n || ''; el('tu-cpf').value = p.cpf || ''; el('tu-cargo').value = p.car || '';
+    var se = el('tu-emp'); se.value = p.emp && Array.prototype.some.call(se.options, function (o) { return o.value === p.emp; }) ? p.emp : (se.options[0] ? se.options[0].value : '__perfil'); tuEmpMudou();
+    var iu = tuUnidadePalpite(p), r = document.querySelector('input[name="tu-un"][value="' + (iu >= 0 ? iu : '') + '"]'); if (r) r.checked = true;
+    // itens: entregas (saídas) registradas no menu Uniforme para este colaborador nos últimos 60 dias
+    el('tu-itens').innerHTML = '';
+    var nome = tuNorm(p.n), lim = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10), ag = {};
+    if (nome) DB.g('uni-mov').forEach(function (m) {
+      if (m.tipo !== 'Saída' || tuNorm(m.func) !== nome || String(m.data || '') < lim) return;
+      var itn = (DB.g('uni-itens').find(function (x) { return x.id === m.item; }) || {}).nome || m.item, k = tuNorm(itn) + '|' + tuNorm(m.tam);
+      ag[k] = ag[k] || { it: String(itn || '').toUpperCase(), tam: String(m.tam || '').toUpperCase(), q: 0 }; ag[k].q += +m.qtd || 0;
+    });
+    var L = Object.keys(ag).map(function (k) { return ag[k]; });
+    L.forEach(function (x) { tuLinha(x.it, x.tam, x.q, ls('rh_tu_val_' + tuNorm(x.it))); });
+    el('tu-itens-info').textContent = L.length ? '(' + L.length + ' item(ns) das entregas do menu Uniforme nos últimos 60 dias)' : '';
+    for (var i = L.length; i < 3; i++) tuLinha();
+  };
+  window.tuAbrir = function () {
+    tuInjetar();
+    var s = el('tu-func');
+    s.innerHTML = '<option value="">— em branco —</option>' + pessoas().filter(function (g) { return g[1].length; }).map(function (g) {
+      return '<optgroup label="' + esc(g[0]) + '">' + g[1].map(function (p) { return '<option value="' + esc(p.k) + '">' + esc(p.n) + '</option>'; }).join('') + '</optgroup>';
+    }).join('');
+    el('tu-emp').innerHTML = DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('') + '<option value="__perfil">Dados da empresa (⚙️ topo do sistema)</option>';
+    el('tu-dl-itens').innerHTML = DB.g('uni-itens').map(function (x) { return '<option value="' + esc(String(x.nome || '').toUpperCase()) + '">'; }).join('');
+    el('tu-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP';
+    el('tu-data').value = typeof td === 'function' ? td() : '';
+    el('tu-resp').value = ls('rh_tu_resp');
+    tuFuncMudou();
+    el('modal-termo-uni').classList.add('open');
+  };
+  window.tuGerar = function () {
+    var u = function (v, len) { return v ? '<span class="pre">' + esc(v) + '</span>' : L(len); };
+    var nome = el('tu-nome').value.trim().toLocaleUpperCase('pt-BR'), cpf = el('tu-cpf').value.trim(), cargo = el('tu-cargo').value.trim().toLocaleUpperCase('pt-BR');
+    var razao = (el('tu-razao').value.trim() || 'BIN EMBALAGENS').toLocaleUpperCase('pt-BR'), cnpj = el('tu-cnpj').value.trim();
+    var un = (document.querySelector('input[name="tu-un"]:checked') || {}).value;
+    var itens = Array.prototype.map.call(document.querySelectorAll('#tu-itens .tu-it'), function (r) { var i = r.querySelectorAll('input'); return { it: i[0].value.trim().toLocaleUpperCase('pt-BR'), tam: i[1].value.trim().toUpperCase(), q: i[2].value.trim(), v: numero(i[3].value) }; })
+      .filter(function (x) { return x.it || x.tam || x.q || x.v; });
+    itens.forEach(function (x) { if (x.it && x.v > 0) ls('rh_tu_val_' + tuNorm(x.it), brl(x.v)); });
+    var cidade = el('tu-cidade').value.trim() || 'Guarulhos – SP', dt = el('tu-data').value, dp = dt ? dt.split('-') : null, resp = el('tu-resp').value.trim().toLocaleUpperCase('pt-BR');
+    ls('rh_rec_cidade', cidade); ls('rh_tu_resp', resp);
+    var linhas = itens.slice(); while (linhas.length < 5) linhas.push(null);
+    var css = '@page{size:A4;margin:1.2cm 1.8cm 1cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;font-size:10.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+      '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;min-height:29.7cm;padding:1.2cm 1.8cm 1cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}}' +
+      'p{margin:0;}.logo{text-align:center;margin-bottom:2pt;}.logo img{width:3cm;height:1.85cm;object-fit:contain;}.tit{text-align:center;font-size:14pt;font-weight:700;}' +
+      '.sub{text-align:center;font-size:8pt;font-style:italic;color:#B8862B;border-bottom:1.5pt solid #B8862B;padding-bottom:4pt;margin-bottom:8pt;}' +
+      'table.dados{width:100%;border-collapse:collapse;}table.dados td{border:.5pt solid #C9A961;padding:3pt 5pt;vertical-align:top;}.rot{font-size:7.5pt;font-weight:700;color:#B8862B;line-height:1.2;}.val{font-size:10pt;min-height:12pt;line-height:1.25;}' +
+      '.un{display:inline-block;margin-right:12pt;white-space:nowrap;}table.it{width:100%;border-collapse:collapse;margin:8pt 0 4pt;}table.it th{background:#F7EFD9;color:#8a6420;font-size:8pt;text-align:left;border:.5pt solid #C9A961;padding:3pt 5pt;}table.it td{border:.5pt solid #C9A961;padding:3pt 5pt;height:15pt;font-size:10pt;}table.it td.n,table.it th.n{text-align:right;}table.it td.c,table.it th.c{text-align:center;}' +
+      '.txt{text-align:justify;line-height:1.3;margin:8pt 0 4pt;}ol{margin:4pt 0 0 0;padding-left:16pt;}ol li{text-align:justify;line-height:1.3;margin-bottom:3pt;}' +
+      '.local{margin:12pt 0 26pt;}table.ass{width:100%;border-collapse:collapse;}table.ass td{width:46%;text-align:center;font-size:9pt;padding:0;vertical-align:top;}table.ass td.gap{width:8%;}table.ass td div.l{border-top:.75pt solid #3A2E1A;padding-top:2pt;}' +
+      '.pre{font-weight:700;}.end{margin-top:22pt;border-top:.75pt solid #C9A961;padding-top:5pt;font-size:7.5pt;color:#6b5a3a;text-align:center;line-height:1.35;}';
+    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Termo de Uniforme' + (nome ? ' - ' + nome : '')) + '</title><style>' + css + '</style></head><body>' +
+      '<div class="logo"><img src="' + LOGO + '" alt="BIN Embalagens"></div><div class="tit">TERMO DE RECEBIMENTO E RESPONSABILIDADE DE UNIFORME</div>' +
+      '<div class="sub">' + esc(razao) + (cnpj ? ' · CNPJ ' + esc(cnpj) : '') + '</div>' +
+      '<table class="dados"><tr><td style="width:68%"><div class="rot">COLABORADOR(A)</div><div class="val">' + (nome ? esc(nome) : '&nbsp;') + '</div></td><td><div class="rot">CPF</div><div class="val">' + (cpf ? esc(cpf) : '&nbsp;') + '</div></td></tr>' +
+      '<tr><td><div class="rot">FUNÇÃO</div><div class="val">' + (cargo ? esc(cargo) : '&nbsp;') + '</div></td><td><div class="rot">DATA DE ENTREGA</div><div class="val">' + (dp ? dp[2] + '/' + dp[1] + '/' + dp[0] : '&nbsp;') + '</div></td></tr>' +
+      '<tr><td colspan="2"><div class="rot">UNIDADE</div><div class="val">' + TU_UNID.map(function (n, i) { return '<span class="un">(' + (String(i) === String(un) ? '<b>X</b>' : '&nbsp;&nbsp;') + ') ' + n + '</span>'; }).join('') + '</div></td></tr></table>' +
+      '<table class="it"><tr><th>ITEM</th><th class="c" style="width:16%">TAMANHO</th><th class="c" style="width:16%">QUANTIDADE</th><th class="n" style="width:24%">VALOR UNITÁRIO (R$)</th></tr>' +
+      linhas.map(function (x) { return x ? '<tr><td>' + esc(x.it) + '</td><td class="c">' + esc(x.tam) + '</td><td class="c">' + esc(x.q) + '</td><td class="n">' + (x.v > 0 ? brl(x.v) : '') + '</td></tr>' : '<tr><td></td><td></td><td></td><td></td></tr>'; }).join('') + '</table>' +
+      '<p class="txt">Declaro que recebi <b>gratuitamente</b> da <b>' + esc(razao) + '</b> os uniformes acima, que permanecem de propriedade da empresa e são de uso exclusivo no trabalho, e me comprometo a zelar por sua conservação e higienização (art. 456-A da CLT).</p>' +
+      '<ol><li>O desgaste natural pelo uso não gera desconto; a troca é feita mediante devolução da peça usada.</li>' +
+      '<li>Em caso de dano causado por culpa ou dolo, ou de extravio, autorizo o desconto do valor unitário indicado acima, mediante comunicação prévia por escrito (art. 462, § 1º, da CLT).</li>' +
+      '<li><b>No desligamento</b>, por qualquer motivo, devolverei todas as peças até o meu último dia de trabalho. As peças não devolvidas, ou danificadas por culpa ou dolo, terão seu valor descontado das verbas rescisórias, o que desde já autorizo, limitado a um mês de remuneração (art. 477, § 5º, da CLT).</li></ol>' +
+      '<p class="local">' + esc(cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : L(6)) + ' de ' + (dp ? MESES[+dp[1] - 1] : L(22)) + ' de ' + (dp ? dp[0] : L(8)) + '.</p>' +
+      '<table class="ass"><tr><td><div class="l">' + (nome ? esc(nome) + '<br>' : '') + 'Colaborador(a)</div></td><td class="gap"></td><td><div class="l">' + (resp ? esc(resp) + '<br>' : '') + 'Empregador (nome e cargo)</div></td></tr></table>' +
+      '<div class="end">' + esc(TU_END) + '</div></body></html>';
+    closeModal('modal-termo-uni');
+    _abrirDocSimples(html, ('Termo_Uniforme_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
+  };
   // ── cartões na tela Gerar Documentos ──
   function injetarCards() {
     var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="rec_sal"]')) return;
@@ -19288,6 +19404,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + R.cor + ';border-color:' + R.cor + ';" onclick="recAbrir(\'' + k + '\')">📄 Gerar Recibo</button>' +
         (k === 'rec_sal' ? '<button class="btn btn-outline btn-sm" onclick="flAbrir()">🗂️ Lançamentos do mês</button>' : '') + '</div></div>';
     }).join('');
+    html += '<div class="trein-card" data-docbase="termo_uni" style="border-left:4px solid #6d4c41;">' +
+      '<div class="tc-header"><div><div class="tc-title">👕 Termo de Recebimento de Uniforme</div><div class="tc-meta">1 página · modelo BIN</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'termo_uni\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Recebimento e responsabilidade pelo uniforme (art. 456-A, 462 e 477 da CLT). Empresa, nome, CPF e função vêm do cadastro; itens puxados das entregas do menu Uniforme.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:#6d4c41;border-color:#6d4c41;" onclick="tuAbrir()">📄 Gerar Termo</button></div></div>';
     var primeiroModelo = grid.querySelector('.dmx-card');
     if (primeiroModelo) primeiroModelo.insertAdjacentHTML('beforebegin', html); else grid.insertAdjacentHTML('beforeend', html);
     try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
