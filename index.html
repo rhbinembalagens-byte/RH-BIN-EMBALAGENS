@@ -20648,18 +20648,45 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   // ── leitura da planilha ──
   async function baixar(id) {
-    var rng = encodeURIComponent("'" + ABA + "'!A1:F600"), erroTok = '';
-    if (typeof driveToken !== 'undefined' && driveToken) {
-      var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + id + '/values/' + rng + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING', { headers: { Authorization: 'Bearer ' + driveToken } });
-      if (r.ok) { var j = await r.json(); return { linhas: j.values || [], via: 'Google (conta conectada)' }; }
-      erroTok = r.status === 401 ? 'sessão do Google expirou' : r.status === 403 ? 'sua conta Google não tem acesso a esta planilha' : r.status === 404 ? 'planilha ou aba "' + ABA + '" não encontrada' : 'erro ' + r.status;
+    var erros = [], tok = (typeof driveToken !== 'undefined' && driveToken) ? driveToken : null;
+    if (tok) {
+      // 1) Drive (mesma permissão já usada pelo sistema): exporta a planilha inteira e lê a aba pelo nome
+      try {
+        var rx = await fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'), { headers: { Authorization: 'Bearer ' + tok } });
+        if (rx.ok && window.XLSX) {
+          var wb = XLSX.read(new Uint8Array(await rx.arrayBuffer()), { type: 'array' });
+          var nomeAba = wb.SheetNames.find(function (n) { return sem(n) === sem(ABA); }) || wb.SheetNames.find(function (n) { return /DESCONTO/.test(sem(n)); });
+          if (!nomeAba) throw new Error('aba "' + ABA + '" não encontrada (abas: ' + wb.SheetNames.join(', ') + ')');
+          var ws = wb.Sheets[nomeAba];
+          return { linhas: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true }), linhasF: XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true }), via: 'Google Drive (conta conectada)' };
+        }
+        erros.push('Drive: ' + (rx.ok ? 'leitor de planilha não carregado' : rx.status === 401 ? 'sessão do Google expirou (clique em Sincronizar / Iniciar no topo)' : rx.status === 403 || rx.status === 404 ? 'a conta conectada não tem acesso à planilha' : 'erro ' + rx.status));
+      } catch (e) { erros.push('Drive: ' + (e.message || e)); }
+      // 2) API do Google Sheets
+      try {
+        var rng = encodeURIComponent("'" + ABA + "'!A1:F600");
+        var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + id + '/values/' + rng + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING', { headers: { Authorization: 'Bearer ' + tok } });
+        if (r.ok) { var j = await r.json(); return { linhas: j.values || [], via: 'Google Sheets (conta conectada)' }; }
+        erros.push('Sheets: erro ' + r.status);
+      } catch (e) { erros.push('Sheets: ' + (e.message || e)); }
     }
-    // sem conta conectada: planilha compartilhada como "qualquer pessoa com o link"
+    // 3) link público ("qualquer pessoa com o link"): lê os valores como aparecem na tela
     try {
-      var r2_ = await fetch('https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&headers=0&sheet=' + encodeURIComponent(ABA));
-      if (r2_.ok) { var t = await r2_.text(); if (!/^\s*</.test(t)) return { linhas: csv(t), via: 'link público da planilha' }; }
-    } catch (e) {}
-    throw new Error(erroTok ? 'Não consegui ler a planilha (' + erroTok + '). Conecte o Google Drive no topo do sistema com a conta dona da planilha.' : 'Não consegui ler a planilha. Conecte o Google Drive no topo do sistema (com a conta dona da planilha) ou compartilhe a planilha como "Qualquer pessoa com o link – Leitor".');
+      var r3 = await fetch('https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:json&headers=0&sheet=' + encodeURIComponent(ABA));
+      if (r3.ok) {
+        var t = await r3.text(), m = t.match(/setResponse\(([\s\S]*)\);?\s*$/);
+        if (m) {
+          var js = JSON.parse(m[1]);
+          if (js.status !== 'error' && js.table) {
+            var LF = js.table.rows.map(function (rw) { return (rw.c || []).map(function (c) { return c ? (c.f != null ? c.f : (c.v != null ? c.v : '')) : ''; }); });
+            var LR = js.table.rows.map(function (rw) { return (rw.c || []).map(function (c) { return c ? (typeof c.v === 'number' ? c.v : (c.f != null ? c.f : (c.v != null ? c.v : ''))) : ''; }); });
+            return { linhas: LR, linhasF: LF, via: 'link público da planilha' };
+          }
+        }
+      }
+      erros.push('link público: a planilha não está como "qualquer pessoa com o link"');
+    } catch (e) { erros.push('link público: ' + (e.message || e)); }
+    throw new Error('Não consegui ler a planilha. ' + (tok ? '' : 'Conecte o Google Drive no topo do sistema (Sincronizar / Iniciar) com a conta dona da planilha. ') + 'Detalhes: ' + erros.join(' · '));
   }
   function csv(t) {
     var out = [], row = [], cur = '', q = false;
@@ -20671,16 +20698,18 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (cur || row.length) { row.push(cur); out.push(row); }
     return out;
   }
-  function interpretar(L) {
+  function interpretar(L, LF) {
+    LF = LF || L;
     var ref = null, hi = -1;
     L.forEach(function (r, i) {
-      var a = sem(r[0]);
-      if (!ref && /MES DE REFERENCIA/.test(a)) ref = lerMes(r[1]);
-      if (hi < 0 && a === 'NOME' && r.some(function (x) { return /FALTA/.test(sem(x)); })) hi = i;
+      var a = sem(r[0]) || sem((LF[i] || [])[0]);
+      if (!ref && /MES DE REFERENCIA/.test(a)) ref = lerMes((LF[i] || [])[1]) || lerMes(r[1]);
+      if (hi < 0 && a === 'NOME') hi = i;
     });
-    if (hi < 0) throw new Error('Não encontrei o cabeçalho "Nome … Falta no Caixa" na aba "' + ABA + '".');
-    var H = L[hi].map(sem), ci = function (re) { return H.findIndex(function (h) { return re.test(h); }); };
-    var cN = 0, cD = ci(/DEPARTAMENTO/), cC = ci(/CARGO/), cF = ci(/FALTA/), cP = ci(/PARCELA/), cS = ci(/SALDO/);
+    if (hi < 0) throw new Error('Não encontrei a linha de títulos com "Nome" na coluna A da aba "' + ABA + '".');
+    var H = (LF[hi] || L[hi]).map(sem), ci = function (re, pad) { var k = H.findIndex(function (x) { return re.test(x); }); return k >= 0 ? k : pad; };
+    // se algum título vier vazio, usa a posição do modelo: A Nome, B Depto, C Cargo, D Falta, E Parcelas, F Saldo
+    var cN = 0, cD = ci(/DEPARTAMENTO/, 1), cC = ci(/CARGO/, 2), cF = ci(/FALTA/, 3), cP = ci(/PARCELA/, 4), cS = ci(/SALDO/, 5);
     var itens = [];
     for (var i = hi + 1; i < L.length; i++) {
       var r = L[i], nome = String(r[cN] || '').trim(); if (!nome || /^TOTAL/i.test(nome)) continue;
@@ -20730,7 +20759,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (rodando) return; rodando = true;
     var c = cfg(), id = idPlanilha(c.planilha);
     try {
-      var d = await baixar(id), R = interpretar(d.linhas);
+      var d = await baixar(id), R = interpretar(d.linhas, d.linhasF);
       if (!R.ref) throw new Error('Preencha o "Mês de referência" na planilha.');
       var P = pessoas(), regs = DB.g(K_REG), agora = new Date().toISOString(), ref = R.ref;
       // a planilha é a fonte do mês que ela mostra: substitui os registros desse mês
