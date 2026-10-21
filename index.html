@@ -20620,5 +20620,206 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ QUEBRA DE CAIXA — lê a planilha Google compartilhada e lança "Desc. falta de caixa" na folha do mês ═══════ */
+(function () {
+  var K_CFG = 'qc-cfg', K_REG = 'quebra-caixa', FL = 'folha-lanc';
+  var PADRAO_ID = '1wuHKmRb8tbFEf4FsjrdvWnzSH0FaliLRAUeP75lwKRU', ABA = 'Descontos do Mês';
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  if (window.RT && RT.LIST) [K_CFG, K_REG].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function num(v) { if (typeof v === 'number') return v; var s = String(v == null ? '' : v).replace(/[^\d,.-]/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isNaN(n) ? 0 : n; }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function cfg() { var c = DB.g(K_CFG)[0] || {}; if (!c.planilha) c.planilha = PADRAO_ID; return c; }
+  function salvarCfg(o) { var c = Object.assign(cfg(), o, { id: 'cfg' }); DB.s(K_CFG, [c]); return c; }
+  function idPlanilha(s) { var m = String(s || '').match(/\/d\/([a-zA-Z0-9_-]{20,})/); return m ? m[1] : String(s || '').trim(); }
+  // mês de referência: "outubro/2026", "out/2026", "01/11/2026", "11/2026" ou número de série do Sheets
+  function lerMes(v) {
+    if (typeof v === 'number' && v > 20000) { var d = new Date(Math.round((v - 25569) * 86400000)); return { m: d.getUTCMonth(), a: d.getUTCFullYear() }; }
+    var s = String(v || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(), m;
+    if ((m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return { m: +m[2] - 1, a: +m[3] };
+    if ((m = s.match(/^(\d{1,2})[\/-](\d{4})$/))) return { m: +m[1] - 1, a: +m[2] };
+    if ((m = s.match(/(\d{4})-(\d{2})/))) return { m: +m[2] - 1, a: +m[1] };
+    var i = MESES.findIndex(function (n) { return s.indexOf(n.normalize('NFD').replace(/[̀-ͯ]/g, '').slice(0, 3)) === 0; }), a = s.match(/(\d{4})/);
+    return i >= 0 && a ? { m: i, a: +a[1] } : null;
+  }
+  // ── leitura da planilha ──
+  async function baixar(id) {
+    var rng = encodeURIComponent("'" + ABA + "'!A1:F600"), erroTok = '';
+    if (typeof driveToken !== 'undefined' && driveToken) {
+      var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + id + '/values/' + rng + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING', { headers: { Authorization: 'Bearer ' + driveToken } });
+      if (r.ok) { var j = await r.json(); return { linhas: j.values || [], via: 'Google (conta conectada)' }; }
+      erroTok = r.status === 401 ? 'sessão do Google expirou' : r.status === 403 ? 'sua conta Google não tem acesso a esta planilha' : r.status === 404 ? 'planilha ou aba "' + ABA + '" não encontrada' : 'erro ' + r.status;
+    }
+    // sem conta conectada: planilha compartilhada como "qualquer pessoa com o link"
+    try {
+      var r2_ = await fetch('https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&headers=0&sheet=' + encodeURIComponent(ABA));
+      if (r2_.ok) { var t = await r2_.text(); if (!/^\s*</.test(t)) return { linhas: csv(t), via: 'link público da planilha' }; }
+    } catch (e) {}
+    throw new Error(erroTok ? 'Não consegui ler a planilha (' + erroTok + '). Conecte o Google Drive no topo do sistema com a conta dona da planilha.' : 'Não consegui ler a planilha. Conecte o Google Drive no topo do sistema (com a conta dona da planilha) ou compartilhe a planilha como "Qualquer pessoa com o link – Leitor".');
+  }
+  function csv(t) {
+    var out = [], row = [], cur = '', q = false;
+    for (var i = 0; i < t.length; i++) {
+      var c = t[i];
+      if (q) { if (c === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; } else if (c === '\n') { row.push(cur); out.push(row); row = []; cur = ''; } else if (c !== '\r') cur += c;
+    }
+    if (cur || row.length) { row.push(cur); out.push(row); }
+    return out;
+  }
+  function interpretar(L) {
+    var ref = null, hi = -1;
+    L.forEach(function (r, i) {
+      var a = sem(r[0]);
+      if (!ref && /MES DE REFERENCIA/.test(a)) ref = lerMes(r[1]);
+      if (hi < 0 && a === 'NOME' && r.some(function (x) { return /FALTA/.test(sem(x)); })) hi = i;
+    });
+    if (hi < 0) throw new Error('Não encontrei o cabeçalho "Nome … Falta no Caixa" na aba "' + ABA + '".');
+    var H = L[hi].map(sem), ci = function (re) { return H.findIndex(function (h) { return re.test(h); }); };
+    var cN = 0, cD = ci(/DEPARTAMENTO/), cC = ci(/CARGO/), cF = ci(/FALTA/), cP = ci(/PARCELA/), cS = ci(/SALDO/);
+    var itens = [];
+    for (var i = hi + 1; i < L.length; i++) {
+      var r = L[i], nome = String(r[cN] || '').trim(); if (!nome || /^TOTAL/i.test(nome)) continue;
+      var f = r2(num(r[cF])); if (!(f > 0)) continue;
+      itens.push({ nome: nome, dep: cD >= 0 ? String(r[cD] || '').trim() : '', cargo: cC >= 0 ? String(r[cC] || '').trim() : '', falta: f, parcelas: Math.max(1, Math.round(num(r[cP])) || 1), saldoPlan: cS >= 0 ? num(r[cS]) : null });
+    }
+    return { ref: ref, itens: itens };
+  }
+  // ── pessoas do sistema ──
+  function pessoas() {
+    var P = [];
+    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado') P.push({ pk: 'f:' + f.id, n: f.n, cpf: f.cpf || '' }); });
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Encerrado') P.push({ pk: 'x:' + c.id, n: c.n, cpf: c.cpf || '' }); });
+    return P;
+  }
+  function achar(nome, P) {
+    var n = sem(nome), p = P.find(function (x) { return sem(x.n) === n; }); if (p) return p;
+    var t = n.split(' ').filter(function (w) { return w.length > 2; });
+    var cand = P.filter(function (x) { var u = sem(x.n).split(' '); return u[0] === t[0] && t.filter(function (w) { return u.indexOf(w) !== -1; }).length >= Math.min(3, t.length); });
+    return cand.length === 1 ? cand[0] : null;
+  }
+  // ── parcelas → lançamentos da folha (Desc. falta de caixa) ──
+  function parcelas(r) {
+    var out = [], base = r2(r.falta / r.parcelas), acc = 0;
+    for (var k = 0; k < r.parcelas; k++) {
+      var v = k === r.parcelas - 1 ? r2(r.falta - acc) : base; acc = r2(acc + v);
+      var d = new Date(r.ano, r.mes + k, 1); out.push({ k: k + 1, mes: d.getMonth(), ano: d.getFullYear(), v: v });
+    }
+    return out;
+  }
+  function gerarLancamentos() {
+    var antes = DB.g(FL), outros = antes.filter(function (x) { return x.origem !== 'quebra'; }), novos = [];
+    DB.g(K_REG).forEach(function (r) {
+      if (!r.pk) return;
+      parcelas(r).forEach(function (p) {
+        novos.push({ id: 'qc-' + r.id + '-' + p.k, pk: r.pk, nome: r.nomeSis || r.nome, cpf: r.cpf || '', mes: p.mes, ano: p.ano, tipo: 'fcx', valor: p.v,
+          desc: 'QUEBRA DE CAIXA ' + p.k + '/' + r.parcelas + ' (REF. ' + String(r.mes + 1).padStart(2, '0') + '/' + r.ano + ')', origem: 'quebra', data: '', criado: r.atualizado || '' });
+      });
+    });
+    var velhos = antes.filter(function (x) { return x.origem === 'quebra'; });
+    var ass = function (L) { return JSON.stringify(L.map(function (x) { return [x.id, x.pk, x.mes, x.ano, x.valor, x.desc]; }).sort()); };
+    if (ass(velhos) !== ass(novos)) DB.s(FL, outros.concat(novos));
+  }
+  // ── sincronizar ──
+  var rodando = false;
+  window.qcSincronizar = async function (silencioso) {
+    if (rodando) return; rodando = true;
+    var c = cfg(), id = idPlanilha(c.planilha);
+    try {
+      var d = await baixar(id), R = interpretar(d.linhas);
+      if (!R.ref) throw new Error('Preencha o "Mês de referência" na planilha.');
+      var P = pessoas(), regs = DB.g(K_REG), agora = new Date().toISOString(), ref = R.ref;
+      // a planilha é a fonte do mês que ela mostra: substitui os registros desse mês
+      var manter = regs.filter(function (x) { return !(x.mes === ref.m && x.ano === ref.a); }), novos = [];
+      R.itens.forEach(function (it) {
+        var p = achar(it.nome, P), idr = ref.a + '-' + String(ref.m + 1).padStart(2, '0') + '-' + sem(it.nome).replace(/\s/g, '_');
+        var ant = regs.find(function (x) { return x.id === idr; });
+        novos.push({ id: idr, nome: it.nome, dep: it.dep, cargo: it.cargo, falta: it.falta, parcelas: it.parcelas, saldoPlan: it.saldoPlan, mes: ref.m, ano: ref.a,
+          pk: p ? p.pk : '', nomeSis: p ? p.n : '', cpf: p ? p.cpf : '', atualizado: ant && ant.falta === it.falta && ant.parcelas === it.parcelas ? ant.atualizado : agora });
+      });
+      var finais = manter.concat(novos), ass = function (L) { return JSON.stringify(L.map(function (x) { return [x.id, x.falta, x.parcelas, x.pk, x.dep]; }).sort()); };
+      if (ass(finais) !== ass(regs)) DB.s(K_REG, finais);
+      gerarLancamentos();
+      salvarCfg({ ultima: agora, via: d.via, erro: '', refPlan: ref.m + '/' + ref.a });
+      if (!silencioso && typeof toast === 'function') toast('🔄 Quebra de caixa sincronizada: ' + novos.length + ' lançamento(s) em ' + MESES[ref.m] + '/' + ref.a);
+    } catch (e) {
+      salvarCfg({ erro: e.message || String(e) });
+      if (!silencioso) alert(e.message || e);
+    } finally { rodando = false; if (el('sec-quebra') && el('sec-quebra').classList.contains('active')) qcRender(); }
+  };
+  // ── tela ──
+  var vis = null;
+  function injetar() {
+    if (el('sec-quebra')) return;
+    var antes = Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\('documentos'/.test(n.getAttribute('onclick') || ''); });
+    if (antes) antes.insertAdjacentHTML('afterend', '<div class="nav-item" onclick="nav(\'quebra\',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle><path d="M6 12h.01M18 12h.01"></path></svg><span>Quebra de Caixa</span></div>');
+    var doc = el('sec-documentos');
+    doc.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-quebra"><div class="card">' +
+      '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">💰 Quebra de Caixa</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Lançamentos feitos na planilha compartilhada entram sozinhos como <strong>Desc. falta de caixa</strong> nos Lançamentos da folha (planilha da contabilidade e recibo de pagamento), divididos nas parcelas informadas.</div></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="qcConfig()">⚙️ Planilha</button><a class="btn btn-outline" id="qc-abrir" target="_blank" rel="noopener">📄 Abrir planilha</a><button class="btn btn-primary" onclick="qcSincronizar()">🔄 Sincronizar agora</button></div></div>' +
+      '<div id="qc-status" style="font-size:12.5px;margin-bottom:10px;"></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><strong style="font-size:13.5px;">Descontos na folha de</strong>' +
+      '<button class="btn btn-outline btn-sm" onclick="qcMes(-1)">◀</button><strong id="qc-mes-lbl" style="min-width:130px;text-align:center;"></strong><button class="btn btn-outline btn-sm" onclick="qcMes(1)">▶</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="qcMes(0)">Mês atual</button><button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="qcFolha()">🗂️ Abrir lançamentos da folha</button></div>' +
+      '<div class="table-wrap"><table id="qc-tab" style="font-size:13px;"></table></div>' +
+      '<div id="qc-dep" style="margin-top:12px;"></div>' +
+      '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:16px 0 6px;">Faltas registradas (todas as referências)</div>' +
+      '<div class="table-wrap" style="max-height:40vh;overflow:auto;"><table id="qc-hist" style="font-size:12.5px;"></table></div></div></div>');
+  }
+  window.qcMes = function (n) { var h = new Date(); if (!vis || n === 0) vis = { m: h.getMonth(), a: h.getFullYear() }; if (n) { var d = new Date(vis.a, vis.m + n, 1); vis = { m: d.getMonth(), a: d.getFullYear() }; } qcRender(); };
+  window.qcFolha = function () { if (typeof flAbrir === 'function') { flAbrir(); if (el('fl-mes')) { el('fl-mes').value = String(vis.m); el('fl-ano').value = vis.a; flRender(); } } };
+  window.qcConfig = function () {
+    var c = cfg(), v = prompt('Link (ou ID) da planilha Google de quebra de caixa.\nA aba lida é "' + ABA + '".', 'https://docs.google.com/spreadsheets/d/' + idPlanilha(c.planilha) + '/edit');
+    if (v === null) return; var id = idPlanilha(v); if (!id) return;
+    salvarCfg({ planilha: id, ultima: '', erro: '' }); qcRender(); qcSincronizar();
+  };
+  window.qcRender = function () {
+    injetar(); if (!vis) { var h = new Date(); vis = { m: h.getMonth(), a: h.getFullYear() }; }
+    var c = cfg(), regs = DB.g(K_REG);
+    el('qc-abrir').href = 'https://docs.google.com/spreadsheets/d/' + idPlanilha(c.planilha) + '/edit';
+    var semV = regs.filter(function (r) { return !r.pk; });
+    el('qc-status').innerHTML = (c.erro ? '<div class="alert alert-warning" style="margin:0 0 6px;"><div>⚠️ ' + esc(c.erro) + '</div></div>' : '') +
+      (c.ultima ? '✅ Última sincronização: <strong>' + new Date(c.ultima).toLocaleString('pt-BR') + '</strong> (' + esc(c.via || '') + ') · a planilha está em <strong>' + (c.refPlan ? MESES[+c.refPlan.split('/')[0]] + '/' + c.refPlan.split('/')[1] : '—') + '</strong> · atualiza sozinha a cada 5 minutos com o sistema aberto.' : 'Ainda não sincronizado.') +
+      (semV.length ? '<div style="color:#c0392b;margin-top:4px;">⚠️ ' + semV.length + ' nome(s) da planilha não encontrado(s) no cadastro (não entram na folha): ' + esc(semV.map(function (r) { return r.nome; }).join(', ')) + '</div>' : '');
+    el('qc-mes-lbl').textContent = MESES[vis.m].charAt(0).toUpperCase() + MESES[vis.m].slice(1) + ' / ' + vis.a;
+    var linhas = [], porDep = {}, tot = 0;
+    regs.forEach(function (r) {
+      var ps = parcelas(r), p = ps.find(function (x) { return x.mes === vis.m && x.ano === vis.a; }); if (!p) return;
+      var pago = ps.filter(function (x) { return x.ano * 12 + x.mes <= vis.a * 12 + vis.m; }).reduce(function (s, x) { return s + x.v; }, 0);
+      linhas.push({ r: r, p: p, saldo: r2(r.falta - pago) }); tot += p.v; var dk = r.dep || 'SEM DEPARTAMENTO'; porDep[dk] = r2((porDep[dk] || 0) + p.v);
+    });
+    linhas.sort(function (a, b) { return a.r.nome.localeCompare(b.r.nome); });
+    el('qc-tab').innerHTML = linhas.length ? '<thead><tr><th>Colaborador</th><th>Depto</th><th>Cargo</th><th>Ref. da falta</th><th style="text-align:right;">Falta total</th><th>Parcela</th><th style="text-align:right;">Desconto no mês</th><th style="text-align:right;">Saldo após o mês</th></tr></thead><tbody>' +
+      linhas.map(function (x) { var r = x.r; return '<tr' + (r.pk ? '' : ' style="background:#fff3e0;" title="Não encontrado no cadastro — não entra na folha"') + '><td><strong>' + esc(r.nomeSis || r.nome) + '</strong></td><td>' + esc(r.dep) + '</td><td>' + esc(r.cargo) + '</td><td>' + String(r.mes + 1).padStart(2, '0') + '/' + r.ano + '</td><td style="text-align:right;">' + brl(r.falta) + '</td><td>' + x.p.k + '/' + r.parcelas + '</td><td style="text-align:right;font-weight:700;">' + brl(x.p.v) + '</td><td style="text-align:right;">' + brl(x.saldo) + '</td></tr>'; }).join('') +
+      '<tr style="font-weight:700;background:var(--gray-50);"><td colspan="6">TOTAL (' + linhas.length + ')</td><td style="text-align:right;">' + brl(tot) + '</td><td></td></tr></tbody>'
+      : '<tr><td style="padding:20px;text-align:center;color:var(--gray-400);">Nenhum desconto de quebra de caixa neste mês.</td></tr>';
+    var dks = Object.keys(porDep).sort();
+    el('qc-dep').innerHTML = dks.length ? '<div style="font-size:12.5px;"><strong>Por departamento:</strong> ' + dks.map(function (k) { return '<span class="badge badge-gray" style="margin:2px;">' + esc(k) + ': R$ ' + brl(porDep[k]) + '</span>'; }).join('') + '</div>' : '';
+    var H = regs.slice().sort(function (a, b) { return (b.ano * 12 + b.mes) - (a.ano * 12 + a.mes) || a.nome.localeCompare(b.nome); });
+    el('qc-hist').innerHTML = H.length ? '<thead><tr><th>Ref.</th><th>Colaborador</th><th>Depto</th><th style="text-align:right;">Falta</th><th>Parcelas</th><th>Meses de desconto</th></tr></thead><tbody>' +
+      H.map(function (r) { var ps = parcelas(r); return '<tr><td>' + String(r.mes + 1).padStart(2, '0') + '/' + r.ano + '</td><td>' + esc(r.nomeSis || r.nome) + (r.pk ? '' : ' <span style="color:#c0392b;font-size:11px;">(não encontrado)</span>') + '</td><td>' + esc(r.dep) + '</td><td style="text-align:right;">' + brl(r.falta) + '</td><td>' + r.parcelas + 'x de ' + brl(ps[0].v) + '</td><td>' + ps.map(function (p) { return String(p.mes + 1).padStart(2, '0') + '/' + p.ano; }).join(', ') + '</td></tr>'; }).join('') + '</tbody>'
+      : '<tr><td style="padding:14px;color:var(--gray-400);">Nada registrado ainda.</td></tr>';
+  };
+  var _nav = window.nav;
+  window.nav = function (id, elx) {
+    if (id === 'quebra') injetar();
+    var r = _nav.apply(this, arguments);
+    if (id === 'quebra') { try { el('topbar-title').textContent = 'Quebra de Caixa'; qcRender(); qcSincronizar(true); } catch (e) { console.error(e); } }
+    return r;
+  };
+  function iniciar() {
+    try { injetar(); } catch (e) {}
+    setTimeout(function () { qcSincronizar(true); }, 8000);
+    setInterval(function () { if (!document.hidden) qcSincronizar(true); }, 5 * 60 * 1000);
+  }
+  window.qcInterpretar = interpretar; window.qcParcelas = parcelas;
+  if (document.readyState !== 'loading') iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
+})();
+</script>
+
 </body>
 </html>
