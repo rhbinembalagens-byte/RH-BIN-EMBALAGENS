@@ -20999,5 +20999,145 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 })();
 </script>
 
+<script>
+/* ═══════ CHECKLIST DE ADMISSÃO E DEMISSÃO (CLT) no cadastro do funcionário ═══════ */
+(function () {
+  var K_MOD = 'chk-modelo', K_FUN = 'chk-func';
+  var PADRAO = {"adm":{"tit":"Checklist de Admissão – CLT","obs":"Ajuste os itens conforme a convenção coletiva da categoria e as exigências do PCMSO/PGR da empresa.","secoes":[{"t":"1. Recrutamento e aprovação","itens":[{"k":"a1","t":"Requisição de vaga aprovada pelo gestor","r":"Gestor"},{"k":"a2","t":"Entrevistas concluídas e candidato aprovado","r":"RH / Gestor"},{"k":"a3","t":"Proposta enviada e aceita (salário, cargo, horário, data de início)","r":"RH"}]},{"t":"2. Documentos do colaborador - Todos com foto legível ou em PDF","itens":[{"k":"a4","t":"RG e CPF","r":"Colaborador"},{"k":"a5","t":"CTPS Digital – número / consulta no app","r":"Colaborador"},{"k":"a6","t":"Título de eleitor","r":"Colaborador"},{"k":"a7","t":"Certificado de reservista (homens, 18 a 45 anos)","r":"Colaborador"},{"k":"a8","t":"Comprovante de residência atualizado","r":"Colaborador"},{"k":"a9","t":"Comprovante de escolaridade / certificados de cursos","r":"Colaborador"},{"k":"a10","t":"Número do PIS/PASEP/NIS","r":"Colaborador"},{"k":"a11","t":"Certidão de nascimento ou casamento","r":"Colaborador"},{"k":"a12","t":"Certidão de nascimento dos filhos menores de 14 anos (salário-família)","r":"Colaborador"},{"k":"a13","t":"Cartão de vacinação dos filhos menores de 7 anos e frequência escolar (a partir de 4 anos)","r":"Colaborador"},{"k":"a14","t":"CPF dos dependentes (IRRF / plano de saúde)","r":"Colaborador"},{"k":"a15","t":"Foto do Rosto com fundo branco para Cadastro","r":"Colaborador"},{"k":"a16","t":"CNH (se a função exigir direção)","r":"Colaborador"},{"k":"a17","t":"Dados bancários - Itaú / chave Pix para salário","r":"Colaborador"},{"k":"a18","t":"Exame admissional realizado e ASO \"APTO\" arquivado (antes do início)","r":"RH / DP"},{"k":"a19","t":"Enviar documentos para contabilidade","r":"RH / DP"}]},{"t":"4. Contratação e registros","itens":[{"k":"a20","t":"Contrato de trabalho assinado (incluir cláusula de experiência, se houver)","r":"RH / Colaborador"},{"k":"a21","t":"Termo de opção / declaração de vale-transporte","r":"Colaborador"},{"k":"a22","t":"Declaração de dependentes para IRRF e salário-família","r":"Colaborador"},{"k":"a23","t":"Acordo de compensação / banco de horas (se aplicável)","r":"RH / Colaborador"},{"k":"a24","t":"Termo de ciência do regulamento interno e código de conduta","r":"Colaborador"},{"k":"a25","t":"Termo de consentimento / ciência LGPD (tratamento de dados)","r":"Colaborador"},{"k":"a26","t":"Descrição de Cargo","r":"Colaborador"},{"k":"a27","t":"Cadastro no sistema de interno RH","r":"DP"},{"k":"a28","t":"Cadastro no sistema de ponto","r":"DP"}]},{"t":"5. Benefícios","itens":[{"k":"a29","t":"Vale-transporte solicitado / cartão emitido","r":"RH"},{"k":"a30","t":"Vale-refeição / alimentação cadastrado","r":"RH"},{"k":"a31","t":"Inclusão no plano de saúde / odontológico (titular e dependentes)","r":"RH"},{"k":"a32","t":"Seguro de vida em grupo","r":"RH"},{"k":"a33","t":"Outros benefícios (VALE COMPRA)","r":"RH"}]},{"t":"6. Integração e primeiro dia","itens":[{"k":"a34","t":"Uniforme entregues","r":"RH"},{"k":"a35","t":"Armário / vestiário designado","r":"RH"},{"k":"a36","t":"Acessos criados (e-mail, sistemas, rede) – se aplicável","r":"TI"},{"k":"a37","t":"Equipamentos entregues com termo de responsabilidade","r":"TI / Gestor"},{"k":"a38","t":"Integração institucional (história, missão, valores, normas)","r":"RH"},{"k":"a39","t":"Apresentação ao gestor e à equipe / tour pelas instalações","r":"Gestor"},{"k":"a40","t":"Definição de padrinho ou responsável pelo treinamento","r":"Gestor"}]},{"t":"7. Acompanhamento do período de experiência","itens":[{"k":"a41","t":"Avaliação de 45 dias (1º período)","r":"Gestor"},{"k":"a42","t":"Avaliação de 90 dias (prorrogação ou efetivação)","r":"Gestor / RH"},{"k":"a43","t":"Feedback registrado e arquivado no prontuário","r":"RH / DP"}]}]},"dem":{"tit":"Checklist de Demissão","obs":"Prazos e verbas variam conforme o tipo de desligamento e a convenção coletiva. Confira os valores antes da assinatura do TRCT.","secoes":[{"t":"1. Decisão e comunicação","itens":[{"k":"d1","t":"Definição do tipo de desligamento (sem justa causa, pedido, justa causa, acordo art. 484-A, término de contrato)","r":"Gestor / RH"},{"k":"d2","t":"Aprovação do desligamento pela diretoria","r":"Diretoria"},{"k":"d3","t":"Conferência de estabilidades (gestante, acidente, CIPA, pré-aposentadoria, dirigente sindical)","r":"RH"},{"k":"d4","t":"Comunicado / carta de demissão ou pedido de demissão assinado","r":"RH / Colaborador"},{"k":"d5","t":"Aviso prévio: trabalhado, indenizado ou dispensado (definir e registrar)","r":"RH"},{"k":"d6","t":"Proporcional do aviso prévio calculado (3 dias por ano trabalhado)","r":"DP"},{"k":"d7","t":"Opção de redução de jornada (2h/dia ou 7 dias corridos) registrada","r":"Colaborador"}]},{"t":"2. Saúde e segurança do trabalho","itens":[{"k":"d8","t":"Exame demissional realizado e ASO arquivado (conforme prazos do PCMSO / NR-7)","r":"RH / DP"}]},{"t":"3. Devoluções e acessos","itens":[{"k":"d9","t":"Uniformes devolvidos","r":"Colaborador"},{"k":"d10","t":"Ferramentas, chaves e equipamentos devolvidos (notebook, celular etc.)","r":"Gestor"},{"k":"d11","t":"Armário liberado","r":"RH"},{"k":"d12","t":"Bloqueio de acessos (sistemas, e-mail, rede, catraca, relógio de ponto)","r":"TI / RH"},{"k":"d13","t":"Cartões de benefícios cancelados (VT, VR/VA)","r":"RH"}]},{"t":"4. Cálculos rescisórios","itens":[{"k":"d14","t":"Fechamento do ponto e conferência de horas extras / banco de horas","r":"DP"},{"k":"d15","t":"Saldo de salário","r":"DP"},{"k":"d16","t":"Férias vencidas e proporcionais + 1/3","r":"DP"},{"k":"d17","t":"13º salário proporcional","r":"DP"},{"k":"d18","t":"Aviso prévio indenizado (se houver)","r":"DP"},{"k":"d19","t":"Multa de 40% do FGTS (ou 20% no acordo) – quando aplicável","r":"DP"},{"k":"d20","t":"Descontos: adiantamentos, faltas, empréstimo consignado, VT","r":"DP"},{"k":"d21","t":"Conferência do TRCT (Termo de Rescisão) antes da assinatura","r":"RH"}]},{"t":"5. Pagamento e encargos","itens":[{"k":"d22","t":"Pagamento das verbas rescisórias em até 10 dias após o término do contrato","r":"Financeiro"},{"k":"d23","t":"Recolhimento do FGTS do mês e rescisório via FGTS Digital","r":"DP"}]},{"t":"6. eSocial e documentos","itens":[{"k":"d24","t":"TRCT assinado pelo colaborador e pela empresa","r":"RH / Colaborador"},{"k":"d25","t":"Termo de Quitação / Homologação (quando exigido pela convenção coletiva)","r":"RH"},{"k":"d26","t":"Guias do Seguro-Desemprego (Empregador Web) – sem justa causa","r":"DP"},{"k":"d27","t":"Chave / extrato para saque do FGTS informado ao colaborador","r":"DP"},{"k":"d28","t":"Exclusão do plano de saúde ou opção de manutenção (arts. 30/31 Lei 9.656/98)","r":"RH"}]},{"t":"7. Encerramento","itens":[{"k":"d29","t":"Entrevista de desligamento realizada","r":"RH"},{"k":"d30","t":"Comunicação interna à equipe / áreas envolvidas","r":"RH/DP"},{"k":"d31","t":"Prontuário do colaborador arquivado (guardar conforme prazos legais)","r":"RH / DP"},{"k":"d32","t":"Abertura de requisição de reposição da vaga (se houver)","r":"Gestor"}]}]}};
+  if (window.RT && RT.LIST) [K_MOD, K_FUN].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  // modelo = padrão do documento + itens/seções incluídos pelo usuário
+  function modelo(tipo) {
+    var base = JSON.parse(JSON.stringify(PADRAO[tipo])), cust = (DB.g(K_MOD).find(function (x) { return x.id === tipo; }) || {});
+    (cust.secNovas || []).forEach(function (s) { base.secoes.push({ t: s.t, itens: [], nova: s.id }); });
+    (cust.itens || []).forEach(function (it) {
+      var s = base.secoes.find(function (x) { return x.t === it.sec; }) || base.secoes[base.secoes.length - 1];
+      s.itens.push({ k: it.k, t: it.t, r: it.r || '', custom: true });
+    });
+    var rem = cust.removidos || [];
+    base.secoes.forEach(function (s) { s.itens = s.itens.filter(function (i) { return rem.indexOf(i.k) === -1; }); });
+    return base;
+  }
+  function salvarCust(tipo, fn) { var L = DB.g(K_MOD), c = L.find(function (x) { return x.id === tipo; }); if (!c) { c = { id: tipo, itens: [], secNovas: [], removidos: [] }; L.push(c); } fn(c); DB.s(K_MOD, L); }
+  // estado do funcionário aberto no cadastro
+  var EST = { fid: null, adm: {}, dem: {} };
+  function carregar(fid) { var r = fid ? DB.g(K_FUN).find(function (x) { return x.id === fid; }) : null; EST = { fid: fid || null, adm: r ? JSON.parse(JSON.stringify(r.adm || {})) : {}, dem: r ? JSON.parse(JSON.stringify(r.dem || {})) : {} }; }
+  function gravar(fid) {
+    if (!fid) return; var L = DB.g(K_FUN), i = L.findIndex(function (x) { return x.id === fid; }), rec = { id: fid, adm: EST.adm, dem: EST.dem, em: new Date().toISOString() };
+    if (i >= 0) L[i] = rec; else L.push(rec); DB.s(K_FUN, L);
+  }
+  var tAuto = null; function autoSalvar() { if (!EST.fid) return; clearTimeout(tAuto); tAuto = setTimeout(function () { gravar(EST.fid); }, 400); }
+  function progresso(tipo, est) {
+    var M = modelo(tipo), tot = 0, ok = 0, secs = M.secoes.map(function (s) { var t = s.itens.length, o = s.itens.filter(function (i) { return est[i.k] && est[i.k].ok; }).length; tot += t; ok += o; return { t: s.t, tot: t, ok: o }; });
+    return { tot: tot, ok: ok, pct: tot ? Math.round(ok / tot * 100) : 0, secs: secs };
+  }
+  window.chkProgresso = function (fid, tipo) { var r = DB.g(K_FUN).find(function (x) { return x.id === fid; }); return progresso(tipo, r ? (r[tipo] || {}) : {}); };
+  function grafico(P, tipo) {
+    var cor = P.pct === 100 ? '#2e7d32' : P.pct >= 50 ? '#B8862B' : '#c0392b';
+    return '<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:var(--gray-50);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">' +
+      '<div style="width:96px;height:96px;border-radius:50%;background:conic-gradient(' + cor + ' ' + (P.pct * 3.6) + 'deg,#e8e2d6 0);display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+      '<div style="width:72px;height:72px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;"><strong style="font-size:20px;color:' + cor + ';">' + P.pct + '%</strong><span style="font-size:10px;color:var(--gray-400);">concluído</span></div></div>' +
+      '<div style="flex:1;min-width:240px;"><div style="font-weight:700;font-size:13.5px;margin-bottom:4px;">' + P.ok + ' de ' + P.tot + ' itens concluídos · <span style="color:' + (P.tot - P.ok ? '#c0392b' : '#2e7d32') + ';">' + (P.tot - P.ok) + ' pendente(s)</span></div>' +
+      P.secs.map(function (s) { var p = s.tot ? Math.round(s.ok / s.tot * 100) : 0; return '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;margin:2px 0;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(s.t) + '">' + esc(s.t) + '</span>' +
+        '<div style="width:110px;height:7px;background:#e8e2d6;border-radius:4px;overflow:hidden;"><div style="width:' + p + '%;height:100%;background:' + (p === 100 ? '#2e7d32' : '#B8862B') + ';"></div></div><span style="width:44px;text-align:right;color:' + (s.ok < s.tot ? '#c0392b' : '#2e7d32') + ';">' + s.ok + '/' + s.tot + '</span></div>'; }).join('') +
+      '</div></div>';
+  }
+  function render(tipo) {
+    var box = el('chk-' + tipo); if (!box) return;
+    var M = modelo(tipo), est = EST[tipo], P = progresso(tipo, est), so = box.dataset.pend === '1';
+    box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><strong style="font-size:14px;color:var(--green-dark);">' + esc(M.tit) + '</strong>' +
+      '<label style="margin-left:auto;font-size:12px;display:flex;gap:5px;align-items:center;text-transform:none;font-weight:400;"><input type="checkbox" style="width:auto;" ' + (so ? 'checked' : '') + ' onchange="chkSoPend(\'' + tipo + '\',this.checked)"> mostrar só pendentes</label>' +
+      '<button type="button" class="btn btn-outline btn-sm" onclick="chkNovoItem(\'' + tipo + '\')">+ Incluir item</button><button type="button" class="btn btn-outline btn-sm" onclick="chkNovaSecao(\'' + tipo + '\')">+ Nova etapa</button>' +
+      '<button type="button" class="btn btn-outline btn-sm" onclick="chkImprimir(\'' + tipo + '\')">🖨️</button></div>' +
+      grafico(P, tipo) + '<div style="font-size:11.5px;color:var(--gray-600);margin-bottom:6px;"><em>Marque cada item ao concluir e preencha data e observações.</em>' + (EST.fid ? ' Fica salvo automaticamente.' : ' Será salvo junto com o cadastro.') + '</div>' +
+      M.secoes.map(function (s) {
+        var itens = s.itens.filter(function (i) { return !so || !(est[i.k] && est[i.k].ok); }); if (so && !itens.length) return '';
+        return '<div style="margin-bottom:10px;"><div style="background:#F7EFD9;color:#8a6420;font-weight:700;font-size:12.5px;padding:5px 8px;border-radius:5px 5px 0 0;">' + esc(s.t) + '</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><tbody>' + (itens.length ? itens.map(function (i) {
+            var e = est[i.k] || {};
+            return '<tr style="border-bottom:1px solid var(--gray-100);' + (e.ok ? 'background:#f1f8f1;' : '') + '"><td style="width:28px;padding:5px;"><input type="checkbox" style="width:18px;height:18px;" ' + (e.ok ? 'checked' : '') + ' onchange="chkMarca(\'' + tipo + '\',\'' + i.k + '\',this.checked)"></td>' +
+              '<td style="padding:5px;' + (e.ok ? 'color:var(--gray-400);text-decoration:line-through;' : '') + '">' + esc(i.t) + (i.custom ? ' <button type="button" class="btn-icon danger" style="font-size:11px;" title="Remover este item incluído" onclick="chkRemover(\'' + tipo + '\',\'' + i.k + '\')">✕</button>' : '') + '</td>' +
+              '<td style="padding:5px;width:96px;font-size:11px;color:var(--gray-600);">' + esc(i.r) + '</td>' +
+              '<td style="padding:3px;width:128px;"><input type="date" value="' + esc(e.data || '') + '" onchange="chkCampo(\'' + tipo + '\',\'' + i.k + '\',\'data\',this.value)" style="padding:3px 5px;font-size:12px;"></td>' +
+              '<td style="padding:3px;width:170px;"><input type="text" value="' + esc(e.obs || '') + '" placeholder="observações" onchange="chkCampo(\'' + tipo + '\',\'' + i.k + '\',\'obs\',this.value)" style="padding:3px 6px;font-size:12px;"></td></tr>';
+          }).join('') : '<tr><td style="padding:6px;color:var(--gray-400);font-size:12px;">Sem itens — use "+ Incluir item".</td></tr>') + '</tbody></table></div>';
+      }).join('') +
+      '<div style="font-size:11.5px;color:var(--gray-600);margin-top:6px;"><strong>Observação:</strong> <em>' + esc(M.obs) + '</em></div>';
+    atualizarAbas();
+  }
+  window.chkSoPend = function (t, v) { el('chk-' + t).dataset.pend = v ? '1' : ''; render(t); };
+  window.chkMarca = function (t, k, v) { var e = EST[t][k] = EST[t][k] || {}; e.ok = v; if (v && !e.data) e.data = hoje(); autoSalvar(); render(t); };
+  window.chkCampo = function (t, k, c, v) { var e = EST[t][k] = EST[t][k] || {}; e[c] = v; autoSalvar(); };
+  window.chkNovoItem = function (t) {
+    var M = modelo(t), secs = M.secoes.map(function (s, i) { return (i + 1) + ' – ' + s.t; }).join('\n');
+    var n = prompt('Em qual etapa incluir? Digite o número:\n\n' + secs, String(M.secoes.length)); if (n === null) return;
+    var s = M.secoes[(parseInt(n, 10) || M.secoes.length) - 1]; if (!s) return;
+    var txt = prompt('Descrição do novo item (vale para todos os funcionários):'); if (!txt || !txt.trim()) return;
+    var resp = prompt('Responsável (ex.: RH, DP, Gestor, Colaborador):', 'RH') || '';
+    salvarCust(t, function (c) { c.itens = c.itens || []; c.itens.push({ k: 'c' + Date.now().toString(36), sec: s.t, t: txt.trim(), r: resp.trim() }); });
+    render(t);
+  };
+  window.chkNovaSecao = function (t) {
+    var nm = prompt('Nome da nova etapa:'); if (!nm || !nm.trim()) return;
+    salvarCust(t, function (c) { c.secNovas = c.secNovas || []; c.secNovas.push({ id: 's' + Date.now().toString(36), t: nm.trim() }); });
+    render(t);
+  };
+  window.chkRemover = function (t, k) { if (!confirm('Remover este item incluído do checklist (para todos os funcionários)?')) return; salvarCust(t, function (c) { c.itens = (c.itens || []).filter(function (i) { return i.k !== k; }); }); render(t); };
+  window.chkImprimir = function (t) {
+    var M = modelo(t), est = EST[t], P = progresso(t, est), nome = (el('fn') && el('fn').value || '').toUpperCase(), logo = window.rhLogo || '';
+    var css = '@page{size:A4;margin:1.2cm 1.4cm;}body{font-family:Calibri,Carlito,Arial,sans-serif;color:#3A2E1A;font-size:9.5pt;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;padding:1.2cm 1.4cm;margin:16px auto;}}' +
+      '.cab{display:flex;gap:12pt;align-items:center;border-bottom:1.5pt solid #B8862B;padding-bottom:5pt;margin-bottom:6pt;}.cab img{width:2.2cm;height:1.35cm;object-fit:contain;}h1{font-size:13pt;margin:0;}table{width:100%;border-collapse:collapse;margin-bottom:5pt;}th{background:#F7EFD9;color:#8a6420;font-size:8pt;text-align:left;border:.5pt solid #C9A961;padding:2pt 4pt;}td{border:.5pt solid #C9A961;padding:2pt 4pt;font-size:8.8pt;}tr.s td{background:#fbf6ea;font-weight:700;color:#8a6420;}';
+    var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(M.tit + (nome ? ' - ' + nome : '')) + '</title><style>' + css + '</style></head><body><div class="cab">' + (logo ? '<img src="' + logo + '">' : '') + '<div><h1>' + esc(M.tit.toUpperCase()) + '</h1><div>' + esc(nome) + ' · ' + P.ok + ' de ' + P.tot + ' concluídos (' + P.pct + '%)</div></div></div>' +
+      '<table><tr><th style="width:6%">OK</th><th>Item</th><th style="width:13%">Responsável</th><th style="width:11%">Data</th><th style="width:24%">Observações</th></tr>' +
+      M.secoes.map(function (s) { return '<tr class="s"><td colspan="5">' + esc(s.t) + '</td></tr>' + s.itens.map(function (i) { var e = est[i.k] || {}, d = e.data ? e.data.split('-').reverse().join('/') : ''; return '<tr><td style="text-align:center;">' + (e.ok ? '☑' : '☐') + '</td><td>' + esc(i.t) + '</td><td>' + esc(i.r) + '</td><td>' + d + '</td><td>' + esc(e.obs || '') + '</td></tr>'; }).join(''); }).join('') +
+      '</table><div><b>Observação:</b> <i>' + esc(M.obs) + '</i></div></body></html>';
+    if (typeof _abrirDocSimples === 'function') _abrirDocSimples(h, (M.tit + '_' + (nome || 'funcionario')).replace(/\s+/g, '_'));
+  };
+  // ── abas no cadastro ──
+  function injetar() {
+    var tabs = document.querySelector('#modal-func .tabs'); if (!tabs || el('ft5')) return;
+    tabs.insertAdjacentHTML('beforeend', '<div class="tab" id="tab-ft5" onclick="fTab(\'ft5\',this)">✅ Admissão <span id="chk-b-adm" style="font-size:11px;opacity:.8;"></span></div><div class="tab" id="tab-ft6" onclick="fTab(\'ft6\',this)" style="display:none;">📤 Demissão <span id="chk-b-dem" style="font-size:11px;opacity:.8;"></span></div>');
+    var ft4 = el('ft4'); ft4.insertAdjacentHTML('afterend', '<div id="ft5" style="display:none"><div id="chk-adm"></div></div><div id="ft6" style="display:none"><div id="chk-dem"></div></div>');
+    var st = el('fst'); if (st) st.addEventListener('change', function () { atualizarAbas(); if (st.value === 'Desligado') { render('dem'); var t6 = el('tab-ft6'); if (t6 && typeof toast === 'function') toast('📤 Checklist de demissão disponível na aba "Demissão"'); } });
+  }
+  function atualizarAbas() {
+    var t6 = el('tab-ft6'), st = el('fst'), desl = st && st.value === 'Desligado', temDem = Object.keys(EST.dem || {}).some(function (k) { return EST.dem[k] && EST.dem[k].ok; });
+    if (t6) t6.style.display = (desl || temDem) ? '' : 'none';
+    var pa = progresso('adm', EST.adm), pd = progresso('dem', EST.dem);
+    if (el('chk-b-adm')) el('chk-b-adm').textContent = pa.pct + '%';
+    if (el('chk-b-dem')) el('chk-b-dem').textContent = pd.pct + '%';
+  }
+  var _fTab = window.fTab;
+  window.fTab = function (id, btn) {
+    ['ft5', 'ft6'].forEach(function (t) { var e = el(t); if (e) e.style.display = 'none'; });
+    var r = _fTab.apply(this, arguments);
+    if (id === 'ft5') render('adm'); if (id === 'ft6') render('dem');
+    return r;
+  };
+  var _edit = window.editFunc;
+  window.editFunc = function (id) { injetar(); carregar(id); var r = _edit.apply(this, arguments); try { render('adm'); render('dem'); atualizarAbas(); } catch (e) { console.error(e); } return r; };
+  var _reset = window.resetFuncModal;
+  window.resetFuncModal = function () { var r = _reset.apply(this, arguments); try { injetar(); carregar(null); render('adm'); render('dem'); atualizarAbas(); } catch (e) {} return r; };
+  var _sav = window.savFunc;
+  window.savFunc = async function () {
+    var editId = null; try { editId = editingFuncId; } catch (e) {}
+    var antes = {}; DB.g('funcionarios').forEach(function (f) { antes[f.id] = 1; });
+    var guard = { adm: EST.adm, dem: EST.dem };
+    var r = await _sav.apply(this, arguments);
+    try {
+      if (el('modal-func').classList.contains('open')) return r;
+      var f = editId ? { id: editId } : DB.g('funcionarios').find(function (x) { return !antes[x.id]; });
+      if (f) { EST.adm = guard.adm; EST.dem = guard.dem; gravar(f.id); }
+    } catch (e) { console.error(e); }
+    return r;
+  };
+  var _open = window.openModal;
+  window.openModal = function (id) { var r = _open.apply(this, arguments); if (id === 'modal-func') { try { injetar(); atualizarAbas(); } catch (e) {} } return r; };
+  if (document.readyState !== 'loading') injetar(); else document.addEventListener('DOMContentLoaded', injetar);
+})();
+</script>
+
 </body>
 </html>
