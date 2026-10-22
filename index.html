@@ -20643,6 +20643,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var s = String(v || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(), m;
     if ((m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/))) return { m: +m[2] - 1, a: +m[3] };
     if ((m = s.match(/^(\d{1,2})[\/-](\d{4})$/))) return { m: +m[1] - 1, a: +m[2] };
+    if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/))) return { m: +m[2] - 1, a: 2000 + +m[3] };
     if ((m = s.match(/(\d{4})-(\d{2})/))) return { m: +m[2] - 1, a: +m[1] };
     var i = MESES.findIndex(function (n) { return s.indexOf(n.normalize('NFD').replace(/[̀-ͯ]/g, '').slice(0, 3)) === 0; }), a = s.match(/(\d{4})/);
     return i >= 0 && a ? { m: i, a: +a[1] } : null;
@@ -20658,16 +20659,21 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
           var wb = XLSX.read(new Uint8Array(await rx.arrayBuffer()), { type: 'array' });
           var nomeAba = wb.SheetNames.find(function (n) { return sem(n) === sem(ABA); }) || wb.SheetNames.find(function (n) { return /DESCONTO/.test(sem(n)); });
           if (!nomeAba) throw new Error('aba "' + ABA + '" não encontrada (abas: ' + wb.SheetNames.join(', ') + ')');
-          var ws = wb.Sheets[nomeAba];
-          return { linhas: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true }), linhasF: XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true }), via: 'Google Drive (conta conectada)' };
+          var ws = wb.Sheets[nomeAba], abaL = wb.SheetNames.find(function (n) { return /^LANCAMENTO/.test(sem(n)); }), wl = abaL ? wb.Sheets[abaL] : null;
+          return { linhas: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true }), linhasF: XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true }),
+            lanc: wl ? XLSX.utils.sheet_to_json(wl, { header: 1, raw: false, defval: '', blankrows: false }) : null, via: 'Google Drive (conta conectada)' };
         }
         erros.push('Drive: ' + (rx.ok ? 'leitor de planilha não carregado' : rx.status === 401 ? 'sessão do Google expirou (clique em Sincronizar / Iniciar no topo)' : rx.status === 403 || rx.status === 404 ? 'a conta conectada não tem acesso à planilha' : 'erro ' + rx.status));
       } catch (e) { erros.push('Drive: ' + (e.message || e)); }
       // 2) API do Google Sheets
       try {
-        var rng = encodeURIComponent("'" + ABA + "'!A1:F600");
+        var rng = encodeURIComponent("'" + ABA + "'!A1:Z600");
         var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + id + '/values/' + rng + '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING', { headers: { Authorization: 'Bearer ' + tok } });
-        if (r.ok) { var j = await r.json(); return { linhas: j.values || [], via: 'Google Sheets (conta conectada)' }; }
+        if (r.ok) {
+          var j = await r.json(), lanc = null;
+          try { var rl = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + id + '/values/' + encodeURIComponent("'Lançamentos'!A1:H3000"), { headers: { Authorization: 'Bearer ' + tok } }); if (rl.ok) lanc = (await rl.json()).values || null; } catch (e) {}
+          return { linhas: j.values || [], lanc: lanc, via: 'Google Sheets (conta conectada)' };
+        }
         erros.push('Sheets: erro ' + r.status);
       } catch (e) { erros.push('Sheets: ' + (e.message || e)); }
     }
@@ -20681,7 +20687,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
           if (js.status !== 'error' && js.table) {
             var LF = js.table.rows.map(function (rw) { return (rw.c || []).map(function (c) { return c ? (c.f != null ? c.f : (c.v != null ? c.v : '')) : ''; }); });
             var LR = js.table.rows.map(function (rw) { return (rw.c || []).map(function (c) { return c ? (typeof c.v === 'number' ? c.v : (c.f != null ? c.f : (c.v != null ? c.v : ''))) : ''; }); });
-            return { linhas: LR, linhasF: LF, via: 'link público da planilha' };
+            var lancP = null;
+            try {
+              var rp = await fetch('https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:json&headers=0&sheet=' + encodeURIComponent('Lançamentos'));
+              var tp = await rp.text(), mp = tp.match(/setResponse\(([\s\S]*)\);?\s*$/), jp = mp ? JSON.parse(mp[1]) : null;
+              if (jp && jp.status !== 'error' && jp.table) lancP = jp.table.rows.map(function (rw) { return (rw.c || []).map(function (c) { return c ? (c.f != null ? c.f : (c.v != null ? c.v : '')) : ''; }); });
+            } catch (e) {}
+            return { linhas: LR, linhasF: LF, lanc: lancP, via: 'link público da planilha' };
           }
         }
       }
@@ -20699,7 +20711,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (cur || row.length) { row.push(cur); out.push(row); }
     return out;
   }
-  function interpretar(L, LF) {
+  function interpretar(L, LF, LC) {
     LF = LF || L;
     var ref = null, hi = -1;
     L.forEach(function (r, i) {
@@ -20716,6 +20728,18 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var r = L[i], nome = String(r[cN] || '').trim(); if (!nome || /^TOTAL/i.test(nome)) continue;
       var f = r2(num(r[cF])); if (!(f > 0)) continue;
       itens.push({ nome: nome, dep: cD >= 0 ? String(r[cD] || '').trim() : '', cargo: cC >= 0 ? String(r[cC] || '').trim() : '', falta: f, parcelas: Math.max(1, Math.round(num(r[cP])) || 1), saldoPlan: cS >= 0 ? num(r[cS]) : null, obs: cO >= 0 ? String((LF[i] || r)[cO] || r[cO] || '').trim() : '' });
+    }
+    // aba "Lançamentos": Data | Colaborador | Valor da falta | Observação → detalhes do mês de referência
+    if (LC && LC.length && ref) {
+      var hl = LC.findIndex(function (r) { return r.some(function (x) { return /COLABORADOR/.test(sem(x)); }); });
+      var HL = hl >= 0 ? LC[hl].map(sem) : [], cl = function (re, pad) { var k = HL.findIndex(function (x) { return re.test(x); }); return k >= 0 ? k : pad; };
+      var lD = cl(/^DATA/, 0), lN = cl(/COLABORADOR|NOME/, 1), lV = cl(/VALOR|FALTA/, 2), lO = cl(/OBSERV|OBS\b/, 3), det = {};
+      for (var k = (hl >= 0 ? hl + 1 : 1); k < LC.length; k++) {
+        var rr = LC[k], nm = String(rr[lN] || '').trim(), vv = r2(num(rr[lV])); if (!nm || !(vv > 0)) continue;
+        var dm = lerMes(rr[lD]); if (dm && (dm.m !== ref.m || dm.a !== ref.a)) continue;
+        (det[sem(nm)] = det[sem(nm)] || []).push({ data: String(rr[lD] || '').trim(), valor: vv, obs: String(rr[lO] || '').trim() });
+      }
+      itens.forEach(function (it) { var d = det[sem(it.nome)]; if (d && d.length) { it.det = d; if (!it.obs) it.obs = d.map(function (x) { return (x.obs || x.data) + ' – R$ ' + brl(x.valor); }).join('; '); } });
     }
     return { ref: ref, itens: itens };
   }
@@ -20760,7 +20784,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (rodando) return; rodando = true;
     var c = cfg(), id = idPlanilha(c.planilha);
     try {
-      var d = await baixar(id), R = interpretar(d.linhas, d.linhasF);
+      var d = await baixar(id), R = interpretar(d.linhas, d.linhasF, d.lanc);
       if (!R.ref) throw new Error('Preencha o "Mês de referência" na planilha.');
       var P = pessoas(), regs = DB.g(K_REG), agora = new Date().toISOString(), ref = R.ref;
       // a planilha é a fonte do mês que ela mostra: substitui os registros desse mês
@@ -20769,10 +20793,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var p = achar(it.nome, P), idr = ref.a + '-' + String(ref.m + 1).padStart(2, '0') + '-' + sem(it.nome).replace(/\s/g, '_');
         var ant = regs.find(function (x) { return x.id === idr; });
         novos.push({ id: idr, nome: it.nome, dep: it.dep, cargo: it.cargo, falta: it.falta, parcelas: it.parcelas, saldoPlan: it.saldoPlan, mes: ref.m, ano: ref.a,
-          obsPlan: it.obs || '', obsSis: ant ? (ant.obsSis || '') : '',
+          obsPlan: it.obs || '', detPlan: it.det || [], obsSis: ant ? (ant.obsSis || '') : '',
           pk: p ? p.pk : '', nomeSis: p ? p.n : '', cpf: p ? p.cpf : '', atualizado: ant && ant.falta === it.falta && ant.parcelas === it.parcelas ? ant.atualizado : agora });
       });
-      var finais = manter.concat(novos), ass = function (L) { return JSON.stringify(L.map(function (x) { return [x.id, x.falta, x.parcelas, x.pk, x.dep, x.obsPlan || '']; }).sort()); };
+      var finais = manter.concat(novos), ass = function (L) { return JSON.stringify(L.map(function (x) { return [x.id, x.falta, x.parcelas, x.pk, x.dep, x.obsPlan || '', JSON.stringify(x.detPlan || [])]; }).sort()); };
       if (ass(finais) !== ass(regs)) DB.s(K_REG, finais);
       gerarLancamentos();
       salvarCfg({ ultima: agora, via: d.via, erro: '', refPlan: ref.m + '/' + ref.a });
@@ -20824,13 +20848,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       linhas.push({ r: r, p: p, saldo: r2(r.falta - pago) }); tot += p.v; var dk = r.dep || 'SEM DEPARTAMENTO'; porDep[dk] = r2((porDep[dk] || 0) + p.v);
     });
     linhas.sort(function (a, b) { return a.r.nome.localeCompare(b.r.nome); });
-    var obsDe = function (r) { return r.obsSis || r.obsPlan || ''; };
+    var obsDe = function (r) { return r.obsSis || ''; };
+    var obsPl = function (r) { return r.obsPlan ? '<div style="font-size:11px;color:var(--gray-600);margin-bottom:3px;" title="Observação da planilha">📄 ' + esc(r.obsPlan) + '</div>' : ''; };
     el('qc-tab').innerHTML = linhas.length ? '<thead><tr><th>Colaborador</th><th>Depto</th><th>Ref. da falta</th><th style="text-align:right;">Falta total</th><th>Parcela</th><th style="text-align:right;">Desconto no mês</th><th style="text-align:right;">Saldo após o mês</th><th>Observação</th><th></th></tr></thead><tbody>' +
       linhas.map(function (x) {
         var r = x.r;
         return '<tr' + (r.pk ? '' : ' style="background:#fff3e0;" title="Não encontrado no cadastro — não entra na folha"') + '><td><strong>' + esc(r.nomeSis || r.nome) + '</strong><div style="font-size:11px;color:var(--gray-400);">' + esc(r.cargo) + '</div></td><td>' + esc(r.dep) + '</td><td>' + String(r.mes + 1).padStart(2, '0') + '/' + r.ano + '</td>' +
           '<td style="text-align:right;">' + brl(r.falta) + '</td><td>' + x.p.k + '/' + r.parcelas + '</td><td style="text-align:right;font-weight:700;">' + brl(x.p.v) + '</td><td style="text-align:right;">' + brl(x.saldo) + '</td>' +
-          '<td style="min-width:180px;"><input type="text" value="' + esc(obsDe(r)) + '" placeholder="ex.: ref. quebra de setembro/2026" onchange="qcObs(\'' + esc(r.id) + '\',this.value)" style="width:100%;padding:4px 6px;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;"></td>' +
+          '<td style="min-width:200px;">' + obsPl(r) + '<input type="text" value="' + esc(obsDe(r)) + '" placeholder="observação do RH (opcional)" onchange="qcObs(\'' + esc(r.id) + '\',this.value)" style="width:100%;padding:4px 6px;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;"></td>' +
           '<td style="white-space:nowrap;"><button class="btn-icon" title="Relatório para o colaborador" onclick="qcRelatorio(\'' + esc(r.pk || ('n:' + r.nome)) + '\')">🖨️</button></td></tr>';
       }).join('') +
       '<tr style="font-weight:700;background:var(--gray-50);"><td colspan="5">TOTAL (' + linhas.length + ')</td><td style="text-align:right;">' + brl(tot) + '</td><td colspan="3"></td></tr></tbody>'
@@ -20840,7 +20865,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var H = regs.slice().sort(function (a, b) { return (b.ano * 12 + b.mes) - (a.ano * 12 + a.mes) || a.nome.localeCompare(b.nome); });
     el('qc-hist').innerHTML = H.length ? '<thead><tr><th>Ref.</th><th>Colaborador</th><th>Depto</th><th style="text-align:right;">Falta</th><th>Parcelas</th><th>Meses de desconto</th><th>Observação</th></tr></thead><tbody>' +
       H.map(function (r) { var ps = parcelas(r); return '<tr><td>' + String(r.mes + 1).padStart(2, '0') + '/' + r.ano + '</td><td>' + esc(r.nomeSis || r.nome) + (r.pk ? '' : ' <span style="color:#c0392b;font-size:11px;">(não encontrado)</span>') + '</td><td>' + esc(r.dep) + '</td><td style="text-align:right;">' + brl(r.falta) + '</td><td>' + r.parcelas + 'x de ' + brl(ps[0].v) + '</td><td>' + ps.map(function (p) { return String(p.mes + 1).padStart(2, '0') + '/' + p.ano; }).join(', ') + '</td>' +
-        '<td style="min-width:180px;"><input type="text" value="' + esc(obsDe(r)) + '" placeholder="observação" onchange="qcObs(\'' + esc(r.id) + '\',this.value)" style="width:100%;padding:4px 6px;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;"></td></tr>'; }).join('') + '</tbody>'
+        '<td style="min-width:200px;">' + obsPl(r) + '<input type="text" value="' + esc(obsDe(r)) + '" placeholder="observação do RH (opcional)" onchange="qcObs(\'' + esc(r.id) + '\',this.value)" style="width:100%;padding:4px 6px;font-size:12px;border:1.5px solid var(--gray-200);border-radius:6px;"></td></tr>'; }).join('') + '</tbody>'
       : '<tr><td style="padding:14px;color:var(--gray-400);">Nada registrado ainda.</td></tr>';
   };
   // observação digitada no sistema (fica salva e tem prioridade sobre a da planilha)
@@ -20877,12 +20902,19 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       pes = pes || {};
       var emp = pes.emp ? DB.g('empresas').find(function (e) { return e.id === pes.emp; }) : null, razao = (emp && emp.razao) || 'BIN EMBALAGENS', cnpj = (emp && emp.cnpj) || '';
       var tot = r2(g.itens.reduce(function (s2, x) { return s2 + x.p.v; }, 0)), saldo = r2(g.itens.reduce(function (s2, x) { return s2 + x.saldo; }, 0));
-      var obs = g.itens.map(function (x) { return (x.r.obsSis || x.r.obsPlan) ? ((g.itens.length > 1 ? 'Lançamento ' + MESES[x.r.mes] + '/' + x.r.ano + ': ' : '') + (x.r.obsSis || x.r.obsPlan)) : ''; }).filter(Boolean);
+      var det = []; g.itens.forEach(function (x) { (x.r.detPlan || []).forEach(function (d) { det.push(d); }); });
+      var obs = g.itens.map(function (x) {
+        var t = [(x.r.detPlan && x.r.detPlan.length) ? '' : x.r.obsPlan, x.r.obsSis].filter(Boolean).join(' · ');
+        return t ? ((g.itens.length > 1 ? 'Lançamento ' + MESES[x.r.mes] + '/' + x.r.ano + ': ' : '') + t) : '';
+      }).filter(Boolean);
+      var tabDet = det.length ? '<div class="rot" style="margin-top:10pt;">FALTAS DE CAIXA LANÇADAS</div><table class="t" style="margin-top:3pt;"><tr><th style="width:22%">Data do lançamento</th><th>Observação</th><th class="n" style="width:22%">Valor da falta</th></tr>' +
+        det.map(function (d) { return '<tr><td>' + esc(d.data) + '</td><td>' + esc(d.obs) + '</td><td class="n">R$ ' + brl(d.valor) + '</td></tr>'; }).join('') +
+        '<tr class="tt"><td colspan="2">TOTAL DAS FALTAS</td><td class="n">R$ ' + brl(det.reduce(function (s2, d) { return s2 + d.valor; }, 0)) + '</td></tr></table>' : '';
       return '<div class="pg">' + (logo ? '<div class="logo"><img src="' + logo + '" alt="BIN"></div>' : '') +
         '<div class="tit">DEMONSTRATIVO DE DESCONTO – QUEBRA DE CAIXA</div><div class="sub">' + esc(razao.toUpperCase()) + (cnpj ? ' · CNPJ ' + esc(cnpj) : '') + ' · Desconto na folha de ' + esc(mesTxt) + '</div>' +
         '<table class="d"><tr><td style="width:62%"><div class="rot">COLABORADOR(A)</div><div class="val">' + esc((r0.nomeSis || r0.nome).toUpperCase()) + '</div></td><td><div class="rot">CPF</div><div class="val">' + esc(pes.cpf || r0.cpf || '') + '&nbsp;</div></td></tr>' +
         '<tr><td><div class="rot">CARGO / FUNÇÃO</div><div class="val">' + esc((pes.car || r0.cargo || '').toUpperCase()) + '&nbsp;</div></td><td><div class="rot">DEPARTAMENTO</div><div class="val">' + esc(r0.dep || '') + '&nbsp;</div></td></tr></table>' +
-        '<table class="t"><tr><th>Lançamento (mês)</th><th class="n">Valor da falta</th><th>Parcela</th><th class="n">Desconto em ' + esc(MESES[vis.m]) + '</th><th class="n">Saldo restante</th></tr>' +
+        tabDet + '<table class="t"><tr><th>Lançamento (mês)</th><th class="n">Valor da falta</th><th>Parcela</th><th class="n">Desconto em ' + esc(MESES[vis.m]) + '</th><th class="n">Saldo restante</th></tr>' +
         g.itens.map(function (x) { return '<tr><td>' + MESES[x.r.mes] + '/' + x.r.ano + '</td><td class="n">R$ ' + brl(x.r.falta) + '</td><td>' + x.p.k + ' de ' + x.r.parcelas + '</td><td class="n">R$ ' + brl(x.p.v) + '</td><td class="n">R$ ' + brl(x.saldo) + '</td></tr>'; }).join('') +
         '<tr class="tt"><td colspan="3">TOTAL DESCONTADO NA FOLHA DE ' + esc(mesTxt) + '</td><td class="n">R$ ' + brl(tot) + '</td><td class="n">R$ ' + brl(saldo) + '</td></tr></table>' +
         (obs.length ? '<div class="obs"><div class="rot">OBSERVAÇÃO</div><div class="val">' + obs.map(esc).join('<br>') + '</div></div>' : '') +
