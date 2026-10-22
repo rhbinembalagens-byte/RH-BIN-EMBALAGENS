@@ -20819,7 +20819,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div id="qc-status" style="font-size:12.5px;margin-bottom:10px;"></div>' +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><strong style="font-size:13.5px;">Descontos na folha de</strong>' +
       '<button class="btn btn-outline btn-sm" onclick="qcMes(-1)">◀</button><strong id="qc-mes-lbl" style="min-width:130px;text-align:center;"></strong><button class="btn btn-outline btn-sm" onclick="qcMes(1)">▶</button>' +
-      '<button class="btn btn-outline btn-sm" onclick="qcMes(0)">Mês atual</button><button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="qcRelatorio()">🖨️ Relatório do mês (todos)</button><button class="btn btn-outline btn-sm" onclick="qcFolha()">🗂️ Abrir lançamentos da folha</button></div>' +
+      '<button class="btn btn-outline btn-sm" onclick="qcMes(0)">Mês atual</button><button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="qcRelatorio()">🖨️ Relatório (empresa / departamento)</button><button class="btn btn-outline btn-sm" onclick="qcFolha()">🗂️ Abrir lançamentos da folha</button></div>' +
       '<div class="table-wrap"><table id="qc-tab" style="font-size:13px;"></table></div>' +
       '<div id="qc-dep" style="margin-top:12px;"></div>' +
       '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:16px 0 6px;">Faltas registradas (todas as referências)</div>' +
@@ -20873,58 +20873,115 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var L = DB.g(K_REG), r = L.find(function (x) { return x.id === id; }); if (!r) return;
     r.obsSis = String(v || '').trim(); DB.s(K_REG, L); qcRender(); if (typeof toast === 'function') toast('Observação salva ✅');
   };
-  // relatório para apresentar ao colaborador (uma página por colaborador)
+  // ── relatório de quebra de caixa (por empresa / departamento / colaborador) ──
+  function pessoaDe(r) { if (!r.pk) return {}; var id = r.pk.slice(2); return (r.pk[0] === 'f' ? DB.g('funcionarios').find(function (x) { return x.id === id; }) : DB.g('colab-ext').find(function (x) { return x.id === id; })) || {}; }
+  function empDe(r) { var p = pessoaDe(r), e = p.emp ? DB.g('empresas').find(function (x) { return x.id === p.emp; }) : null; return { k: e ? e.id : '', razao: e ? e.razao : 'SEM EMPRESA NO CADASTRO', cnpj: e ? e.cnpj : '' }; }
+  function depDe(r) { if (r.dep) return String(r.dep).toUpperCase(); var p = pessoaDe(r), d = p.dep ? DB.g('departamentos').find(function (x) { return x.id === p.dep; }) : null; return d ? d.nome.toUpperCase() : 'SEM DEPARTAMENTO'; }
+  function linhasMes(filtro) {
+    var out = [];
+    DB.g(K_REG).forEach(function (r) {
+      var ps = parcelas(r), p = ps.find(function (x) { return x.mes === vis.m && x.ano === vis.a; }); if (!p) return;
+      var pago = ps.filter(function (x) { return x.ano * 12 + x.mes <= vis.a * 12 + vis.m; }).reduce(function (s2, x) { return s2 + x.v; }, 0);
+      var e = empDe(r), d = depDe(r), o = { r: r, p: p, saldo: r2(r.falta - pago), emp: e, dep: d, nome: (r.nomeSis || r.nome).toUpperCase(), pes: pessoaDe(r) };
+      if (filtro && !filtro(o)) return; out.push(o);
+    });
+    return out;
+  }
   window.qcRelatorio = function (chave) {
     if (!vis) { var h0 = new Date(); vis = { m: h0.getMonth(), a: h0.getFullYear() }; }
-    var regs = DB.g(K_REG), grupos = {}, ordem = [];
-    regs.forEach(function (r) {
-      var ps = parcelas(r), p = ps.find(function (x) { return x.mes === vis.m && x.ano === vis.a; }); if (!p) return;
-      var k = r.pk || ('n:' + r.nome); if (chave && k !== chave) return;
-      var pago = ps.filter(function (x) { return x.ano * 12 + x.mes <= vis.a * 12 + vis.m; }).reduce(function (s2, x) { return s2 + x.v; }, 0);
-      if (!grupos[k]) { grupos[k] = { r0: r, itens: [] }; ordem.push(k); }
-      grupos[k].itens.push({ r: r, p: p, saldo: r2(r.falta - pago) });
-    });
-    if (!ordem.length) { alert('Nenhum desconto de quebra de caixa neste mês.'); return; }
-    ordem.sort(function (a, b) { return (grupos[a].r0.nomeSis || grupos[a].r0.nome).localeCompare(grupos[b].r0.nomeSis || grupos[b].r0.nome); });
-    var mesTxt = MESES[vis.m].toUpperCase() + '/' + vis.a, hoje = new Date();
-    var css = '@page{size:A4;margin:1.3cm 1.8cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;font-size:10.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
-      '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;padding:1.3cm 1.8cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}' +
-      '.pg+.pg{break-before:page;page-break-before:always;}.logo{text-align:center;margin-bottom:2pt;}.logo img{width:3cm;height:1.85cm;object-fit:contain;}.tit{text-align:center;font-size:14pt;font-weight:700;}' +
-      '.sub{text-align:center;font-size:8.5pt;font-style:italic;color:#B8862B;border-bottom:1.5pt solid #B8862B;padding-bottom:4pt;margin-bottom:8pt;}' +
-      'table.d{width:100%;border-collapse:collapse;}table.d td{border:.5pt solid #C9A961;padding:3pt 5pt;vertical-align:top;}.rot{font-size:7.5pt;font-weight:700;color:#B8862B;}.val{font-size:10pt;}' +
-      'table.t{width:100%;border-collapse:collapse;margin:10pt 0 6pt;}table.t th{background:#F7EFD9;color:#8a6420;font-size:8pt;text-align:left;border:.5pt solid #C9A961;padding:3pt 5pt;}table.t td{border:.5pt solid #C9A961;padding:3pt 5pt;font-size:9.5pt;vertical-align:top;}table.t .n{text-align:right;white-space:nowrap;}table.t tr.tt td{font-weight:700;background:#F7EFD9;}' +
-      '.obs{margin-top:6pt;border:.5pt solid #C9A961;border-radius:3pt;padding:5pt 7pt;}.txt{text-align:justify;line-height:1.35;margin:10pt 0;}.local{margin:10pt 0 30pt;}' +
-      'table.ass{width:100%;border-collapse:collapse;}table.ass td{width:46%;text-align:center;font-size:9pt;}table.ass td.g{width:8%;}table.ass td div{border-top:.75pt solid #3A2E1A;padding-top:2pt;}';
-    var logo = window.rhLogo || '';
-    var paginas = ordem.map(function (k) {
-      var g = grupos[k], r0 = g.r0, pes = r0.pk && typeof acharPessoaRH === 'function' ? acharPessoaRH(r0.pk) : null;
-      if (!pes && r0.pk) { var id = r0.pk.slice(2); pes = r0.pk[0] === 'f' ? DB.g('funcionarios').find(function (x) { return x.id === id; }) : DB.g('colab-ext').find(function (x) { return x.id === id; }); }
-      pes = pes || {};
-      var emp = pes.emp ? DB.g('empresas').find(function (e) { return e.id === pes.emp; }) : null, razao = (emp && emp.razao) || 'BIN EMBALAGENS', cnpj = (emp && emp.cnpj) || '';
-      var tot = r2(g.itens.reduce(function (s2, x) { return s2 + x.p.v; }, 0)), saldo = r2(g.itens.reduce(function (s2, x) { return s2 + x.saldo; }, 0));
-      var det = []; g.itens.forEach(function (x) { (x.r.detPlan || []).forEach(function (d) { det.push(d); }); });
-      var obs = g.itens.map(function (x) {
-        var t = [(x.r.detPlan && x.r.detPlan.length) ? '' : x.r.obsPlan, x.r.obsSis].filter(Boolean).join(' · ');
-        return t ? ((g.itens.length > 1 ? 'Lançamento ' + MESES[x.r.mes] + '/' + x.r.ano + ': ' : '') + t) : '';
-      }).filter(Boolean);
-      var tabDet = det.length ? '<div class="rot" style="margin-top:10pt;">FALTAS DE CAIXA LANÇADAS</div><table class="t" style="margin-top:3pt;"><tr><th style="width:22%">Data do lançamento</th><th>Observação</th><th class="n" style="width:22%">Valor da falta</th></tr>' +
-        det.map(function (d) { return '<tr><td>' + esc(d.data) + '</td><td>' + esc(d.obs) + '</td><td class="n">R$ ' + brl(d.valor) + '</td></tr>'; }).join('') +
-        '<tr class="tt"><td colspan="2">TOTAL DAS FALTAS</td><td class="n">R$ ' + brl(det.reduce(function (s2, d) { return s2 + d.valor; }, 0)) + '</td></tr></table>' : '';
-      return '<div class="pg">' + (logo ? '<div class="logo"><img src="' + logo + '" alt="BIN"></div>' : '') +
-        '<div class="tit">DEMONSTRATIVO DE DESCONTO – QUEBRA DE CAIXA</div><div class="sub">' + esc(razao.toUpperCase()) + (cnpj ? ' · CNPJ ' + esc(cnpj) : '') + ' · Desconto na folha de ' + esc(mesTxt) + '</div>' +
-        '<table class="d"><tr><td style="width:62%"><div class="rot">COLABORADOR(A)</div><div class="val">' + esc((r0.nomeSis || r0.nome).toUpperCase()) + '</div></td><td><div class="rot">CPF</div><div class="val">' + esc(pes.cpf || r0.cpf || '') + '&nbsp;</div></td></tr>' +
-        '<tr><td><div class="rot">CARGO / FUNÇÃO</div><div class="val">' + esc((pes.car || r0.cargo || '').toUpperCase()) + '&nbsp;</div></td><td><div class="rot">DEPARTAMENTO</div><div class="val">' + esc(r0.dep || '') + '&nbsp;</div></td></tr></table>' +
-        tabDet + '<table class="t"><tr><th>Lançamento (mês)</th><th class="n">Valor da falta</th><th>Parcela</th><th class="n">Desconto em ' + esc(MESES[vis.m]) + '</th><th class="n">Saldo restante</th></tr>' +
-        g.itens.map(function (x) { return '<tr><td>' + MESES[x.r.mes] + '/' + x.r.ano + '</td><td class="n">R$ ' + brl(x.r.falta) + '</td><td>' + x.p.k + ' de ' + x.r.parcelas + '</td><td class="n">R$ ' + brl(x.p.v) + '</td><td class="n">R$ ' + brl(x.saldo) + '</td></tr>'; }).join('') +
-        '<tr class="tt"><td colspan="3">TOTAL DESCONTADO NA FOLHA DE ' + esc(mesTxt) + '</td><td class="n">R$ ' + brl(tot) + '</td><td class="n">R$ ' + brl(saldo) + '</td></tr></table>' +
-        (obs.length ? '<div class="obs"><div class="rot">OBSERVAÇÃO</div><div class="val">' + obs.map(esc).join('<br>') + '</div></div>' : '') +
-        '<p class="txt">Declaro estar ciente da(s) diferença(s) de caixa acima apurada(s) sob minha responsabilidade e autorizo o desconto do valor indicado em minha folha de pagamento de <b>' + esc(MESES[vis.m]) + ' de ' + vis.a + '</b>' + (saldo > 0 ? ', permanecendo o saldo restante para desconto nas parcelas seguintes' : '') + ', conforme acordado (art. 462, § 1º, da CLT).</p>' +
-        '<p class="local">Guarulhos – SP, ' + String(hoje.getDate()).padStart(2, '0') + ' de ' + MESES[hoje.getMonth()] + ' de ' + hoje.getFullYear() + '.</p>' +
-        '<table class="ass"><tr><td><div>' + esc((r0.nomeSis || r0.nome).toUpperCase()) + '<br>Colaborador(a)</div></td><td class="g"></td><td><div>' + esc(razao.toUpperCase()) + '<br>Empregador</div></td></tr></table></div>';
-    });
-    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Quebra de Caixa ' + mesTxt + (ordem.length === 1 ? ' - ' + (grupos[ordem[0]].r0.nomeSis || grupos[ordem[0]].r0.nome) : '')) + '</title><style>' + css + '</style></head><body>' + paginas.join('') + '</body></html>';
-    _abrirDocSimples(html, ('Quebra_de_Caixa_' + MESES[vis.m] + '_' + vis.a + (ordem.length === 1 ? '_' + (grupos[ordem[0]].r0.nomeSis || grupos[ordem[0]].r0.nome) : '')).replace(/\s+/g, '_'));
+    if (chave) { gerarRel(linhasMes(function (o) { return (o.r.pk || ('n:' + o.r.nome)) === chave; }), 'colab'); return; }
+    var L = linhasMes(); if (!L.length) { alert('Nenhum desconto de quebra de caixa neste mês.'); return; }
+    var emps = {}, deps = {}; L.forEach(function (o) { emps[o.emp.k || '_'] = o.emp.razao; deps[o.dep] = 1; });
+    if (!el('modal-qc-rel')) document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-qc-rel"><div class="modal" style="max-width:520px;"><div class="modal-header"><span class="modal-title">🖨️ Relatório de quebra de caixa</span><button class="modal-close" onclick="closeModal(\'modal-qc-rel\')">×</button></div>' +
+      '<div id="qcr-mes" style="font-size:13px;margin-bottom:10px;"></div>' +
+      '<div class="form-group"><label>Empresa</label><select id="qcr-emp" onchange="qcRelDeps()"></select></div>' +
+      '<div class="form-group"><label>Departamento</label><select id="qcr-dep"></select></div>' +
+      '<div class="form-group"><label>Formato</label><div style="display:flex;flex-direction:column;gap:6px;font-size:13.5px;">' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;margin:0;"><input type="radio" name="qcr-fmt" value="cons" checked style="width:auto;"> Consolidado (empresa › departamento › colaborador, com totais)</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;margin:0;"><input type="radio" name="qcr-fmt" value="colab" style="width:auto;"> Uma página por colaborador (para apresentar)</label></div></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-qc-rel\')">Cancelar</button><button class="btn btn-primary" onclick="qcRelGerar()">🖨️ Gerar relatório</button></div></div></div>');
+    el('qcr-mes').innerHTML = 'Descontos na folha de <strong>' + MESES[vis.m] + '/' + vis.a + '</strong> · ' + L.length + ' colaborador(es)';
+    el('qcr-emp').innerHTML = '<option value="">Todas as empresas</option>' + Object.keys(emps).sort(function (a, b) { return emps[a].localeCompare(emps[b]); }).map(function (k) { return '<option value="' + esc(k) + '">' + esc(emps[k]) + '</option>'; }).join('');
+    qcRelDeps();
+    el('modal-qc-rel').classList.add('open');
   };
+  window.qcRelDeps = function () {
+    var ek = el('qcr-emp').value, ds = {};
+    linhasMes(function (o) { return !ek || (o.emp.k || '_') === ek; }).forEach(function (o) { ds[o.dep] = 1; });
+    el('qcr-dep').innerHTML = '<option value="">Todos os departamentos</option>' + Object.keys(ds).sort().map(function (d) { return '<option value="' + esc(d) + '">' + esc(d) + '</option>'; }).join('');
+  };
+  window.qcRelGerar = function () {
+    var ek = el('qcr-emp').value, dk = el('qcr-dep').value, fmt = (document.querySelector('input[name="qcr-fmt"]:checked') || {}).value || 'cons';
+    var L = linhasMes(function (o) { return (!ek || (o.emp.k || '_') === ek) && (!dk || o.dep === dk); });
+    if (!L.length) { alert('Nada encontrado com esses filtros.'); return; }
+    closeModal('modal-qc-rel');
+    gerarRel(L, fmt, { emp: ek ? el('qcr-emp').selectedOptions[0].text : 'Todas as empresas', dep: dk || 'Todos os departamentos' });
+  };
+  function gerarRel(L, fmt, filtros) {
+    if (!L.length) { alert('Nenhum desconto de quebra de caixa neste mês.'); return; }
+    var mesTxt = MESES[vis.m].toUpperCase() + '/' + vis.a, hoje = new Date(), m = function (v) { return 'R$ ' + brl(v); };
+    var css = '@page{size:A4;margin:1.2cm 1.5cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;font-size:10pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+      '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;padding:1.2cm 1.5cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}' +
+      '.pg+.pg{break-before:page;page-break-before:always;}.cab{display:flex;align-items:center;gap:14pt;border-bottom:1.5pt solid #B8862B;padding-bottom:6pt;margin-bottom:8pt;}.cab img{width:2.3cm;height:1.4cm;object-fit:contain;}' +
+      '.tit{font-size:13.5pt;font-weight:700;}.sub{font-size:8.5pt;color:#8a6420;margin-top:2pt;}.filt{font-size:8.5pt;color:#6b5a3a;margin-bottom:8pt;}' +
+      'h3{font-size:11pt;color:#8a6420;margin:12pt 0 3pt;border-bottom:.5pt solid #C9A961;padding-bottom:2pt;}h4{font-size:10pt;margin:8pt 0 2pt;}' +
+      'table.t{width:100%;border-collapse:collapse;margin:3pt 0 6pt;}table.t th{background:#F7EFD9;color:#8a6420;font-size:7.8pt;text-align:left;border:.5pt solid #C9A961;padding:2.5pt 4pt;}table.t td{border:.5pt solid #C9A961;padding:2.5pt 4pt;font-size:9pt;vertical-align:top;}' +
+      'table.t .n{text-align:right;white-space:nowrap;}table.t tr.st td{font-weight:700;background:#fbf6ea;}table.t tr.tt td{font-weight:700;background:#F7EFD9;}.det{font-size:8.3pt;color:#5a4a2c;}.pe{font-size:7.5pt;color:#8a7650;margin-top:10pt;text-align:right;}' +
+      'table.d{width:100%;border-collapse:collapse;margin-bottom:6pt;}table.d td{border:.5pt solid #C9A961;padding:3pt 5pt;}.rot{font-size:7.5pt;font-weight:700;color:#B8862B;}.obs{border:.5pt solid #C9A961;padding:4pt 6pt;margin-top:4pt;}';
+    var logo = window.rhLogo || '', cab = function (sub) { return '<div class="cab">' + (logo ? '<img src="' + logo + '" alt="BIN">' : '') + '<div><div class="tit">RELATÓRIO DE QUEBRA DE CAIXA</div><div class="sub">' + sub + '</div></div></div>'; };
+    var detHtml = function (o) {
+      var d = o.r.detPlan || [];
+      return d.length ? d.map(function (x) { return esc(x.data) + (x.obs ? ' · ' + esc(x.obs) : '') + ' · ' + m(x.valor); }).join('<br>') : esc(o.r.obsPlan || '');
+    };
+    var ord = function (a, b) { return a.emp.razao.localeCompare(b.emp.razao) || a.dep.localeCompare(b.dep, 'pt-BR', { numeric: true }) || a.nome.localeCompare(b.nome); };
+    L.sort(ord);
+    var corpo = '';
+    if (fmt === 'colab') {
+      // uma página por colaborador
+      var pk = {}, ordem = []; L.forEach(function (o) { var k = o.r.pk || o.nome; if (!pk[k]) { pk[k] = []; ordem.push(k); } pk[k].push(o); });
+      corpo = ordem.map(function (k) {
+        var G = pk[k], o0 = G[0], tot = r2(G.reduce(function (s2, o) { return s2 + o.p.v; }, 0)), sal = r2(G.reduce(function (s2, o) { return s2 + o.saldo; }, 0)), det = [];
+        G.forEach(function (o) { (o.r.detPlan || []).forEach(function (x) { det.push(x); }); });
+        var obsS = G.map(function (o) { return o.r.obsSis; }).filter(Boolean);
+        return '<div class="pg">' + cab(esc(o0.emp.razao) + (o0.emp.cnpj ? ' · CNPJ ' + esc(o0.emp.cnpj) : '') + ' · Desconto na folha de ' + mesTxt) +
+          '<table class="d"><tr><td style="width:60%"><div class="rot">COLABORADOR(A)</div>' + esc(o0.nome) + '</td><td><div class="rot">CPF</div>' + esc(o0.pes.cpf || o0.r.cpf || '') + '&nbsp;</td></tr>' +
+          '<tr><td><div class="rot">CARGO / FUNÇÃO</div>' + esc((o0.pes.car || o0.r.cargo || '').toUpperCase()) + '&nbsp;</td><td><div class="rot">DEPARTAMENTO</div>' + esc(o0.dep) + '</td></tr></table>' +
+          (det.length ? '<h4>Faltas de caixa lançadas</h4><table class="t"><tr><th style="width:22%">Data do lançamento</th><th>Observação</th><th class="n" style="width:20%">Valor da falta</th></tr>' +
+            det.map(function (x) { return '<tr><td>' + esc(x.data) + '</td><td>' + esc(x.obs) + '</td><td class="n">' + m(x.valor) + '</td></tr>'; }).join('') +
+            '<tr class="tt"><td colspan="2">TOTAL DAS FALTAS</td><td class="n">' + m(det.reduce(function (s2, x) { return s2 + x.valor; }, 0)) + '</td></tr></table>' : '') +
+          '<h4>Desconto em folha</h4><table class="t"><tr><th>Lançamento (mês)</th><th class="n">Valor da falta</th><th>Parcela</th><th class="n">Desconto em ' + MESES[vis.m] + '</th><th class="n">Saldo restante</th></tr>' +
+          G.map(function (o) { return '<tr><td>' + MESES[o.r.mes] + '/' + o.r.ano + '</td><td class="n">' + m(o.r.falta) + '</td><td>' + o.p.k + ' de ' + o.r.parcelas + '</td><td class="n">' + m(o.p.v) + '</td><td class="n">' + m(o.saldo) + '</td></tr>'; }).join('') +
+          '<tr class="tt"><td colspan="3">TOTAL DESCONTADO NA FOLHA DE ' + mesTxt + '</td><td class="n">' + m(tot) + '</td><td class="n">' + m(sal) + '</td></tr></table>' +
+          (obsS.length ? '<div class="obs"><div class="rot">OBSERVAÇÃO</div>' + obsS.map(esc).join('<br>') + '</div>' : '') +
+          '<div class="pe">Emitido em ' + hoje.toLocaleDateString('pt-BR') + '</div></div>';
+      }).join('');
+    } else {
+      // consolidado: empresa › departamento › colaborador
+      var tg = 0, tq = 0, emps = [], porE = {};
+      L.forEach(function (o) { var k = o.emp.razao; if (!porE[k]) { porE[k] = { e: o.emp, deps: {}, ordD: [] }; emps.push(k); } var E = porE[k]; if (!E.deps[o.dep]) { E.deps[o.dep] = []; E.ordD.push(o.dep); } E.deps[o.dep].push(o); });
+      var resumo = '<table class="t"><tr><th>Empresa</th><th>Departamento</th><th class="n">Colaboradores</th><th class="n">Desconto no mês</th><th class="n">Saldo a descontar</th></tr>';
+      corpo = emps.map(function (k) {
+        var E = porE[k], te = 0, se = 0, qe = 0;
+        var blocos = E.ordD.map(function (d) {
+          var G = E.deps[d], td = r2(G.reduce(function (s2, o) { return s2 + o.p.v; }, 0)), sd = r2(G.reduce(function (s2, o) { return s2 + o.saldo; }, 0));
+          te += td; se += sd; qe += G.length; resumo += '<tr><td>' + esc(k) + '</td><td>' + esc(d) + '</td><td class="n">' + G.length + '</td><td class="n">' + m(td) + '</td><td class="n">' + m(sd) + '</td></tr>';
+          return '<h4>' + esc(d) + '</h4><table class="t" style="table-layout:fixed;"><colgroup><col style="width:22%"><col style="width:14%"><col style="width:29%"><col style="width:9.5%"><col style="width:6%"><col style="width:10%"><col style="width:9.5%"></colgroup><tr><th>Colaborador</th><th>Cargo</th><th>Lançamentos (data · observação · valor)</th><th class="n">Falta</th><th>Parc.</th><th class="n">Desconto</th><th class="n">Saldo</th></tr>' +
+            G.map(function (o) { return '<tr><td><b>' + esc(o.nome) + '</b>' + (o.r.obsSis ? '<div class="det">Obs.: ' + esc(o.r.obsSis) + '</div>' : '') + '</td><td>' + esc((o.pes.car || o.r.cargo || '').toUpperCase()) + '</td><td class="det">' + detHtml(o) + '</td><td class="n">' + m(o.r.falta) + '</td><td>' + o.p.k + '/' + o.r.parcelas + '</td><td class="n">' + m(o.p.v) + '</td><td class="n">' + m(o.saldo) + '</td></tr>'; }).join('') +
+            '<tr class="st"><td colspan="5">Subtotal ' + esc(d) + ' (' + G.length + ')</td><td class="n">' + m(td) + '</td><td class="n">' + m(sd) + '</td></tr></table>';
+        }).join('');
+        tg += te; tq += qe;
+        return '<h3>' + esc(k) + (E.e.cnpj ? ' · CNPJ ' + esc(E.e.cnpj) : '') + ' — total ' + m(r2(te)) + '</h3>' + blocos;
+      }).join('');
+      resumo += '<tr class="tt"><td colspan="2">TOTAL GERAL</td><td class="n">' + tq + '</td><td class="n">' + m(r2(tg)) + '</td><td class="n">' + m(r2(L.reduce(function (s2, o) { return s2 + o.saldo; }, 0))) + '</td></tr></table>';
+      corpo = '<div class="pg">' + cab('Descontos na folha de ' + mesTxt + ' · ' + L.length + ' colaborador(es) · total ' + m(r2(tg))) +
+        (filtros ? '<div class="filt">Filtros: ' + esc(filtros.emp) + ' · ' + esc(filtros.dep) + '</div>' : '') +
+        '<h3>Resumo por empresa e departamento</h3>' + resumo + corpo + '<div class="pe">Emitido em ' + hoje.toLocaleDateString('pt-BR') + ' às ' + hoje.toLocaleTimeString('pt-BR').slice(0, 5) + '</div></div>';
+    }
+    var nomeArq = 'Relatorio_Quebra_de_Caixa_' + MESES[vis.m] + '_' + vis.a + (fmt === 'colab' && L.length && L.every(function (o) { return o.r.pk === L[0].r.pk; }) ? '_' + L[0].nome : '');
+    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(nomeArq.replace(/_/g, ' ')) + '</title><style>' + css + '</style></head><body>' + corpo + '</body></html>';
+    _abrirDocSimples(html, nomeArq.replace(/\s+/g, '_'));
+  }
   var _nav = window.nav;
   window.nav = function (id, elx) {
     if (id === 'quebra') injetar();
