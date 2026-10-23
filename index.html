@@ -1010,7 +1010,8 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
     <div id="func-view-aniv" style="display:none;">
 <div class="card-header"><span class="card-title" style="font-size:15px;">🎂 Aniversariantes</span>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <select id="bday-dep" onchange="rdBday()" onfocus="bdayDeps()" title="Departamento" style="padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;"><option value="">Todos os departamentos</option></select>
         <select id="bday-filter" onchange="rdBday()" style="padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;">
           <option value="mes">Este mês</option>
           <option value="semana">Esta semana</option>
@@ -6892,11 +6893,22 @@ function hideReconnectButton() {
 }
 
 // ANIVERSARIANTES
+// filtro de departamento dos aniversariantes
+function bdayDepOk(f) { var s = document.getElementById('bday-dep'), v = s ? s.value : ''; return !v || f.dep === v; }
+function bdayDepNome() { var s = document.getElementById('bday-dep'); return s && s.value ? s.options[s.selectedIndex].text : ''; }
+function bdayDeps() {
+  var s = document.getElementById('bday-dep'); if (!s) return; var atual = s.value;
+  var usados = {}; DB.g('funcionarios').forEach(function (f) { if (f.dep && f.st !== 'Desligado') usados[f.dep] = 1; });
+  var deps = DB.g('departamentos').filter(function (d) { return usados[d.id]; }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR', { numeric: true }); });
+  var html = '<option value="">Todos os departamentos</option>' + deps.map(function (d) { return '<option value="' + d.id + '">' + String(d.nome).replace(/</g, '&lt;') + '</option>'; }).join('');
+  if (s.innerHTML !== html) { s.innerHTML = html; s.value = Array.prototype.some.call(s.options, function (o) { return o.value === atual; }) ? atual : ''; }
+}
 function rdBday() {
   var filter = (document.getElementById('bday-filter') || {value:'mes'}).value;
   var hoje = new Date(); var hm = hoje.getMonth()+1; var hd = hoje.getDate();
   if (/^m\d+$/.test(filter)) { hm = parseInt(filter.slice(1), 10); filter = 'mes'; }
-  var funcs = DB.g('funcionarios').filter(function(f){ return f.nas && f.st !== 'Desligado'; });
+  if (typeof bdayDeps === 'function') bdayDeps();
+  var funcs = DB.g('funcionarios').filter(function(f){ return f.nas && f.st !== 'Desligado' && bdayDepOk(f); });
   var lista = funcs.map(function(f){
     var parts = f.nas.split('-').map(Number);
     return Object.assign({}, f, {bm: parts[1], bd: parts[2]});
@@ -7004,12 +7016,12 @@ function gerarTemplateAniversariantes(mes) {
 
   var deps  = DB.g('departamentos');
   var funcs = DB.g('funcionarios').filter(function(f){
-    if (!f.nas || f.st === 'Desligado') return false;
+    if (!f.nas || f.st === 'Desligado' || !bdayDepOk(f)) return false;
     return parseInt(f.nas.split('-')[1]) === mes;
   }).sort(function(a,b){
     return parseInt(a.nas.split('-')[2]) - parseInt(b.nas.split('-')[2]);
   });
-  if (!funcs.length) { alert('Nenhum aniversariante em ' + MESES[mes-1] + '.'); return; }
+  if (!funcs.length) { alert('Nenhum aniversariante em ' + MESES[mes-1] + (bdayDepNome() ? ' no departamento ' + bdayDepNome() : '') + '.'); return; }
 
   // Cards — mesmo layout do PJ mas COM foto
   var cards = funcs.map(function(f) {
@@ -7040,7 +7052,7 @@ function gerarTemplateAniversariantes(mes) {
     : '';
 
   var doc = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">' +
-    '<title>Aniversariantes ' + MESES[mes-1] + ' ' + ano + '</title>' +
+    '<title>Aniversariantes ' + MESES[mes-1] + ' ' + ano + (bdayDepNome() ? ' - ' + bdayDepNome() : '') + '</title>' +
     '<style>' +
       '*{box-sizing:border-box;margin:0;padding:0;}' +
       'body{font-family:Calibri,Arial,sans-serif;background:#a8dfc0;min-height:100vh;padding:22px 26px;}' +
@@ -7063,7 +7075,7 @@ function gerarTemplateAniversariantes(mes) {
     '<div class="pg">' +
       '<div class="hdr">' + logoHtml +
         '<div class="title">&#127873; Parabéns, Aniversariantes!</div>' +
-        '<div class="sub">' + MESES[mes-1] + ' ' + ano + ' &nbsp;|&nbsp; Com carinho, família BIN Embalagens &#128149;</div>' +
+        '<div class="sub">' + MESES[mes-1] + ' ' + ano + (bdayDepNome() ? ' &nbsp;|&nbsp; ' + bdayDepNome() : '') + ' &nbsp;|&nbsp; Com carinho, família BIN Embalagens &#128149;</div>' +
       '</div>' +
       '<div class="grid">' + cards + '</div>' +
       '<div class="ftr">Sistema de RH &nbsp;&#183;&nbsp; ' + new Date().toLocaleDateString('pt-BR') + '</div>' +
