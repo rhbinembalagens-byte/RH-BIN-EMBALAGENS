@@ -16922,7 +16922,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     { k: 'vt',        id: 'fvt',     t: 'VT', money: 1 },
     { k: 'comb',      id: 'fcomb',   t: 'Combustível', money: 1 },
     { k: 'conv',      id: 'fconv',   t: 'Convênio', money: 1 },
-    { k: 'va',        id: 'fva',     t: 'VA', money: 1 }
+    { k: 'va',        id: 'fva',     t: 'VA', money: 1 },
+    { k: 'dtDesl',    id: 'fdtdesl', t: 'Data de desligamento' },
+    { k: 'motDesl',   id: 'fmotdesl', t: 'Motivo / observação do desligamento' }
   ];
   // rótulos dos campos já existentes (para a prévia da importação)
   var ROT = { n: 'Nome', cpf: 'CPF', rg: 'RG', nas: 'Nascimento', sex: 'Sexo', end: 'Endereço completo', cep: 'CEP', emp: 'Empresa', dep: 'Departamento',
@@ -16946,7 +16948,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 
   // ════════════ 1. FORMULÁRIO DO FUNCIONÁRIO ════════════
   function grupo(c, extra) {
-    var tipo = c.k === 'dtIni' ? 'date' : 'text';
+    var tipo = (c.k === 'dtIni' || c.k === 'dtDesl') ? 'date' : 'text';
     var ph = c.money ? ' placeholder="R$ 0,00"' : (c.k === 'endUf' || c.k === 'rgUf' ? ' placeholder="SP" maxlength="2" style="text-transform:uppercase;"' : '');
     if (c.k === 'folga') ph = ' placeholder="ex.: SAB/DOM, DOM/QUA, S/REG" list="dl-folgas" autocomplete="off"';
     return '<div class="form-group' + (extra || '') + '"><label>' + c.t + '</label><input id="' + c.id + '" type="' + tipo + '"' + ph + '></div>';
@@ -16967,6 +16969,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     }); });
     // Contrato
     g('fadm').insertAdjacentHTML('afterend', grupo(C('dtIni')));
+    if (g('fst')) g('fst').insertAdjacentHTML('afterend', grupo(C('dtDesl')) + grupo(C('motDesl'), ' form-full'));
     g('fescala').insertAdjacentHTML('afterend', grupo(C('folga')) + grupo(C('codEpr')) + grupo(C('codEmp')) + grupo(C('conta'), ' form-full'));
     g('fescala').closest('.form-grid').insertAdjacentHTML('afterend',
       '<div class="uni-sec-tit" style="margin-top:18px;">💰 Remuneração e benefícios</div>' +
@@ -21204,6 +21207,95 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   var _cm = window.closeModal;
   if (_cm) window.closeModal = function (id) { var r = _cm.apply(this, arguments); if (id === 'modal-func') { try { render(); } catch (e) {} } return r; };
   if (document.readyState !== 'loading') { try { render(); } catch (e) {} } else document.addEventListener('DOMContentLoaded', function () { try { render(); } catch (e) {} });
+})();
+</script>
+<script>
+/* ═══════ FUNCIONÁRIOS: importar desligados (planilha) — inclui como "Desligado" sem alterar quem já está cadastrado ═══════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function data(v) {
+    if (typeof v === 'number' && v > 1000) return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
+    var m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+    m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
+  }
+  function br(iso) { return iso ? iso.split('-').reverse().join('/') : '—'; }
+  function moeda(v) { if (typeof v === 'number') return v ? String(Math.round(v * 100) / 100) : ''; var s = String(v || '').replace(/[^\d,.-]/g, ''); if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isNaN(n) || !n ? '' : String(Math.round(n * 100) / 100); }
+  function depId(cod) { if (!cod) return ''; if (window.cxDepId) return window.cxDepId(cod, false) || ''; var d = DB.g('departamentos').find(function (x) { return sem(x.nome) === sem(cod); }); return d ? d.id : ''; }
+  var PL = null;
+  window.dslAbrir = function () {
+    if (!el('modal-dsl')) document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-dsl"><div class="modal" style="max-width:980px;"><div class="modal-header"><span class="modal-title">📥 Importar funcionários desligados</span><button class="modal-close" onclick="closeModal(\'modal-dsl\')">×</button></div>' +
+      '<div class="alert alert-info" style="font-size:13px;margin-bottom:10px;"><div>Use a planilha <strong>Funcionarios_desligados_para_importar.xlsx</strong> (colunas Nome, CPF, Cargo, Vínculo, Departamento, Nascimento, Início, Admissão, Salário, Data desligamento, Motivo / observação, Importar). Quem <strong>não está</strong> no sistema entra em Funcionários com status <strong>Desligado</strong>. Quem já está cadastrado (mesmo CPF ou nome) <strong>não é alterado</strong>. Linhas marcadas "REVISAR" vêm desmarcadas.</div></div>' +
+      '<label class="btn btn-primary" style="cursor:pointer;margin:0 0 8px;">📂 Escolher planilha<input type="file" accept=".xlsx,.xls" style="display:none;" onchange="dslArquivo(this)"></label>' +
+      '<div id="dsl-prev"></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-dsl\')">Cancelar</button><button class="btn btn-primary" id="dsl-ok" disabled onclick="dslConfirmar()">✅ Incluir como desligados</button></div></div></div>');
+    el('dsl-prev').innerHTML = ''; el('dsl-ok').disabled = true; PL = null;
+    el('modal-dsl').classList.add('open');
+  };
+  window.dslArquivo = function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function (e) {
+      try {
+        if (typeof XLSX === 'undefined') throw new Error('A leitura de planilhas não carregou (verifique a internet e recarregue).');
+        var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }), hi = rows.findIndex(function (r) { return r.some(function (x) { return sem(x) === 'NOME'; }); });
+        if (hi < 0) throw new Error('Não encontrei a coluna "Nome".');
+        var H = rows[hi].map(sem), c = function (re) { return H.findIndex(function (x) { return re.test(x); }); };
+        var C = { n: c(/^NOME$/), cpf: c(/^CPF$/), car: c(/^CARGO/), vinc: c(/^VINCULO/), ag: c(/^AGENCIA/), dep: c(/^DEPARTAMENTO/), nas: c(/NASC/), ini: c(/^INICIO/), adm: c(/^ADMISSAO/), sal: c(/^SALARIO/), desl: c(/DESLIG/), obs: c(/MOTIVO|OBSERV/), imp: c(/^IMPORTAR/) };
+        var funcs = DB.g('funcionarios'), ext = DB.g('colab-ext');
+        var porCpf = {}, porNome = {}; funcs.forEach(function (x) { var d = dig(x.cpf); if (d) porCpf[d] = x; porNome[sem(x.n)] = x; });
+        var extCpf = {}, extNome = {}; ext.forEach(function (x) { var d = dig(x.cpf); if (d) extCpf[d] = x; extNome[sem(x.n)] = x; });
+        var P = { novos: [], existe: [], ext: [], vistos: {} };
+        rows.slice(hi + 1).forEach(function (r) {
+          var nome = String(r[C.n] || '').trim(); if (!nome) return;
+          var cpf = String(r[C.cpf] || '').trim(), d = dig(cpf), k = d || sem(nome); if (P.vistos[k]) return; P.vistos[k] = 1;
+          var o = { n: nome.toUpperCase(), cpf: d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '', car: String(r[C.car] || '').trim().toUpperCase(), vinc: C.vinc >= 0 ? String(r[C.vinc] || '').trim() : '',
+            agencia: C.ag >= 0 ? String(r[C.ag] || '').trim().toUpperCase() : '', depCod: C.dep >= 0 ? String(r[C.dep] || '').trim() : '', nas: data(r[C.nas]), dtIni: data(r[C.ini]), adm: data(r[C.adm]) || data(r[C.ini]),
+            sal: moeda(r[C.sal]), dtDesl: data(r[C.desl]), motDesl: C.obs >= 0 ? String(r[C.obs] || '').trim() : '', revisar: C.imp >= 0 && /REVIS/i.test(String(r[C.imp] || '')) };
+          var ex = (d && porCpf[d]) || porNome[sem(nome)];
+          if (ex) { P.existe.push({ o: o, ex: ex }); return; }
+          var xx = (d && extCpf[d]) || extNome[sem(nome)];
+          if (xx) { P.ext.push({ o: o, ex: xx }); return; }
+          P.novos.push({ o: o, marcado: !o.revisar });
+        });
+        PL = P; desenhar();
+      } catch (err) { el('dsl-prev').innerHTML = '<div class="alert alert-warning"><div>⚠️ ' + esc(err.message || err) + '</div></div>'; }
+    };
+    rd.readAsArrayBuffer(f);
+  };
+  function desenhar() {
+    var P = PL, chip = function (cor, n, t) { return '<div style="flex:1;min-width:120px;padding:8px 12px;border-radius:var(--radius-sm);background:' + cor + ';"><div style="font-size:20px;font-weight:700;">' + n + '</div><div style="font-size:12px;">' + t + '</div></div>'; };
+    var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' + chip('#e8f5e9', P.novos.length, 'novos (serão incluídos como Desligado)') + chip('var(--gray-50)', P.existe.length, 'já em Funcionários (não alterados)') + chip('#fff3e0', P.ext.length, 'já em Agência / Sem registro (não alterados)') + '</div>';
+    if (P.novos.length) h += '<div style="font-weight:700;font-size:13.5px;color:var(--green-dark);margin:6px 0;">🟢 Incluir como desligados <span style="font-weight:400;font-size:12px;">(desmarque quem não deve entrar)</span></div><div class="table-wrap" style="max-height:42vh;overflow:auto;"><table style="font-size:12px;"><thead><tr><th><input type="checkbox" checked style="width:auto;" onchange="dslTodos(this.checked)"></th><th>Nome</th><th>CPF</th><th>Cargo</th><th>Vínculo</th><th>Depto</th><th>Admissão</th><th>Desligamento</th><th>Motivo / observação</th></tr></thead><tbody>' +
+      P.novos.map(function (x, i) { var o = x.o; return '<tr style="' + (o.revisar ? 'background:#fff8e1;' : '') + '"><td><input type="checkbox" data-dsl="' + i + '" ' + (x.marcado ? 'checked' : '') + ' style="width:auto;"></td><td style="font-weight:600;">' + esc(o.n) + (o.revisar ? '<div style="font-size:10.5px;color:#b26a00;font-weight:400;">REVISAR — pode estar ativo</div>' : '') + '</td><td>' + esc(o.cpf || '—') + '</td><td>' + esc(o.car) + '</td><td>' + esc(o.vinc + (o.agencia ? ' ' + o.agencia : '')) + '</td><td>' + esc(o.depCod) + '</td><td>' + br(o.adm) + '</td><td>' + br(o.dtDesl) + '</td><td style="font-size:11px;max-width:260px;">' + esc(o.motDesl) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    if (P.existe.length) h += '<details style="margin-top:10px;font-size:12.5px;"><summary style="cursor:pointer;font-weight:700;">⚪ Já cadastrados em Funcionários — não serão alterados (' + P.existe.length + ')</summary><div style="margin-top:6px;">' + P.existe.map(function (x) { return esc(x.ex.n) + ' <span style="color:var(--gray-400);">(' + esc(x.ex.st || 'Ativo') + ')</span>'; }).join(' · ') + '</div></details>';
+    if (P.ext.length) h += '<details style="margin-top:6px;font-size:12.5px;"><summary style="cursor:pointer;font-weight:700;">🟠 Já cadastrados em Agência / Sem registro — não serão alterados (' + P.ext.length + ')</summary><div style="margin-top:6px;">' + P.ext.map(function (x) { return esc(x.ex.n) + ' <span style="color:var(--gray-400);">(' + (x.ex.tipo === 'agencia' ? 'Agência' : 'Sem registro') + ' · ' + esc(x.ex.st || '') + ')</span>'; }).join(' · ') + '</div></details>';
+    el('dsl-prev').innerHTML = h; el('dsl-ok').disabled = !P.novos.length;
+  }
+  window.dslTodos = function (v) { document.querySelectorAll('#dsl-prev input[data-dsl]').forEach(function (c) { c.checked = v; }); };
+  window.dslConfirmar = function () {
+    var marc = {}; document.querySelectorAll('#dsl-prev input[data-dsl]').forEach(function (c) { if (c.checked) marc[c.getAttribute('data-dsl')] = 1; });
+    var sel = PL.novos.filter(function (x, i) { return marc[i]; }); if (!sel.length) { alert('Nenhum funcionário marcado.'); return; }
+    if (!confirm('Incluir ' + sel.length + ' funcionário(s) em Funcionários com status "Desligado"?\n\nNinguém que já está cadastrado será alterado.')) return;
+    var L = DB.g('funcionarios');
+    sel.forEach(function (x) {
+      var o = x.o, rec = { id: (typeof uid === 'function' ? uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 7)), n: o.n, cpf: o.cpf, car: o.car, nas: o.nas, adm: o.adm, dtIni: o.dtIni, sal: o.sal,
+        dep: depId(o.depCod), st: 'Desligado', dtDesl: o.dtDesl, motDesl: o.motDesl, tip: /AGENCIA/.test(sem(o.vinc)) ? 'Temporário' : /APRENDIZ/.test(sem(o.vinc)) ? 'Aprendiz' : 'CLT', vincOrig: o.vinc, agencia: o.agencia, docs: [], origem: 'Planilha de desligados', criado: new Date().toISOString() };
+      Object.keys(rec).forEach(function (k) { if (rec[k] === '' || rec[k] == null) delete rec[k]; }); rec.docs = [];
+      L.push(rec);
+    });
+    DB.s('funcionarios', L);
+    closeModal('modal-dsl'); try { rdFunc(); } catch (e) {}
+    if (typeof toast === 'function') toast('✅ ' + sel.length + ' funcionário(s) incluído(s) como desligados');
+  };
+  function botao() {
+    var b = Array.prototype.find.call(document.querySelectorAll('#sec-funcionarios .card-header button'), function (x) { return /Novo Funcion/.test(x.textContent); });
+    if (b && !el('btn-dsl')) b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-dsl" onclick="dslAbrir()" title="Incluir funcionários desligados a partir de planilha">📥 Importar desligados</button>');
+  }
+  if (document.readyState !== 'loading') botao(); else document.addEventListener('DOMContentLoaded', botao);
 })();
 </script>
 </body>
