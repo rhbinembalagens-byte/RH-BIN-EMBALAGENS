@@ -19949,12 +19949,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     else if (n) { c.m += n; if (c.m < 0) { c.m = 11; c.a--; } if (c.m > 11) { c.m = 0; c.a++; } }
     rdEstDeps();
   };
+  // J.A (jovem aprendiz) conta como meia pessoa no limite de colaboradores
+  function ehJA(p) { var c = String(p.car || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim(); return c === 'JA' || c === 'J A' || /JOVEM APRENDIZ/.test(c); }
   function contar(dep) {
-    var clt = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado' && f.dep === dep; }).length;
-    var ag = 0, sr = 0;
-    DB.g('colab-ext').forEach(function (c) { if (c.dep === dep && c.st === 'Ativo') { if (c.tipo === 'agencia') ag++; else sr++; } });
-    return { clt: clt, ag: ag, sr: sr, tot: clt + ag + sr };
+    var cl = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado' && f.dep === dep; });
+    var ag = 0, sr = 0, ja = 0, peso = 0;
+    cl.forEach(function (f) { if (ehJA(f)) { ja++; peso += 0.5; } else peso += 1; });
+    DB.g('colab-ext').forEach(function (c) { if (c.dep === dep && c.st === 'Ativo') { if (c.tipo === 'agencia') ag++; else sr++; if (ehJA(c)) { ja++; peso += 0.5; } else peso += 1; } });
+    return { clt: cl.length, ag: ag, sr: sr, ja: ja, pessoas: cl.length + ag + sr, tot: peso };
   }
+  function fmtQ(v) { return String(v).replace('.', ','); }
   function barra() {
     var v = el('est-view-dep'); if (!v || el('dim-bar')) return;
     var c = cp();
@@ -19992,7 +19996,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var b = tr.querySelector('button[onclick^="estEditar(\'dep\'"]'); if (!b) return;
       var id = (b.getAttribute('onclick').match(/'dep','([^']+)'/) || [])[1]; if (!id) return;
       var fat = fatDe(id, c.m, c.a), f = window.dimFaixa(fat), n = contar(id);
-      var tip = 'CLT: ' + n.clt + ' · Agência: ' + n.ag + ' · Sem registro: ' + n.sr;
+      var tip = 'CLT: ' + n.clt + ' · Agência: ' + n.ag + ' · Sem registro: ' + n.sr + (n.ja ? ' · ' + n.ja + ' J.A contado(s) como meia pessoa (' + n.pessoas + ' pessoas = ' + fmtQ(n.tot) + ')' : '');
       tds[4].insertAdjacentHTML('beforebegin',
         '<td class="dim-td"><input type="text" value="' + (fat ? fat.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') + '" placeholder="R$ 0,00" title="Faturamento realizado em ' + MES[c.m] + '/' + c.a + '" ' +
         'onchange="dimSetFat(\'' + id + '\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()" style="width:120px;text-align:right;padding:5px 7px;border:1.5px solid var(--gray-200);border-radius:6px;"></td>' +
@@ -20001,10 +20005,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (!f) { sit = '<span class="est-sub">—</span>'; semFat++; }
       else {
         var d = n.tot - f.teto;
-        if (d > 0) { acima++; sit = '<span class="badge badge-red" style="background:#ffebee;color:#c62828;">⚠ ' + d + ' acima do limite</span>'; }
-        else { dentro++; sit = d === 0 ? '<span class="badge badge-yellow">No limite</span>' : '<span class="badge badge-green">✔ Dentro · ' + (-d) + ' vaga(s)</span>'; }
+        if (d > 0) { acima++; sit = '<span class="badge badge-red" style="background:#ffebee;color:#c62828;">⚠ ' + fmtQ(d) + ' acima do limite</span>'; }
+        else { dentro++; sit = d === 0 ? '<span class="badge badge-yellow">No limite</span>' : '<span class="badge badge-green">✔ Dentro · ' + fmtQ(-d) + ' vaga(s)</span>'; }
       }
-      tds[4].insertAdjacentHTML('afterend', '<td class="dim-td" style="white-space:nowrap;"><div title="' + tip + '"><strong>' + n.tot + '</strong> / ' + (f ? f.teto : '—') + '</div>' + sit + '<div class="est-sub" style="white-space:nowrap;">CLT ' + n.clt + ' · Ag. ' + n.ag + ' · S/reg. ' + n.sr + '</div></td>');
+      tds[4].insertAdjacentHTML('afterend', '<td class="dim-td" style="white-space:nowrap;"><div title="' + tip + '"><strong>' + fmtQ(n.tot) + '</strong> / ' + (f ? f.teto : '—') + '</div>' + sit + '<div class="est-sub" style="white-space:nowrap;">CLT ' + n.clt + ' · Ag. ' + n.ag + ' · S/reg. ' + n.sr + (n.ja ? ' · ' + n.ja + ' J.A (½)' : '') + '</div></td>');
     });
     el('dim-resumo').innerHTML = (dentro ? '<span class="badge badge-green">' + dentro + ' dentro</span> ' : '') + (acima ? '<span class="badge" style="background:#ffebee;color:#c62828;">' + acima + ' acima do limite</span> ' : '') + (semFat ? '<span class="est-sub">' + semFat + ' sem faturamento lançado</span>' : '');
   }
