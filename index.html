@@ -21810,5 +21810,99 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
 })();
 </script>
+<script>
+/* ════════ MENU ESTOQUE DE UNIFORMES (entrada, saída, ajuste, itens, movimentações) — usa os dados uni-itens / uni-est / uni-mov ════════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function injetar() {
+    if (el('sec-uniformes')) return;
+    var antes = Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\('beneficios'/.test(n.getAttribute('onclick') || ''); });
+    if (antes) antes.insertAdjacentHTML('afterend', '<div class="nav-item" onclick="nav(\'uniformes\',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3l-5 3 2 5 2-1v11h10V10l2 1 2-5-5-3a4 4 0 0 1-8 0z"></path></svg><span>Estoque de Uniformes</span></div>');
+    var ref = el('sec-beneficios') || el('sec-documentos');
+    ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-uniformes"><div class="card">' +
+      '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">👕 Estoque de Uniformes</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Cadastre os itens e tamanhos, registre as <strong>entradas</strong> (compras/recebimentos) e as <strong>saídas</strong> (entregas aos colaboradores). O estoque é atualizado sozinho e as entregas aparecem no Termo de Uniforme.</div></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        '<button class="btn btn-primary" onclick="openModal(\'modal-uni-in\')">📥 Entrada</button>' +
+        '<button class="btn btn-danger" onclick="openModal(\'modal-uni-out\')">📤 Saída</button>' +
+        '<button class="btn btn-outline" onclick="openModal(\'modal-uni-ajuste\')">⚖️ Ajuste</button>' +
+        '<button class="btn btn-outline" onclick="editingUniItemId=null;openModal(\'modal-uni-item\')">⚙️ Cadastrar item</button>' +
+        '<button class="btn btn-outline" onclick="if(window.tuAbrir)tuAbrir()">📄 Termo de Uniforme</button>' +
+        '<button class="btn btn-outline" onclick="exportUniCSV()">⬇️ Exportar movimentações</button></div></div>' +
+      '<div id="uni-resumo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;"></div>' +
+      '<div class="tabs" style="margin-bottom:14px;"><div class="tab active" onclick="uniTab(\'uni-estoque\',this)">📦 Estoque</div><div class="tab" onclick="uniTab(\'uni-mov-tab\',this)">🔁 Movimentações</div><div class="tab" onclick="uniTab(\'uni-itens-tab\',this)">⚙️ Itens cadastrados</div></div>' +
+      '<div id="uni-estoque">' +
+        '<div class="uni-estoque-header"><input id="uni-search" class="uni-search" type="search" placeholder="🔍 Buscar item ou tamanho" oninput="rdUni()">' +
+        '<div class="uni-filter-btns"><button class="uni-filter-btn active" onclick="uniSetFilter(\'todos\',this)">Todos</button><button class="uni-filter-btn" onclick="uniSetFilter(\'ok\',this)">Em estoque</button><button class="uni-filter-btn" onclick="uniSetFilter(\'low\',this)">Estoque baixo</button><button class="uni-filter-btn" onclick="uniSetFilter(\'zero\',this)">Sem estoque</button></div>' +
+        '<div class="uni-view-btns"><button class="uni-view-btn active" title="Cartões" onclick="uniSetView(\'card\',this)">▦</button><button class="uni-view-btn" title="Lista" onclick="uniSetView(\'list\',this)">☰</button></div></div>' +
+        '<div id="uni-stats-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>' +
+        '<div id="uni-grid"></div>' +
+        '<div id="uni-empty" style="display:none;flex-direction:column;align-items:center;gap:10px;padding:30px;color:var(--gray-400);">Nenhum item cadastrado ainda.<button class="btn btn-primary btn-sm" onclick="editingUniItemId=null;openModal(\'modal-uni-item\')">⚙️ Cadastrar o primeiro item</button></div></div>' +
+      '<div id="uni-mov-tab" style="display:none;">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">' +
+        '<div class="form-group" style="margin:0;"><label>Tipo</label><select id="uni-mov-filter-tipo" onchange="rdUniMov()"><option value="">Todos</option><option>Entrada</option><option>Saída</option><option>Ajuste</option></select></div>' +
+        '<div class="form-group" style="margin:0;"><label>Item</label><select id="uni-mov-filter-item" onchange="rdUniMov()"><option value="">Todos</option></select></div></div>' +
+        '<div class="table-wrap" style="max-height:60vh;overflow:auto;"><table><thead><tr><th>Data</th><th>Tipo</th><th>Item</th><th>Tamanho</th><th>Qtd.</th><th>Colaborador</th><th>Observações</th><th></th></tr></thead><tbody id="tb-uni-mov"></tbody></table></div></div>' +
+      '<div id="uni-itens-tab" style="display:none;">' +
+        '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Estoque por tamanho</th><th>Total</th><th></th></tr></thead><tbody id="tb-uni-itens"></tbody></table></div></div>' +
+      '</div></div>');
+  }
+  function resumo() {
+    var box = el('uni-resumo'); if (!box) return;
+    var est = DB.go('uni-est') || {}, itens = DB.g('uni-itens'), movs = DB.g('uni-mov'), m = new Date().toISOString().slice(0, 7);
+    var pecas = 0, baixo = 0; itens.forEach(function (it) { (it.tams || []).forEach(function (t) { var q = est[it.nome + '-' + t] || 0; pecas += q; if (q <= 2) baixo++; }); });
+    var ent = 0, sai = 0; movs.forEach(function (x) { if (String(x.data || '').slice(0, 7) !== m) return; if (x.tipo === 'Entrada') ent += +x.qtd || 0; if (x.tipo === 'Saída') sai += +x.qtd || 0; });
+    var c = function (ic, v, t, cor) { return '<div style="background:var(--gray-50,#faf8f5);border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11.5px;color:var(--gray-500);font-weight:600;">' + ic + ' ' + t + '</div><div style="font-size:22px;font-weight:800;color:' + (cor || 'var(--green-dark)') + ';">' + v + '</div></div>'; };
+    box.innerHTML = c('👕', itens.length, 'Itens cadastrados') + c('📦', pecas, 'Peças em estoque') + c('⚠️', baixo, 'Tamanhos com estoque baixo/zerado', baixo ? 'var(--accent)' : '') + c('📥', ent, 'Entradas no mês') + c('📤', sai, 'Saídas no mês');
+  }
+  // saída também para colaboradores de Agência e Sem registro
+  var _open = window.openModal;
+  window.openModal = function (id) {
+    var r = _open.apply(this, arguments);
+    if (id === 'modal-uni-out') {
+      var s = el('uof'), ext = DB.g('colab-ext').filter(function (c) { return c.st !== 'Encerrado'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+      if (s && ext.length && !s.querySelector('optgroup')) {
+        var clt = Array.prototype.slice.call(s.options, 1).map(function (o) { return '<option value="' + esc(o.value) + '">' + esc(o.textContent) + '</option>'; }).join('');
+        var grp = function (t, l) { return l.length ? '<optgroup label="' + t + '">' + l.map(function (c) { return '<option value="x:' + esc(c.id) + '">' + esc(c.n) + '</option>'; }).join('') + '</optgroup>' : ''; };
+        s.innerHTML = '<option value="">Selecione</option>' + (clt ? '<optgroup label="Funcionários CLT">' + clt + '</optgroup>' : '') + grp('Agência', ext.filter(function (c) { return c.tipo === 'agencia'; })) + grp('Sem registro', ext.filter(function (c) { return c.tipo !== 'agencia'; }));
+      }
+      if (el('uo-data') && !el('uo-data').value && typeof td === 'function') el('uo-data').value = td();
+    }
+    return r;
+  };
+  window.savUniOut = async function () {
+    var fid = v('uof'), item = v('uon'), tam = v('uotam'), qtd = parseInt(v('uoqtd')) || 1;
+    if (!fid) { alert('Selecione o colaborador.'); return; }
+    if (!item || !tam) { alert('Selecione item e tamanho.'); return; }
+    var est = DB.go('uni-est'), key = item + '-' + tam;
+    if ((est[key] || 0) < qtd) { alert('Estoque insuficiente! Disponível: ' + (est[key] || 0)); return; }
+    est[key] -= qtd; DB.so('uni-est', est);
+    var f = fid.indexOf('x:') === 0 ? DB.g('colab-ext').find(function (x) { return x.id === fid.slice(2); }) : DB.g('funcionarios').find(function (x) { return x.id === fid; });
+    var movs = DB.g('uni-mov');
+    movs.unshift({ id: uid(), tipo: 'Saída', item: item, tam: tam, qtd: qtd, func: f ? f.n : '—', fid: fid, data: v('uo-data') || td(), obs: v('uo-obs') });
+    DB.s('uni-mov', movs);
+    if (typeof driveReady !== 'undefined' && driveReady) { try { await driveSyncObj('uni-est'); await driveSync('uni-mov'); } catch (e) {} }
+    closeModal('modal-uni-out'); rdUni();
+    toast('Saída registrada' + (typeof driveReady !== 'undefined' && driveReady ? ' ☁️' : '!'));
+  };
+  // atualiza resumo e movimentações junto com o estoque
+  var _rd = window.rdUni;
+  window.rdUni = function () { var r = _rd.apply(this, arguments); try { resumo(); if (el('uni-mov-tab') && el('uni-mov-tab').style.display !== 'none') rdUniMov(); if (el('uni-itens-tab') && el('uni-itens-tab').style.display !== 'none') rdUniItens(); } catch (e) {} return r; };
+  var _nav = window.nav;
+  window.nav = function (id, elx) {
+    if (id === 'uniformes') {
+      injetar();
+      document.querySelectorAll('.section-page').forEach(function (s) { s.classList.remove('active'); });
+      el('sec-uniformes').classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+      if (elx) elx.classList.add('active');
+      el('topbar-title').textContent = 'Estoque de Uniformes';
+      rdUni(); return;
+    }
+    return _nav.apply(this, arguments);
+  };
+  injetar();
+})();
+</script>
 </body>
 </html>
