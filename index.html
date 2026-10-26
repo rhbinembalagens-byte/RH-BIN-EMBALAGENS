@@ -21298,5 +21298,198 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (document.readyState !== 'loading') botao(); else document.addEventListener('DOMContentLoaded', botao);
 })();
 </script>
+<script>
+/* ════════ LANÇAMENTOS DA FOLHA: importar planilha de horas (HE 60%, HE 100% somadas, faltas parciais) ════════ */
+(function () {
+  var FL = 'folha-lanc', ORIG = 'planilha-horas';
+  var MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function nid() { return 'flh' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  // "24:17", "24:17:00", "05h38", número (fração de dia do Excel) → minutos
+  function minut(v) {
+    if (typeof v === 'number') return v > 0 ? Math.round(v * 1440) : 0;
+    var s = String(v || '').toLowerCase().replace(/\s+/g, ''); if (!s || s[0] === '-') return 0;
+    var m = s.match(/^(\d+)(?:[h:](\d{1,2}))?/); return m ? (+m[1]) * 60 + (+(m[2] || 0)) : 0;
+  }
+  function hhmm(min) { if (!min) return ''; var h = Math.floor(min / 60), m = min % 60; return String(h).padStart(2, '0') + 'h' + String(m).padStart(2, '0'); }
+  // "29/09 - 13/10 - 20/10" → 3 · "14 a 19/10" → 6 · "05/10 a 15/10" → 11 (dias corridos do período)
+  function contarDias(s) {
+    s = String(s || '').trim(); if (!s) return 0;
+    return s.split(/\s*(?:[,;]|\s-\s|\se\s)\s*/i).filter(function (t) { return t.trim(); }).reduce(function (n, t) {
+      var m = t.match(/(\d{1,2})(?:\/(\d{1,2}))?(?:\/\d{2,4})?\s*(?:a|até|ate|à)\s*(\d{1,2})\/(\d{1,2})/i);
+      if (m) { var a = new Date(2001, (+(m[2] || m[4])) - 1, +m[1]), b = new Date(2001, +m[4] - 1, +m[3]); if (b < a) b.setFullYear(2002); return n + Math.round((b - a) / 864e5) + 1; }
+      return n + 1;
+    }, 0);
+  }
+  function txtData(x, fx) {
+    if (typeof x === 'number' && x > 20000) { var d = new Date(Math.round((x - 25569) * 864e5)); return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0'); }
+    return String(fx != null && fx !== '' ? fx : (x == null ? '' : x)).trim();
+  }
+  function pessoas() {
+    var P = [];
+    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado') P.push({ pk: 'f:' + f.id, n: f.n, cpf: dig(f.cpf), g: 'CLT' }); });
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Encerrado') P.push({ pk: 'x:' + c.id, n: c.n, cpf: dig(c.cpf), g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro' }); });
+    return P.sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); });
+  }
+  function achar(nome, cpf, P) {
+    cpf = dig(cpf);
+    if (cpf.length >= 9) { var c = P.find(function (x) { return x.cpf && x.cpf.padStart(11, '0') === cpf.padStart(11, '0'); }); if (c) return c; }
+    var n = sem(nome).replace(/[\d.\-]+$/, '').trim(), p = P.find(function (x) { return sem(x.n) === n; }); if (p) return p;
+    var t = n.split(' ').filter(function (w) { return w.length > 2; }); if (!t.length) return null;
+    var cand = P.filter(function (x) { var u = sem(x.n).split(' '); return u[0] === t[0] && t.filter(function (w) { return u.indexOf(w) !== -1; }).length >= Math.min(2, t.length); });
+    return cand.length === 1 ? cand[0] : null;
+  }
+  // ── leitura ──
+  function interpretar(raw, fmt) {
+    var hi = -1;
+    for (var i = 0; i < Math.min(raw.length, 30); i++) { var r = (raw[i] || []).map(sem); if (r.some(function (c) { return c === 'NOME' || /^NOME /.test(c) || /COLABORADOR|FUNCIONARIO/.test(c); }) && r.some(function (c) { return /EXTRA|FALTA|60|100/.test(c); })) { hi = i; break; } }
+    if (hi < 0) throw new Error('não encontrei o cabeçalho (colunas "Nome" e "Horas Extras").');
+    var H = raw[hi].map(sem), col = { nome: -1, cpf: -1, local: -1, he60: [], he100: [], fp: [], datas: -1, dsr: -1 };
+    H.forEach(function (h, j) {
+      if (col.nome < 0 && (h === 'NOME' || /^NOME /.test(h) || /COLABORADOR|FUNCIONARIO/.test(h))) col.nome = j;
+      else if (col.cpf < 0 && /^CPF/.test(h)) col.cpf = j;
+      else if (col.local < 0 && /LOCAL|LOJA|SETOR|DEPART/.test(h)) col.local = j;
+      else if (col.dsr < 0 && /^DSR/.test(h)) col.dsr = j;
+      else if (col.datas < 0 && /DATA/.test(h) && /FALTA/.test(h)) col.datas = j;
+      else if (/100/.test(h)) col.he100.push(j);
+      else if (/60|50/.test(h) && /EXTRA|HE|H\.E/.test(h)) col.he60.push(j);
+      else if (/FALTA.*PARC|ATRASO/.test(h)) col.fp.push(j);
+    });
+    if (col.nome < 0) throw new Error('coluna "Nome" não encontrada.');
+    var P = pessoas(), L = [];
+    for (var k = hi + 1; k < raw.length; k++) {
+      var r = raw[k] || [], f = (fmt && fmt[k]) || r, nome = String(f[col.nome] || r[col.nome] || '').trim(); if (!nome) continue;
+      var v = function (j) { var x = r[j]; return (typeof x === 'number') ? minut(x) : minut(f[j] != null && f[j] !== '' ? f[j] : x); };
+      var soma = function (a) { return a.reduce(function (s, j) { return s + v(j); }, 0); };
+      var it = { nome: nome, cpf: col.cpf >= 0 ? String(f[col.cpf] || r[col.cpf] || '') : '', local: col.local >= 0 ? String(f[col.local] || '') : '', he60: soma(col.he60), he100: soma(col.he100), fp: soma(col.fp),
+        datas: col.datas >= 0 ? txtData(r[col.datas], f[col.datas]) : '', dsr: col.dsr >= 0 ? (parseFloat(String(f[col.dsr] || r[col.dsr] || '').replace(',', '.')) || 0) : 0 };
+      it.dias = contarDias(it.datas);
+      it.p = achar(nome, it.cpf, P); L.push(it);
+    }
+    return { itens: L, P: P, cols: col };
+  }
+  async function lerArquivo(f) {
+    if (!window.XLSX) throw new Error('leitor de planilha não carregado (verifique a internet).');
+    var wb;
+    if (/\.csv$/i.test(f.name || '') || /csv|text/.test(f.type || '')) wb = XLSX.read((await f.text()).replace(/^\uFEFF/, '').replace(/\r(?!\n)/g, ' '), { type: 'string', raw: true });
+    else wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    return { raw: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }), fmt: XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }) };
+  }
+  async function lerGoogle(link) {
+    var m = String(link || '').match(/\/d\/([a-zA-Z0-9_-]{20,})/), id = m ? m[1] : String(link || '').trim(), erros = [];
+    if (!id) throw new Error('cole o link da planilha.');
+    var tok = (typeof driveToken !== 'undefined' && driveToken) ? driveToken : null;
+    if (tok && window.XLSX) {
+      try {
+        var rx = await fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=' + encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'), { headers: { Authorization: 'Bearer ' + tok } });
+        if (rx.ok) { var wb = XLSX.read(new Uint8Array(await rx.arrayBuffer()), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]]; return { raw: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }), fmt: XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' }) }; }
+        erros.push('Drive: ' + (rx.status === 401 ? 'sessão do Google expirou (clique em Sincronizar no topo)' : 'sem acesso (' + rx.status + ')'));
+      } catch (e) { erros.push('Drive: ' + (e.message || e)); }
+    }
+    try {
+      var r = await fetch('https://docs.google.com/spreadsheets/d/' + id + '/gviz/tq?tqx=out:csv&headers=0');
+      if (r.ok && window.XLSX) { var t = await r.text(); if (!/^\s*</.test(t)) { var w2 = XLSX.read(t, { type: 'string', raw: true }), s2 = w2.Sheets[w2.SheetNames[0]], a = XLSX.utils.sheet_to_json(s2, { header: 1, raw: false, defval: '' }); return { raw: a, fmt: a }; } }
+      erros.push('link público: a planilha não está como "qualquer pessoa com o link"');
+    } catch (e) { erros.push('link público: ' + (e.message || e)); }
+    throw new Error('não consegui ler a planilha.\n• ' + erros.join('\n• '));
+  }
+  // ── janela ──
+  var D = null;
+  function injetar() {
+    if (el('modal-flh')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-flh"><div class="modal" style="max-width:1000px;">' +
+      '<div class="modal-header"><span class="modal-title">📥 Importar planilha de horas</span><button class="modal-close" onclick="closeModal(\'modal-flh\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Modelo: <strong>Local de Trabalho | Nome | CPF | Horas Extras 60% | Horas Extras 100% | Horas Extras 100% | Faltas Parciais | Data da falta | DSR Faltas</strong>. Os dias de falta são contados pelas datas (pode ajustar na prévia). As colunas de 100% são <strong>somadas</strong> e lançadas juntas. Os valores entram em <strong>Lançamentos da folha</strong> da competência <strong id="flh-comp"></strong> e saem na <em>Planilha da folha</em> e no recibo de pagamento. Se importar de novo a mesma competência, a importação anterior é <strong>substituída</strong> (lançamentos manuais não são alterados).</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">' +
+      '<div class="form-group" style="margin:0;"><label>Arquivo (Excel ou CSV)</label><input type="file" id="flh-arq" accept=".xlsx,.xls,.csv" onchange="flhArquivo(this)"></div>' +
+      '<div style="align-self:center;color:var(--gray-400);">ou</div>' +
+      '<div class="form-group" style="margin:0;flex:1;min-width:260px;"><label>Link da planilha Google</label><input type="text" id="flh-link" placeholder="https://docs.google.com/spreadsheets/d/..."></div>' +
+      '<button class="btn btn-outline" onclick="flhGoogle()" style="height:40px;">🔗 Ler planilha</button></div>' +
+      '<div id="flh-info" style="font-size:13px;margin-bottom:6px;"></div>' +
+      '<div class="table-wrap" style="max-height:52vh;overflow:auto;"><table id="flh-tab" style="font-size:12.5px;"></table></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-flh\')">Cancelar</button>' +
+      '<button class="btn btn-primary" id="flh-ok" onclick="flhConfirmar()" disabled>✅ Lançar na folha</button></div></div></div>');
+  }
+  function comp() { return { m: +(el('fl-mes') ? el('fl-mes').value : new Date().getMonth()), a: +(el('fl-ano') ? el('fl-ano').value : new Date().getFullYear()) }; }
+  window.flhAbrir = function () {
+    injetar(); D = null; var c = comp();
+    el('flh-comp').textContent = MES[c.m] + '/' + c.a; el('flh-arq').value = ''; el('flh-info').innerHTML = ''; el('flh-tab').innerHTML = ''; el('flh-ok').disabled = true;
+    el('modal-flh').classList.add('open');
+  };
+  function mostrar(dados) {
+    D = interpretar(dados.raw, dados.fmt);
+    var opts = '<option value="">— não lançar —</option>' + D.P.map(function (p) { return '<option value="' + esc(p.pk) + '">' + esc(p.n) + ' (' + p.g + ')</option>'; }).join('');
+    var ach = 0, vaz = 0;
+    el('flh-tab').innerHTML = '<thead><tr><th><input type="checkbox" checked onchange="document.querySelectorAll(\'.flh-ck\').forEach(function(c){c.checked=this.checked}.bind(this))"></th><th>Local</th><th>Nome na planilha</th><th>Colaborador no sistema</th><th>HE 60%</th><th>HE 100% (soma)</th><th>Faltas parciais</th><th>Data da falta</th><th>Dias</th><th>DSR</th></tr></thead><tbody>' +
+      D.itens.map(function (it, i) {
+        var tem = it.he60 || it.he100 || it.fp || it.datas || it.dsr; if (it.p) ach++; if (!tem) vaz++;
+        return '<tr' + (!it.p ? ' style="background:#fff7e0;"' : '') + '><td><input type="checkbox" class="flh-ck" data-i="' + i + '"' + (it.p && tem ? ' checked' : '') + '></td><td>' + esc(it.local) + '</td><td>' + esc(it.nome) + '</td>' +
+          '<td><select class="flh-p" data-i="' + i + '" onchange="var c=document.querySelector(\'.flh-ck[data-i=&quot;' + i + '&quot;]\');if(c)c.checked=!!this.value" style="max-width:260px;font-size:12px;">' + opts.replace('value="' + esc(it.p ? it.p.pk : '#') + '"', 'value="' + esc(it.p ? it.p.pk : '#') + '" selected') + '</select></td>' +
+          '<td>' + (hhmm(it.he60) || '—') + '</td><td>' + (hhmm(it.he100) || '—') + '</td><td>' + (hhmm(it.fp) || '—') + '</td><td>' + (esc(it.datas) || '—') + '</td>' +
+          '<td>' + (it.datas || it.dsr ? '<input type="number" class="flh-d" data-i="' + i + '" min="0" step="0.5" value="' + (it.dias || '') + '" style="width:58px;padding:3px 5px;font-size:12px;">' : '—') + '</td><td>' + (it.dsr || '—') + '</td></tr>';
+      }).join('') + '</tbody>';
+    var nao = D.itens.length - ach;
+    el('flh-info').innerHTML = '<strong>' + D.itens.length + '</strong> linha(s) · <strong>' + ach + '</strong> encontrada(s) no sistema' + (nao ? ' · <span style="color:#b26a00;"><strong>' + nao + '</strong> não encontrada(s) (em amarelo — escolha o colaborador para lançar)</span>' : '') + (vaz ? ' · ' + vaz + ' sem horas (desmarcada(s))' : '') + '.';
+    el('flh-ok').disabled = !D.itens.length;
+  }
+  window.flhArquivo = async function (inp) {
+    var f = inp.files && inp.files[0]; if (!f) return;
+    el('flh-info').textContent = '⏳ Lendo...';
+    try { mostrar(await lerArquivo(f)); } catch (e) { el('flh-info').innerHTML = '<span style="color:var(--red,#c0392b);">❌ ' + esc(e.message || e) + '</span>'; }
+  };
+  window.flhGoogle = async function () {
+    el('flh-info').textContent = '⏳ Lendo a planilha...';
+    try { mostrar(await lerGoogle(el('flh-link').value)); } catch (e) { el('flh-info').innerHTML = '<span style="color:var(--red,#c0392b);white-space:pre-line;">❌ ' + esc(e.message || e) + '</span>'; }
+  };
+  window.flhConfirmar = function () {
+    if (!D) return; var c = comp(), sel = [], P = {}; D.P.forEach(function (p) { P[p.pk] = p; });
+    document.querySelectorAll('.flh-ck').forEach(function (ck) {
+      if (!ck.checked) return; var i = +ck.dataset.i, s = document.querySelector('.flh-p[data-i="' + i + '"]'), pk = s ? s.value : '';
+      var di = document.querySelector('.flh-d[data-i="' + i + '"]');
+      if (pk && P[pk]) sel.push({ it: D.itens[i], p: P[pk], dias: di ? (parseFloat(di.value) || 0) : (D.itens[i].dias || 0) });
+    });
+    if (!sel.length) { alert('Nenhuma linha marcada com colaborador.'); return; }
+    var pks = {}; sel.forEach(function (x) { pks[x.p.pk] = 1; });
+    var L = DB.g(FL), antes = L.length;
+    L = L.filter(function (x) { return !(x.origem === ORIG && +x.mes === c.m && +x.ano === c.a && pks[x.pk]); });
+    var subst = antes - L.length, n = 0, hoje = new Date().toISOString().slice(0, 10), agora = new Date().toISOString();
+    sel.forEach(function (x) {
+      if (x.it.datas || x.it.dsr) {
+        L.push({ id: nid(), pk: x.p.pk, nome: x.p.n, cpf: x.p.cpf || '', mes: c.m, ano: c.a, tipo: 'falta', dias: x.dias, datas: x.it.datas, dsr: x.it.dsr, desc: 'PLANILHA DE HORAS', data: hoje, origem: ORIG, criado: agora });
+        n++;
+      }
+      [['he60', x.it.he60], ['he100', x.it.he100], ['fp', x.it.fp]].forEach(function (t) {
+        if (!t[1]) return;
+        L.push({ id: nid(), pk: x.p.pk, nome: x.p.n, cpf: x.p.cpf || '', mes: c.m, ano: c.a, tipo: t[0], horas: hhmm(t[1]), desc: 'PLANILHA DE HORAS', data: hoje, origem: ORIG, criado: agora });
+        n++;
+      });
+    });
+    DB.s(FL, L);
+    closeModal('modal-flh');
+    if (typeof flRender === 'function' && el('fl-mes')) flRender();
+    if (typeof toast === 'function') toast(n + ' lançamento(s) de horas/faltas importado(s)' + (subst ? ' (' + subst + ' da importação anterior substituído(s))' : '') + ' ✅');
+  };
+  // botão dentro de "Lançamentos da folha do mês"
+  var _ab = window.flAbrir;
+  if (typeof _ab === 'function') {
+    window.flAbrir = function () {
+      var r = _ab.apply(this, arguments);
+      try {
+        if (!el('btn-flh')) {
+          var b = document.querySelector('#modal-folha-lanc button[onclick="flExportar()"]');
+          if (b) b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-flh" onclick="flhAbrir()">📥 Importar planilha de horas</button>');
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+  window.flhInterpretar = interpretar;
+})();
+</script>
 </body>
 </html>
