@@ -21491,5 +21491,214 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.flhInterpretar = interpretar;
 })();
 </script>
+<script>
+/* ════════ GERAR DOCUMENTOS: RECIBO AVULSO (lançamentos esporádicos) — editável, puxa todos os colaboradores ════════ */
+(function () {
+  var K_HIST = 'recibos-avulsos';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K_HIST) === -1) { RT.LIST.push(K_HIST); if (RT.ALL && RT.ALL.indexOf(K_HIST) === -1) RT.ALL.push(K_HIST); }
+  var MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var FORMAS = ['Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'];
+  var COR = '#00796b';
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function up(s) { return String(s || '').trim().toLocaleUpperCase('pt-BR'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+  function num(x) { var s = String(x == null ? '' : x).replace(/R\$|\s/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isFinite(n) ? n : 0; }
+  function brl(n) { return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function nid() { return 'ra' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function ext(v) { return typeof window.recPorExtenso === 'function' ? window.recPorExtenso(v) : ''; }
+  function empDados(id) {
+    var e = id && id !== '__perfil' ? DB.g('empresas').find(function (x) { return x.id === id; }) : null;
+    if (e) return { razao: e.razao || '', cnpj: e.cnpj || '' };
+    var p = window.rhPerfil ? rhPerfil() : {}; return { razao: p.razao || 'BIN EMBALAGENS', cnpj: p.cnpj || '' };
+  }
+  function depNome(p) { if (!p.dep) return ''; var d = DB.g('departamentos').find(function (x) { return x.id === p.dep || x.nome === p.dep; }); return d ? d.nome : (/^[a-z0-9]{8,}$/i.test(p.dep) ? '' : p.dep); }
+  // todos os colaboradores (CLT, Agência, Sem registro); desligados opcionais
+  function todos(inclDesl) {
+    var L = [];
+    DB.g('funcionarios').forEach(function (f) { if (f._ext || (!inclDesl && f.st === 'Desligado')) return; L.push({ k: 'f:' + f.id, p: f, g: 'CLT', deslig: f.st === 'Desligado' }); });
+    DB.g('colab-ext').forEach(function (c) { var enc = c.st === 'Encerrado'; if (!inclDesl && enc) return; L.push({ k: 'x:' + c.id, p: c, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', deslig: enc }); });
+    return L.sort(function (a, b) { return (a.p.n || '').localeCompare(b.p.n || ''); });
+  }
+  var LIN = {}; // pk → valores editados na tela {ck, nome, cpf, cargo, mat, valor, ref, emp}
+  function injetar() {
+    if (el('modal-ravulso')) return;
+    var opt = function (a) { return a.map(function (o) { return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>'; }).join(''); };
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-ravulso"><div class="modal" style="max-width:1200px;">' +
+      '<div class="modal-header"><span class="modal-title">🧾 Recibo avulso — lançamentos esporádicos</span><button class="modal-close" onclick="closeModal(\'modal-ravulso\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Para pagamentos que não são da folha (ajuda de custo, prêmio, reembolso, diária, gratificação etc.). Os dados vêm do cadastro de <strong>todos os colaboradores</strong> e você pode <strong>alterar qualquer informação</strong> antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
+      '<div class="form-grid">' +
+      '<div class="form-group form-full"><label>Título do recibo</label><input id="ra-tit" type="text" style="text-transform:uppercase;"></div>' +
+      '<div class="form-group form-full"><label>Referente a <span style="font-weight:400;text-transform:none;">(vale para todos; pode mudar por colaborador na tabela)</span></label><input id="ra-ref" type="text" list="ra-dl-ref" placeholder="ex.: AJUDA DE CUSTO – OUTUBRO/2026" style="text-transform:uppercase;" oninput="raRefPadrao()"><datalist id="ra-dl-ref"></datalist></div>' +
+      '<div class="form-group"><label>Valor padrão (R$)</label><input id="ra-vpad" type="text" placeholder="0,00"></div>' +
+      '<div class="form-group" style="display:flex;align-items:flex-end;"><button type="button" class="btn btn-outline btn-sm" onclick="raAplicarValor()" style="height:38px;">↓ Aplicar valor aos marcados</button></div>' +
+      '<div class="form-group form-full"><label>Empresa pagadora</label><select id="ra-emp"></select></div>' +
+      '<div class="form-group form-full"><label>Texto do recibo <span style="font-weight:400;text-transform:none;">(use {empresa}, {cnpj}, {valor}, {extenso}, {referente})</span></label><textarea id="ra-texto" rows="2" style="font-size:13px;"></textarea></div>' +
+      '<div class="form-group form-full"><label>Forma de pagamento</label><div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">' +
+        ['', 'Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'].map(function (f) { return '<label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--gray-800);cursor:pointer;"><input type="radio" name="ra-forma" value="' + f + '" style="width:auto;"' + (f ? '' : ' checked') + '> ' + (f || 'Marcar à mão') + '</label>'; }).join('') + '</div></div>' +
+      '<div class="form-group"><label>Cidade – UF</label><input id="ra-cidade" type="text"></div>' +
+      '<div class="form-group"><label>Data do recibo <span style="font-weight:400;text-transform:none;">(vazio = preencher à mão)</span></label><input id="ra-data" type="date"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 6px;">' +
+        '<div class="form-group" style="margin:0;"><label>Grupo</label><select id="ra-fg" onchange="raLista()">' + opt([['', 'Todos'], ['CLT', 'CLT'], ['Agência', 'Agência'], ['Sem registro', 'Sem registro']]) + '</select></div>' +
+        '<div class="form-group" style="margin:0;"><label>Empresa (cadastro)</label><select id="ra-femp" onchange="raLista()"></select></div>' +
+        '<div class="form-group" style="margin:0;"><label>Departamento</label><select id="ra-fdep" onchange="raLista()"></select></div>' +
+        '<div class="form-group" style="margin:0;flex:1;min-width:160px;"><label>Buscar</label><input id="ra-busca" type="search" placeholder="🔍 nome ou CPF" oninput="raLista()"></div>' +
+        '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;text-transform:none;margin:0 0 8px;"><input type="checkbox" id="ra-desl" style="width:auto;" onchange="raLista()"> incluir desligados</label>' +
+        '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;text-transform:none;margin:0 0 8px;"><input type="checkbox" id="ra-somk" style="width:auto;" onchange="raLista()"> só marcados</label>' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="raBranco()" style="margin-bottom:4px;">+ Recibo em branco / pessoa sem cadastro</button></div>' +
+      '<div style="max-height:40vh;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);"><table id="ra-tab" style="font-size:12.5px;"></table></div>' +
+      '<div id="ra-tot" style="margin-top:8px;font-size:13px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="raHistorico()" style="margin-right:auto;">🕘 Histórico</button><button class="btn btn-outline" onclick="closeModal(\'modal-ravulso\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="raGerar()">📄 Gerar recibo(s)</button></div></div></div>' +
+      '<div class="modal-bg" id="modal-ravulso-h"><div class="modal" style="max-width:900px;"><div class="modal-header"><span class="modal-title">🕘 Recibos avulsos gerados</span><button class="modal-close" onclick="closeModal(\'modal-ravulso-h\')">×</button></div>' +
+      '<div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="ra-htab" style="font-size:12.5px;"></table></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-ravulso-h\')">Fechar</button></div></div></div>');
+    var st = document.createElement('style');
+    st.textContent = '#ra-tab input[type=text]{padding:4px 6px;font-size:12.5px;width:100%;min-width:70px;}#ra-tab td,#ra-tab th{padding:5px 6px;white-space:nowrap;}#ra-tab td.w{min-width:200px;}#ra-tab tr.on{background:#eef7f5;}';
+    document.head.appendChild(st);
+  }
+  var TXT_PADRAO = 'Recebi da empresa <b>{empresa}</b>, inscrita no CNPJ nº {cnpj}, a importância de R$ {valor} ({extenso}), referente a <b>{referente}</b>, dando plena e geral quitação do valor aqui recebido.';
+  window.raAbrir = function () {
+    injetar(); LIN = {};
+    var E = DB.g('empresas');
+    el('ra-emp').innerHTML = '<option value="">Do cadastro de cada colaborador</option>' + E.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('') + '<option value="__perfil">Dados da empresa (⚙️ topo do sistema)</option>';
+    el('ra-femp').innerHTML = '<option value="">Todas</option>' + E.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('');
+    var deps = {}; todos(true).forEach(function (x) { var d = depNome(x.p); if (d) deps[d] = 1; });
+    el('ra-fdep').innerHTML = '<option value="">Todos</option>' + Object.keys(deps).sort().map(function (d) { return '<option value="' + esc(d) + '">' + esc(d) + '</option>'; }).join('');
+    el('ra-tit').value = ls('rh_ra_tit') || 'RECIBO DE PAGAMENTO AVULSO';
+    el('ra-ref').value = ''; el('ra-vpad').value = '';
+    el('ra-texto').value = ls('rh_ra_txt') || TXT_PADRAO;
+    el('ra-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP';
+    el('ra-data').value = hoje();
+    var refs = {}; DB.g(K_HIST).forEach(function (h) { (h.itens || []).forEach(function (i) { if (i.ref) refs[i.ref] = 1; }); });
+    ['AJUDA DE CUSTO', 'PRÊMIO', 'REEMBOLSO DE DESPESAS', 'DIÁRIA', 'GRATIFICAÇÃO', 'VALE TRANSPORTE', 'HORAS EXTRAS AVULSAS'].forEach(function (r) { refs[r] = 1; });
+    el('ra-dl-ref').innerHTML = Object.keys(refs).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('');
+    ['ra-fg', 'ra-femp', 'ra-fdep', 'ra-busca'].forEach(function (id) { el(id).value = ''; }); el('ra-desl').checked = false; el('ra-somk').checked = false;
+    raLista();
+    el('modal-ravulso').classList.add('open');
+  };
+  function linhaDe(x) {
+    var p = x.p, L = LIN[x.k];
+    if (!L) L = LIN[x.k] = { ck: false, nome: up(p.n), cpf: p.cpf || '', cargo: up(p.car || ''), mat: p.codEpr || p.mat || '', valor: '', ref: '', emp: p.emp || '' };
+    return L;
+  }
+  window.raLista = function () {
+    var fg = el('ra-fg').value, fe = el('ra-femp').value, fd = el('ra-fdep').value, q = sem(el('ra-busca').value), so = el('ra-somk').checked;
+    var X = todos(el('ra-desl').checked).filter(function (x) {
+      if (fg && x.g !== fg) return false; if (fe && x.p.emp !== fe) return false; if (fd && depNome(x.p) !== fd) return false;
+      if (q && sem(x.p.n).indexOf(q) === -1 && String(x.p.cpf || '').replace(/\D/g, '').indexOf(q.replace(/\D/g, '') || '#') === -1) return false;
+      if (so && !(LIN[x.k] && LIN[x.k].ck)) return false; return true;
+    });
+    var extras = Object.keys(LIN).filter(function (k) { return k.indexOf('n:') === 0; });
+    var refPad = up(el('ra-ref').value);
+    var row = function (k, L, info) {
+      var inp = function (c, v, ph, w) { return '<td' + (w ? ' class="w"' : '') + '><input type="text" data-k="' + esc(k) + '" data-c="' + c + '" value="' + esc(v) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + ' oninput="raEdit(this)"' + (c === 'nome' || c === 'cargo' || c === 'ref' ? ' style="text-transform:uppercase;"' : '') + '></td>'; };
+      return '<tr class="' + (L.ck ? 'on' : '') + '"><td><input type="checkbox" data-k="' + esc(k) + '" ' + (L.ck ? 'checked' : '') + ' style="width:auto;" onchange="raCk(this)"></td>' +
+        inp('nome', L.nome, '', 1) + '<td style="font-size:11px;color:var(--gray-400);">' + esc(info) + '</td>' + inp('cpf', L.cpf) + inp('cargo', L.cargo) + inp('mat', L.mat) + inp('valor', L.valor, '0,00') + inp('ref', L.ref, refPad || 'referente a', 1) +
+        (k.indexOf('n:') === 0 ? '<td><button class="btn-icon danger" title="Remover" onclick="raRemover(\'' + esc(k) + '\')">✕</button></td>' : '<td></td>') + '</tr>';
+    };
+    el('ra-tab').innerHTML = '<thead><tr><th><input type="checkbox" style="width:auto;" title="Marcar/desmarcar os da lista" onchange="raTodos(this.checked)"></th><th>Nome no recibo</th><th>Grupo · depto.</th><th>CPF</th><th>Cargo / função</th><th>Matrícula</th><th>Valor (R$)</th><th>Referente a (se diferente)</th><th></th></tr></thead><tbody>' +
+      extras.map(function (k) { return row(k, LIN[k], 'sem cadastro'); }).join('') +
+      X.map(function (x) { return row(x.k, linhaDe(x), [x.g, depNome(x.p), x.deslig ? 'desligado' : ''].filter(Boolean).join(' · ')); }).join('') +
+      (!X.length && !extras.length ? '<tr><td colspan="9" style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum colaborador com estes filtros.</td></tr>' : '') + '</tbody>';
+    raTotal();
+  };
+  window.raEdit = function (i) { var L = LIN[i.dataset.k]; if (!L) return; L[i.dataset.c] = i.value; if (i.dataset.c === 'valor' && num(i.value) > 0 && !L.ck) { L.ck = true; var c = i.closest('tr').querySelector('input[type=checkbox]'); c.checked = true; i.closest('tr').classList.add('on'); } raTotal(); };
+  window.raCk = function (c) { var L = LIN[c.dataset.k]; if (!L) return; L.ck = c.checked; c.closest('tr').classList.toggle('on', c.checked); if (c.checked && !num(L.valor) && num(el('ra-vpad').value)) { L.valor = brl(num(el('ra-vpad').value)); c.closest('tr').querySelector('input[data-c=valor]').value = L.valor; } raTotal(); };
+  window.raTodos = function (v) { document.querySelectorAll('#ra-tab tbody input[type=checkbox]').forEach(function (c) { c.checked = v; raCk(c); }); };
+  window.raRemover = function (k) { delete LIN[k]; raLista(); };
+  window.raBranco = function () { LIN['n:' + nid()] = { ck: true, nome: '', cpf: '', cargo: '', mat: '', valor: el('ra-vpad').value ? brl(num(el('ra-vpad').value)) : '', ref: '', emp: '' }; raLista(); };
+  window.raRefPadrao = function () { var v = up(el('ra-ref').value) || 'referente a'; document.querySelectorAll('#ra-tab input[data-c=ref]').forEach(function (i) { i.placeholder = v; }); };
+  window.raAplicarValor = function () {
+    var v = num(el('ra-vpad').value); if (!(v > 0)) { alert('Informe o valor padrão.'); return; }
+    Object.keys(LIN).forEach(function (k) { if (LIN[k].ck) LIN[k].valor = brl(v); }); raLista();
+  };
+  function marcados() { return Object.keys(LIN).filter(function (k) { return LIN[k].ck; }).map(function (k) { return Object.assign({ k: k }, LIN[k]); }); }
+  function raTotal() { var M = marcados(), t = M.reduce(function (s, x) { return s + num(x.valor); }, 0); el('ra-tot').innerHTML = '<strong>' + M.length + '</strong> recibo(s) marcado(s) · total <strong>R$ ' + brl(t) + '</strong>'; }
+  // ── documento ──
+  var CSS = '@page{size:A4;margin:1cm 2cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+    '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;min-height:29.7cm;padding:1cm 2cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}}' +
+    'p{margin:0;}.logo{text-align:center;margin-bottom:3pt;}.logo img{width:3.44cm;height:2.12cm;object-fit:contain;}.tit{text-align:center;font-size:14pt;font-weight:700;}' +
+    '.sub{text-align:center;font-size:8pt;font-style:italic;color:#B8862B;border-bottom:1.5pt solid #B8862B;padding-bottom:4pt;margin-bottom:6pt;}' +
+    'table.dados{width:100%;border-collapse:collapse;}table.dados td{border:.5pt solid #C9A961;padding:3pt 5pt;vertical-align:top;}.rot{font-size:8pt;font-weight:700;color:#B8862B;line-height:1.2;}.val{font-size:10pt;min-height:12pt;line-height:1.2;}' +
+    'td.vl{background:#F7EFD9;}.rs{font-size:11pt;font-weight:700;line-height:1.2;}.txt{font-size:10pt;text-align:justify;line-height:1.25;margin:8pt 0 6pt;}.forma{font-size:10pt;margin-bottom:3pt;}.local{font-size:10pt;margin:6pt 0 18pt;}' +
+    'table.ass{width:100%;border-collapse:collapse;}table.ass td{width:46.9%;text-align:center;font-size:9pt;padding:0;}table.ass td.gap{width:6.2%;}table.ass td div{border-top:.75pt solid #3A2E1A;padding-top:2pt;}' +
+    '.corte{text-align:center;font-size:7pt;color:#999;border-bottom:.75pt dashed #999;padding-bottom:4pt;margin:14pt 0;}.pre{font-weight:700;}.pg+.pg{break-before:page;page-break-before:always;}@media screen{.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}' +
+    'table.rel{width:100%;border-collapse:collapse;font-size:9.5pt;margin:4pt 0 10pt;}table.rel td,table.rel th{border:.5pt solid #C9A961;padding:2.5pt 6pt;}table.rel th{background:#F7EFD9;color:#8a6420;text-align:left;font-size:8.5pt;}table.rel td.n,table.rel th.n{text-align:right;}table.rel tr.t td{font-weight:700;background:#F7EFD9;}';
+  function linha(n) { return '<span style="display:inline-block;min-width:' + (n || 10) * 5 + 'pt;border-bottom:.6pt solid #3A2E1A;">&nbsp;</span>'; }
+  function via(G, x, n) {
+    var cel = function (rot, v, st) { return '<td' + (st ? ' style="' + st + '"' : '') + '><div class="rot">' + rot + '</div><div class="val">' + (v ? esc(v) : '&nbsp;') + '</div></td>'; };
+    var u = function (v, l) { return v ? '<span class="pre">' + esc(v) + '</span>' : linha(l); };
+    var ok = x.v > 0, dp = G.data ? G.data.split('-') : null;
+    var txt = esc(G.texto).replace(/&lt;(\/?)b&gt;/g, '<$1b>')
+      .replace(/\{empresa\}/g, esc(up(x.razao) || 'BIN EMBALAGENS')).replace(/\{cnpj\}/g, u(x.cnpj, 20)).replace(/\{valor\}/g, u(ok ? brl(x.v) : '', 14))
+      .replace(/\{extenso\}/g, u(ok ? ext(x.v) : '', 48)).replace(/\{referente\}/g, u(x.ref, 40));
+    return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">' + esc(G.titulo) + '</p>' +
+      '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
+      '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup>' +
+      '<tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('MATRÍCULA', x.mat) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('CPF', x.cpf) + '</tr>' +
+      '<tr>' + cel('REFERENTE A', x.ref) + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
+      '<p class="txt">' + txt + '</p>' +
+      '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
+      '<p class="local">' + esc(G.cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : linha(6)) + ' de ' + (dp ? MES[+dp[1] - 1] : linha(22)) + ' de ' + (dp ? dp[0] : linha(8)) + '.</p>' +
+      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table></div>';
+  }
+  function relacao(G, L) {
+    var E = {}, t = 0; L.forEach(function (x) { var k = up(x.razao) || 'SEM EMPRESA'; E[k] = E[k] || { c: x.cnpj, q: 0, t: 0, p: [] }; E[k].q++; E[k].t += x.v; E[k].p.push(x); t += x.v; });
+    return '<div class="tit">RELAÇÃO · ' + esc(G.titulo) + '</div><div class="sub">' + L.length + ' recibo(s) · total R$ ' + brl(t) + (G.data ? ' · ' + G.data.split('-').reverse().join('/') : '') + '</div>' +
+      Object.keys(E).sort().map(function (k) {
+        return '<table class="rel"><tr><th colspan="3">' + esc(k) + (E[k].c ? ' · CNPJ ' + esc(E[k].c) : '') + '</th></tr><tr><th>Colaborador</th><th>Referente a</th><th class="n">Valor</th></tr>' +
+          E[k].p.map(function (x) { return '<tr><td>' + esc(x.nome) + '</td><td>' + esc(x.ref) + '</td><td class="n">R$ ' + brl(x.v) + '</td></tr>'; }).join('') +
+          '<tr class="t"><td colspan="2">TOTAL (' + E[k].q + ')</td><td class="n">R$ ' + brl(E[k].t) + '</td></tr></table>';
+      }).join('') + '<table class="rel"><tr class="t"><td>TOTAL GERAL</td><td class="n">R$ ' + brl(t) + '</td></tr></table>';
+  }
+  function documento(G, L) {
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(G.titulo + (L.length === 1 ? ' - ' + (L[0].nome || '') : ' - ' + L.length + ' colaboradores')) + '</title><style>' + CSS + '</style></head><body>' +
+      L.map(function (x) { return '<div class="pg">' + via(G, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(G, x, 2) + '</div>'; }).join('') +
+      (L.length > 1 ? '<div class="pg">' + relacao(G, L) + '</div>' : '') + '</body></html>';
+  }
+  window.raGerar = function () {
+    var M = marcados(); if (!M.length) { alert('Marque pelo menos um colaborador (ou use "+ Recibo em branco").'); return; }
+    var refPad = up(el('ra-ref').value), empSel = el('ra-emp').value;
+    var G = { titulo: up(el('ra-tit').value) || 'RECIBO', texto: el('ra-texto').value.trim() || TXT_PADRAO, forma: (document.querySelector('input[name="ra-forma"]:checked') || {}).value || '', cidade: el('ra-cidade').value.trim() || 'Guarulhos – SP', data: el('ra-data').value };
+    var L = M.map(function (x) {
+      var e = empDados(empSel || x.emp || '__perfil');
+      return { pk: x.k.indexOf('n:') === 0 ? '' : x.k, nome: up(x.nome), cpf: x.cpf, cargo: up(x.cargo), mat: x.mat, v: Math.round(num(x.valor) * 100) / 100, ref: up(x.ref) || refPad, razao: e.razao, cnpj: e.cnpj };
+    });
+    ls('rh_ra_tit', G.titulo); ls('rh_ra_txt', G.texto); ls('rh_rec_cidade', G.cidade);
+    var H = DB.g(K_HIST); H.push(Object.assign({ id: nid(), em: new Date().toISOString(), itens: L }, G)); DB.s(K_HIST, H);
+    closeModal('modal-ravulso');
+    _abrirDocSimples(documento(G, L), (G.titulo + '_' + (L.length === 1 ? (L[0].nome || 'em_branco') : L.length + '_colaboradores')).replace(/[\s\/]+/g, '_'));
+  };
+  window.raHistorico = function () {
+    var H = DB.g(K_HIST).slice().sort(function (a, b) { return (b.em || '').localeCompare(a.em || ''); });
+    el('ra-htab').innerHTML = H.length ? '<thead><tr><th>Gerado em</th><th>Título</th><th>Colaborador(es)</th><th style="text-align:right;">Total</th><th></th></tr></thead><tbody>' + H.map(function (h) {
+      var t = (h.itens || []).reduce(function (s, x) { return s + (x.v || 0); }, 0), nomes = (h.itens || []).map(function (x) { return x.nome; }).filter(Boolean);
+      return '<tr><td>' + esc(new Date(h.em).toLocaleString('pt-BR').slice(0, 17)) + '</td><td>' + esc(h.titulo) + '</td><td style="white-space:normal;">' + esc(nomes.slice(0, 3).join(', ') + (nomes.length > 3 ? ' e +' + (nomes.length - 3) : '')) + '</td><td style="text-align:right;">R$ ' + brl(t) + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="raReabrir(\'' + h.id + '\')">📄 Abrir</button> <button class="btn-icon danger" title="Excluir do histórico" onclick="raHistExcluir(\'' + h.id + '\')">&#128465;</button></td></tr>';
+    }).join('') + '</tbody>' : '<tr><td style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum recibo avulso gerado ainda.</td></tr>';
+    el('modal-ravulso-h').classList.add('open');
+  };
+  window.raReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(documento(h, h.itens || []), (h.titulo || 'Recibo').replace(/[\s\/]+/g, '_')); };
+  window.raHistExcluir = function (id) { if (!confirm('Excluir este registro do histórico?')) return; DB.s(K_HIST, DB.g(K_HIST).filter(function (x) { return x.id !== id; })); raHistorico(); };
+  // ── cartão na tela Gerar Documentos ──
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="rec_avulso"]')) return;
+    var ref = grid.querySelector('[data-docbase="termo_uni"]');
+    var h = '<div class="trein-card" data-docbase="rec_avulso" style="border-left:4px solid ' + COR + ';">' +
+      '<div class="tc-header"><div><div class="tc-title">🧾 Recibo Avulso (lançamentos esporádicos)</div><div class="tc-meta">Recibo em 2 vias · modelo BIN</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'rec_avulso\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Ajuda de custo, prêmio, reembolso, diária, gratificação e outros pagamentos fora da folha. Puxa nome, CPF, cargo, matrícula e empresa de todos os colaboradores; tudo editável. Um ou vários de uma vez.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="raAbrir()">📄 Gerar Recibo</button></div></div>';
+    if (ref) ref.insertAdjacentHTML('afterend', h); else { var m = grid.querySelector('.dmx-card'); if (m) m.insertAdjacentHTML('beforebegin', h); else grid.insertAdjacentHTML('beforeend', h); }
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
 </body>
 </html>
