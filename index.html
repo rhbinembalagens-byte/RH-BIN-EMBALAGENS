@@ -16283,6 +16283,11 @@ function rhPodeEnviar() {
   function ferUT(r, f) { f = f || {}; var d = f.dep ? DB.g('departamentos').find(function (x) { return x.id === f.dep || x.nome === f.dep; }) : null; return (d ? d.nome : (f.dep && !/^[a-z0-9]{8,}$/i.test(f.dep) ? f.dep : '')) || (r && r.uTrab) || ''; }
   function ferUR(r, f) { f = f || {}; var e = f.emp ? DB.g('empresas').find(function (x) { return x.id === f.emp; }) : null; return (e ? e.razao : '') || (r && r.uReg) || ''; }
   window.ferUT = ferUT; window.ferUR = ferUR;
+  // Mês e Dias a descansar calculados pelo gozo (início/fim); sem datas, usa o que foi digitado/importado
+  function ferIso(s) { s = String(s || '').trim(); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0]; m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; }
+  function ferFimIso(r) { return ferIso(r.fim) || (ferIso(r.ret) ? addDias(ferIso(r.ret), -1) : ''); }
+  function ferMes(r) { var i = ferIso(r.ini); return i ? mesTxt(i) : mesTxt(r.mes); }
+  function ferDias(r) { var i = ferIso(r.ini), f = ferFimIso(r); if (i && f && f >= i) return String(Math.round((new Date(f + 'T12:00:00') - new Date(i + 'T12:00:00')) / 86400000) + 1); return r.dias == null ? '' : r.dias; }
   window.rdFer = function () {
     var tb = el('tb-fer'); if (!tb) return;
     var lista = garantirPeriodos();
@@ -16340,9 +16345,9 @@ function rhPodeEnviar() {
         '<td class="nome">' + esc(f.n || '—') + '</td><td>' + fdx(f.adm) + '</td>' +
         '<td>' + esc(r.per || (r.ai ? perLabel(parseInt(r.ai, 10)) : '')) + '</td>' +
         '<td' + (limAlerta ? ' class="fer-lim-alerta" title="Data limite próxima — programar!"' : '') + '>' + fdx(r.lim) + (limAlerta ? ' ⚠️' : '') + '</td>' +
-        '<td>' + esc(r.saldoAnt) + '</td><td>' + esc(mesTxt(r.mes)) + '</td>' +
+        '<td>' + esc(r.saldoAnt) + '</td><td>' + esc(ferMes(r)) + '</td>' +
         '<td>' + (r.ini ? fdx(r.ini) : '<span style="color:var(--gray-400)">—</span>') + '</td><td>' + fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')) + '</td>' +
-        '<td>' + esc(r.dias) + '</td><td>' + esc(r.saldo) + '</td>' +
+        '<td>' + esc(ferDias(r)) + '</td><td>' + esc(r.saldo) + '</td>' +
         '<td class="obs">' + esc(r.obs) + '</td>' +
         '<td><strong>' + statusTxt(r) + '</strong></td>' +
         '<td><div class="fer-acoes">' +
@@ -16439,7 +16444,7 @@ function rhPodeEnviar() {
     var aoa = [['Unid Trabalho','Unid Registro','Cargo/Função','Funcionário','Data de admissão','Periodo aquisitivo','Data limite de saída','Saldo Ant.','Mês','Início gozo','Fim gozo','Dias a descansar','Saldo','Observações','Situação']];
     linhas.forEach(function (r) {
       var f = funcs.find(function (x) { return x.id === r.fid; }) || {};
-      aoa.push([ferUT(r, f), ferUR(r, f), r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, mesTxt(r.mes), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), r.dias || '', r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, '')]);
+      aoa.push([ferUT(r, f), ferUR(r, f), r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, ferMes(r), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), ferDias(r), r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, '')]);
     });
     var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = aoa[0].map(function (h, i) { return { wch: i === 13 ? 50 : i === 3 ? 32 : 14 }; });
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Controle de Férias');
