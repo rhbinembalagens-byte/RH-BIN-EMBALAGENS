@@ -22274,5 +22274,79 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   montar();
 })();
 </script>
+<script>
+/* ════════ BENEFÍCIOS › RELATÓRIO GERAL e EXPORTAR: só Mobilidade, Livre, Bônus e Alimentação / Refeição (valores do mês) ════════ */
+(function () {
+  var CAT = [['mob', 'Mobilidade', '🚌'], ['livre', 'Livre', '🆓'], ['bonus', 'Bônus', '💰'], ['alim', 'Alimentação / Refeição', '🍽️']];
+  var NOVO = { 'Mobilidade': 'mob', 'Livre': 'livre', 'Bônus': 'bonus', 'Alimentação / Refeição': 'alim' };
+  // benefícios antigos ainda ativos entram na coluna equivalente (VT/Combustível → Mobilidade; VR/VA → Alimentação; Assiduidade → Livre)
+  function catDe(tipo) {
+    if (NOVO[tipo]) return NOVO[tipo];
+    var t = String(tipo || '').toUpperCase(), m = window.benefModeloMap ? benefModeloMap() : {};
+    var k = /^VT/.test(t) ? 'vt' : /^VR/.test(t) ? 'vr' : (/^VA/.test(t) || t.indexOf('ALIMENTA') !== -1) ? 'va' : t.indexOf('COMBUST') !== -1 ? 'comb' : t.indexOf('ASSIDU') !== -1 ? 'assim' : (t.indexOf('BÔN') !== -1 || t.indexOf('BON') !== -1 || t.indexOf('PREM') !== -1) ? 'bonus' : '';
+    if (!k) return '';
+    if (k === 'bonus') return 'bonus';
+    var c = m[k]; return c === 'mob' || c === 'livre' || c === 'alim' ? c : '';
+  }
+  function porDia(a) { var t = String(a.tipoBase || a.tipo || '').toUpperCase(); return a.tipoCalc ? a.tipoCalc === 'dia' : /^V[TR]/.test(t); }
+  function dias(f) { return typeof escBase === 'function' && escBase(f.escala) === '56' ? 26 : 22; }
+  function valoresDo(f, atribs) {
+    var v = { mob: 0, livre: 0, bonus: 0, alim: 0 };
+    atribs.forEach(function (a) { if (a.fid !== f.id) return; var c = catDe(a.tipoBase || a.tipo); if (!c) return; var x = parseFloat(a.valor) || 0; v[c] += porDia(a) ? x * dias(f) : x; });
+    Object.keys(v).forEach(function (k) { v[k] = Math.round(v[k] * 100) / 100; });
+    return v;
+  }
+  function money(v) { return typeof fmtMoney === 'function' ? fmtMoney(v) : 'R$ ' + v.toFixed(2); }
+  window.rdBenefRel = function () {
+    var sel = document.getElementById('benef-rel-emp');
+    if (sel && sel.options.length <= 1) DB.g('empresas').slice().sort(function (a, b) { return (a.razao || a.nome || '').localeCompare(b.razao || b.nome || ''); }).forEach(function (e) { var o = document.createElement('option'); o.value = e.id; o.textContent = e.razao || e.nome; sel.appendChild(o); });
+    var fe = (sel || {}).value || '';
+    var funcs = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    var atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
+    var tb = document.getElementById('tb-benef-rel'); if (!tb) return;
+    var th = tb.parentNode.querySelector('thead');
+    if (th) th.innerHTML = '<tr><th>Funcionário</th>' + CAT.map(function (c) { return '<th style="text-align:right">' + c[1] + '</th>'; }).join('') + '<th style="text-align:right">Total</th></tr>';
+    var T = { mob: 0, livre: 0, bonus: 0, alim: 0 }, G = 0;
+    if (!funcs.length) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--gray-400)">Nenhum funcionário ativo.</td></tr>'; document.getElementById('tf-benef-rel').innerHTML = ''; document.getElementById('benef-rel-cards').innerHTML = ''; return; }
+    tb.innerHTML = funcs.map(function (f) {
+      var v = valoresDo(f, atribs), t = v.mob + v.livre + v.bonus + v.alim; CAT.forEach(function (c) { T[c[0]] += v[c[0]]; }); G += t;
+      return '<tr><td><strong>' + f.n + '</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (v[c[0]] > 0 ? money(v[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;font-weight:700;color:var(--green-dark)">' + (t > 0 ? money(t) : '—') + '</td></tr>';
+    }).join('');
+    document.getElementById('tf-benef-rel').innerHTML = '<tr><td><strong>TOTAL</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (T[c[0]] > 0 ? money(T[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;color:var(--green-dark)">' + money(G) + '</td></tr>';
+    var cf = (document.getElementById('benef-rel-mes') || { value: '' }).value || '', C = { mob: 0, livre: 0, bonus: 0, alim: 0 };
+    DB.g('benef-compras').filter(function (c) { return !cf || c.comp === cf; }).forEach(function (c) { var k = catDe(c.tipoBase || c.tipo); if (k) C[k] += parseFloat(c.vtotal) || 0; });
+    document.getElementById('benef-rel-cards').innerHTML = CAT.map(function (c) {
+      return '<div style="background:#fff;border-radius:var(--radius-sm);padding:16px;box-shadow:var(--shadow);border-top:3px solid var(--green)"><div style="font-size:22px">' + c[2] + '</div>' +
+        '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin:4px 0">' + c[1] + '</div>' +
+        '<div style="font-size:11px;color:var(--gray-600)">Atribuído: <strong>' + money(T[c[0]]) + '</strong>/mês</div>' +
+        '<div style="font-size:11px;color:var(--gray-600)">Comprado: <strong>' + money(C[c[0]]) + '</strong></div></div>';
+    }).join('');
+  };
+  window.exportBenefCSV = function () {
+    var fe = (document.getElementById('benef-rel-emp') || {}).value || (document.getElementById('benef-emp-filter') || {}).value || '';
+    var emps = DB.g('empresas'), deps = DB.g('departamentos'), atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
+    var funcs = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    var linhas = funcs.map(function (f) { return { f: f, v: valoresDo(f, atribs) }; }).filter(function (x) { return x.v.mob + x.v.livre + x.v.bonus + x.v.alim > 0; });
+    if (!linhas.length) { alert('Nenhum benefício ativo para exportar.'); return; }
+    var aoa = [['FUNCIONÁRIO', 'CPF', 'CARGO', 'DEPARTAMENTO', 'EMPRESA', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'BÔNUS (R$)', 'ALIMENTAÇÃO / REFEIÇÃO (R$)', 'TOTAL (R$)']];
+    linhas.forEach(function (x) {
+      var f = x.f, d = deps.find(function (q) { return q.id === f.dep; }), e = emps.find(function (q) { return q.id === f.emp; }), v = x.v;
+      aoa.push([f.n || '', f.cpf || '', f.car || '', d ? d.nome : '', e ? e.razao : '', v.mob, v.livre, v.bonus, v.alim, Math.round((v.mob + v.livre + v.bonus + v.alim) * 100) / 100]);
+    });
+    var tot = ['TOTAL', '', '', '', '']; for (var c = 5; c <= 9; c++) tot.push(Math.round(aoa.slice(1).reduce(function (s, r) { return s + r[c]; }, 0) * 100) / 100); aoa.push(tot);
+    var nomeEmp = fe ? ((emps.find(function (e) { return e.id === fe; }) || {}).razao || 'Geral') : 'Geral';
+    if (typeof XLSX !== 'undefined') {
+      var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 35 }, { wch: 16 }, { wch: 25 }, { wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 14 }];
+      for (var r = 1; r < aoa.length; r++) for (var cc = 5; cc <= 9; cc++) { var ad = XLSX.utils.encode_cell({ r: r, c: cc }); if (ws[ad]) ws[ad].z = '#,##0.00'; }
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Benefícios');
+      XLSX.writeFile(wb, 'Beneficios_' + nomeEmp + '_' + td() + '.xlsx');
+    } else {
+      var csv = '﻿' + aoa.map(function (r) { return r.map(function (v) { return typeof v === 'number' ? String(v).replace('.', ',') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'Beneficios_' + nomeEmp + '_' + td() + '.csv'; a.click();
+    }
+    toast('Planilha exportada! (' + linhas.length + ' funcionários)');
+  };
+})();
+</script>
 </body>
 </html>
