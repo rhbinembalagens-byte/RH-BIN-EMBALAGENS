@@ -8799,6 +8799,7 @@ async function gerarFlashXLSX() {
   var emp   = DB.g('empresas').find(function(e){ return e.id===empId; });
   var funcs = DB.g('funcionarios').filter(function(f){ return f.emp===empId && f.st!=='Desligado'; });
   var deps  = DB.g('departamentos');
+  if (window.__benefSoExt) funcs = [];
   var _extEmp = (typeof window.benefExtLinhas === 'function') ? window.benefExtLinhas(empId).length : 0;
   if (!funcs.length && !_extEmp) { alert('Nenhum funcionário ativo nesta empresa.'); return; }
 
@@ -8897,7 +8898,7 @@ async function gerarFlashXLSX() {
     itensModelo.push({ f: f, dep: depNome, dias: dias, vt: vtDia, vr: vrDia, va: va, comb: comb, assim: assim, bonus: bonus, odonto: odonto, med: med, tot: (typeof window.benefModeloTot === 'function' ? window.benefModeloTot(f.id) : null) });
   });
 
-  try { document.querySelectorAll('#flash-tbody tr[data-ext]').forEach(function (tr) { var fx = tr.dataset.ext, x = window.benefPessoaDe ? window.benefPessoaDe(fx) : null; if (!x || x.p.emp !== empId) return; var dpn = (deps.find(function (d) { return d.id === x.p.dep; }) || {}).nome || ''; itensModelo.push({ f: x.p, dep: dpn, dias: 0, vt: 0, vr: 0, va: 0, comb: 0, assim: 0, bonus: 0, odonto: 0, med: 0, tot: window.benefModeloTot(fx) }); }); } catch (e) {}
+  try { document.querySelectorAll('#flash-tbody tr[data-ext]').forEach(function (tr) { var fx = tr.dataset.ext, x = window.benefPessoaDe ? window.benefPessoaDe(fx) : null; if (!x || x.p.emp !== empId || (window.__benefSoExt && x.g !== window.__benefSoExt)) return; var dpn = (deps.find(function (d) { return d.id === x.p.dep; }) || {}).nome || ''; itensModelo.push({ f: x.p, dep: dpn, dias: 0, vt: 0, vr: 0, va: 0, comb: 0, assim: 0, bonus: 0, odonto: 0, med: 0, tot: window.benefModeloTot(fx) }); }); } catch (e) {}
   var blob   = window.benefModeloBlob(itensModelo, emp);
   var nomeArq = 'Pedido_Beneficios_' + ((emp && (emp.razao || emp.nome)) || '').replace(/[^A-Za-z0-9À-ÿ]+/g, '_') + '_' + de + '_a_' + ate + '.xlsx';
   var a = document.createElement('a');
@@ -17423,7 +17424,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (/^m\d+$/.test(filtro)) { hm = parseInt(filtro.slice(1), 10); filtro = 'mes'; }
     var emps = {}; DB.g('empresas').forEach(function (e) { emps[e.id] = e; });
     var h0 = new Date(ano, hoje.getMonth(), hd);
-    var lista = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!empF || f.emp === empF); }).map(function (f) {
+    var lista = (typeof window.extComoFuncs === 'function' ? window.extComoFuncs(empF, true) : DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!empF || f.emp === empF); })).map(function (f) {
       var dt = base === 'ini' ? (f.dtIni || f.adm) : (f.adm || f.dtIni);
       if (!dt || !/^\d{4}-\d{2}-\d{2}/.test(dt)) return null;
       var p = dt.split('-').map(Number), prox = new Date(ano, p[1] - 1, p[2]);
@@ -17438,7 +17439,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   window.rdTempoCasa = function () {
     var se = el('tc-emp');
-    if (se) { var cur = se.value; se.innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join(''); se.value = cur; }
+    if (se) { var cur = se.value; se.innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join(''); se.value = cur; if (window.addExtOpts) { addExtOpts(se); if (cur === '__ag' || cur === '__sr') se.value = cur; } }
     var R = _tcLista(), box = el('tc-list'), res = el('tc-resumo'); if (!box) return;
     var hoje = R.hoje, titulo = R.filtro === 'mes' ? MESES[R.hm - 1] : R.filtro === 'prox30' ? 'próximos 30 dias' : 'o ano todo';
     if (!R.lista.length) {
@@ -20966,12 +20967,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
   window.qcRelDeps = function () {
     var ek = el('qcr-emp').value, ds = {};
-    linhasMes(function (o) { return !ek || (o.emp.k || '_') === ek; }).forEach(function (o) { ds[o.dep] = 1; });
+    linhasMes(function (o) { return !ek || (o.emp.k || '_') === ek || (window.extGrupoOk && extGrupoOk(o.r.pk, ek)); }).forEach(function (o) { ds[o.dep] = 1; });
     el('qcr-dep').innerHTML = '<option value="">Todos os departamentos</option>' + Object.keys(ds).sort().map(function (d) { return '<option value="' + esc(d) + '">' + esc(d) + '</option>'; }).join('');
   };
   window.qcRelGerar = function () {
     var ek = el('qcr-emp').value, dk = el('qcr-dep').value, fmt = (document.querySelector('input[name="qcr-fmt"]:checked') || {}).value || 'cons';
-    var L = linhasMes(function (o) { return (!ek || (o.emp.k || '_') === ek) && (!dk || o.dep === dk); });
+    var L = linhasMes(function (o) { return (!ek || (o.emp.k || '_') === ek || (window.extGrupoOk && extGrupoOk(o.r.pk, ek))) && (!dk || o.dep === dk); });
     if (!L.length) { alert('Nada encontrado com esses filtros.'); return; }
     closeModal('modal-qc-rel');
     gerarRel(L, fmt, { emp: ek ? el('qcr-emp').selectedOptions[0].text : 'Todas as empresas', dep: dk || 'Todos os departamentos' });
@@ -22324,8 +22325,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function money(v) { return typeof fmtMoney === 'function' ? fmtMoney(v) : 'R$ ' + v.toFixed(2); }
   // CLT + Agência / Sem registro (fid 'x:id')
   function relPessoas(fe) {
-    var L = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).slice();
-    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (fe && c.emp !== fe)) return; L.push(Object.assign({}, c, { id: 'x:' + c.id, n: c.n + (c.tipo === 'agencia' ? ' (Agência)' : ' (Sem registro)') })); });
+    var gx = fe === '__ag' ? 'agencia' : fe === '__sr' ? 'semreg' : ''; if (gx) fe = '';
+    var L = gx ? [] : DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).slice();
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (fe && c.emp !== fe) || (gx && (c.tipo === 'agencia' ? 'agencia' : 'semreg') !== gx)) return; L.push(Object.assign({}, c, { id: 'x:' + c.id, n: c.n + (c.tipo === 'agencia' ? ' (Agência)' : ' (Sem registro)') })); });
     return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
   }
   window.rdBenefRel = function () {
@@ -22446,8 +22448,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // pessoas: CLT (fid = id) + Agência / Sem registro (fid = 'x:' + id)
   function pessoas(empF) {
     var L = [];
-    DB.g('funcionarios').forEach(function (f) { if (f.st === 'Desligado' || f._ext || (empF && f.emp !== empF)) return; L.push({ fid: f.id, n: f.n, g: 'CLT', p: f }); });
-    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (empF && c.emp !== empF)) return; L.push({ fid: 'x:' + c.id, n: c.n, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', p: c }); });
+    var gx = empF === '__ag' ? 'agencia' : empF === '__sr' ? 'semreg' : ''; if (gx) empF = '';
+    if (!gx) DB.g('funcionarios').forEach(function (f) { if (f.st === 'Desligado' || f._ext || (empF && f.emp !== empF)) return; L.push({ fid: f.id, n: f.n, g: 'CLT', p: f }); });
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (empF && c.emp !== empF) || (gx && (c.tipo === 'agencia' ? 'agencia' : 'semreg') !== gx)) return; L.push({ fid: 'x:' + c.id, n: c.n, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', p: c }); });
     return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
   }
   window.benefPessoas = pessoas;
@@ -22582,6 +22585,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 /* ════════ GERAR ARQUIVO DE BENEFÍCIO: "Todas as empresas" (tabela única por empresa) e um arquivo de compra para cada empresa ════════ */
 (function () {
   var TODAS = '__todas';
+  function multiV(v) { return v === TODAS || v === '__ag' || v === '__sr'; }
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function empresasComGente() {
@@ -22598,17 +22602,18 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.rdFlash = function () {
     var s = el('flash-empresa'), cur = s ? s.value : '';
     var r = _rdf.apply(this, arguments); addOpcao();
-    if (cur === TODAS) { s.value = TODAS; renderFlashTable(); }
+    if (multiV(cur)) { if (window.addExtOpts) addExtOpts(s); s.value = cur; renderFlashTable(); }
     return r;
   };
   var _onemp = window.onFlashEmpChange;
   window.onFlashEmpChange = function () {
-    if ((el('flash-empresa') || {}).value === TODAS) { if (el('flash-cnpj')) el('flash-cnpj').value = 'Um CNPJ por empresa'; renderFlashTable(); return; }
+    if (multiV((el('flash-empresa') || {}).value)) { if (el('flash-cnpj')) el('flash-cnpj').value = 'Um CNPJ por empresa'; renderFlashTable(); return; }
     return _onemp.apply(this, arguments);
   };
   var _rt = window.renderFlashTable;
   window.renderFlashTable = function () {
-    var s = el('flash-empresa'); if (!s || s.value !== TODAS) return _rt.apply(this, arguments);
+    var s = el('flash-empresa'); if (!s || !multiV(s.value)) return _rt.apply(this, arguments);
+    var modo = s.value, soG = modo === '__ag' ? 'Agência' : modo === '__sr' ? 'Sem registro' : '';
     var ff = el('flash-func-filter'), fval = ff ? ff.value : '', tb = el('flash-tbody'), linhas = [];
     empresasComGente().forEach(function (e) {
       s.value = e.id;
@@ -22617,10 +22622,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (ff && fval) ff.value = fval;
       var rows = Array.prototype.slice.call(tb.querySelectorAll('tr')).filter(function (tr) { return tr.querySelector('input'); });
       if (fval) { rows = rows.filter(function (tr) { return tr.querySelector('#dias-' + CSS.escape(fval)) || tr.dataset.ext === fval; }); }
+      if (soG) rows = rows.filter(function (tr) { var x = tr.dataset.ext && window.benefPessoaDe ? window.benefPessoaDe(tr.dataset.ext) : null; return x && x.g === soG; });
       if (!rows.length) return;
       linhas.push({ e: e, rows: rows });
     });
-    s.value = TODAS;
+    s.value = modo;
     tb.innerHTML = '';
     linhas.forEach(function (g) {
       var h = document.createElement('tr'); h.className = 'b3-emp'; h.dataset.emp = g.e.id;
@@ -22640,7 +22646,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // Gerar compra: com "Todas as empresas", um arquivo para cada empresa
   var _ger = window.gerarFlashXLSX;
   window.gerarFlashXLSX = async function () {
-    var s = el('flash-empresa'); if (!s || s.value !== TODAS) return _ger.apply(this, arguments);
+    var s = el('flash-empresa'); if (!s || !multiV(s.value)) return _ger.apply(this, arguments);
+    var modo = s.value; window.__benefSoExt = modo === '__ag' ? 'Agência' : modo === '__sr' ? 'Sem registro' : '';
     var grupos = Array.prototype.map.call(document.querySelectorAll('#flash-tbody tr.b3-emp'), function (h) { return h.dataset.emp; });
     if (!grupos.length) { alert('Nenhum colaborador na lista.'); return; }
     if (!confirm('Gerar ' + grupos.length + ' arquivo(s) de compra — um para cada empresa?\n\nSe o navegador perguntar, permita baixar vários arquivos.')) return;
@@ -22649,7 +22656,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       try { await _ger.apply(this, arguments); } catch (e) { console.error(e); }
       await new Promise(function (r) { setTimeout(r, 700); });
     }
-    s.value = TODAS;
+    window.__benefSoExt = ''; s.value = modo;
     toast(grupos.length + ' arquivo(s) de compra gerado(s) — um por empresa ✅');
   };
   addOpcao();
@@ -22789,6 +22796,78 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   card();
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
+<script>
+/* ════════ FILTROS DE EMPRESA: opções "Colaboradores de Agência" e "Colaboradores sem registro" + eles junto da empresa ════════ */
+(function () {
+  var OPS = [['__ag', '🏢 Colaboradores de Agência'], ['__sr', '📝 Colaboradores sem registro']];
+  function el(id) { return document.getElementById(id); }
+  window.addExtOpts = function (sel) {
+    if (!sel) return;
+    // só depois que a tela já colocou as empresas na lista (algumas telas só preenchem quando a lista está vazia)
+    if (!Array.prototype.some.call(sel.options, function (o) { return o.value && o.value !== '__ag' && o.value !== '__sr' && o.value !== '__todas' && o.value !== '__perfil'; })) return;
+    OPS.forEach(function (o) { if (!sel.querySelector('option[value="' + o[0] + '"]')) { var x = document.createElement('option'); x.value = o[0]; x.textContent = o[1]; x.style.fontWeight = '600'; sel.appendChild(x); } });
+  };
+  window.extGrupoOk = function (pk, v) {
+    if (v !== '__ag' && v !== '__sr' || !pk || String(pk).indexOf('x:') !== 0) return false;
+    var c = DB.g('colab-ext').find(function (q) { return q.id === String(pk).slice(2); }); if (!c) return false;
+    return v === '__ag' ? c.tipo === 'agencia' : c.tipo !== 'agencia';
+  };
+  // colaboradores de Agência / Sem registro no formato de funcionário (para relatórios)
+  function extFunc(c) {
+    return Object.assign({}, c, { id: 'x:' + c.id, n: c.n + (c.tipo === 'agencia' ? ' (Agência)' : ' (Sem registro)'), adm: c.adm || c.ini || '', dtIni: c.ini || '', st: (c.st || 'Ativo') === 'Ativo' ? 'Ativo' : 'Desligado', _ext: c.tipo === 'agencia' ? 'agencia' : 'semreg' });
+  }
+  // empF: '' = só CLT (como antes) · id da empresa = CLT + Agência/Sem registro da empresa · '__ag'/'__sr' = só o grupo
+  window.extComoFuncs = function (empF, soAtivos) {
+    var clt = DB.g('funcionarios').filter(function (f) { return !f._ext && (!soAtivos || f.st !== 'Desligado'); });
+    if (!empF) return clt;
+    var ext = DB.g('colab-ext').filter(function (c) { return !soAtivos || (c.st || 'Ativo') === 'Ativo'; });
+    if (empF === '__ag' || empF === '__sr') return ext.filter(function (c) { return empF === '__ag' ? c.tipo === 'agencia' : c.tipo !== 'agencia'; }).map(extFunc);
+    return clt.filter(function (f) { return f.emp === empF; }).concat(ext.filter(function (c) { return c.emp === empF; }).map(extFunc));
+  };
+  // recoloca as opções e o valor escolhido quando a tela recria a lista
+  function manter(selId, fn, depois) {
+    var orig = window[fn]; if (typeof orig !== 'function') return;
+    window[fn] = function () {
+      var s = el(selId), cur = s ? s.value : '';
+      var r = orig.apply(this, arguments);
+      s = el(selId); if (s) { addExtOpts(s); if ((cur === '__ag' || cur === '__sr') && s.value !== cur) { s.value = cur; if (depois) depois(); } }
+      return r;
+    };
+  }
+  // Benefícios
+  manter('benef-emp-filter', 'rdBenefFunc', function () { rdBenefFunc(); });
+  manter('benef-rel-emp', 'rdBenefRel', function () { rdBenefRel(); });
+  var _bm = window.batrModo; if (_bm) window.batrModo = function (m) { var r = _bm.apply(this, arguments); if (m) addExtOpts(el('batr-me')); return r; };
+  var _rdf = window.rdFlash; if (_rdf) window.rdFlash = function () { var s = el('flash-empresa'), cur = s ? s.value : ''; if (s) addExtOpts(s); if (s && (cur === '__ag' || cur === '__sr')) s.value = cur; var r = _rdf.apply(this, arguments); s = el('flash-empresa'); addExtOpts(s); if ((cur === '__ag' || cur === '__sr') && s.value !== cur) { s.value = cur; renderFlashTable(); } return r; };
+  // Recibos em grupo (adiantamento, pagamento, 13º, bônus)
+  var _ra = window.recAbrir; if (_ra) window.recAbrir = function () { var r = _ra.apply(this, arguments); addExtOpts(el('rc-gemp')); return r; };
+  var _rgl = window.recGrupoLista; if (_rgl) window.recGrupoLista = function () {
+    var s = el('rc-gemp'), g = el('rc-grupo'), v = s ? s.value : '';
+    if (v === '__ag' || v === '__sr') { if (g) g.value = v === '__ag' ? 'agencia' : 'semreg'; s.value = ''; var r = _rgl.apply(this, arguments); s.value = v; return r; }
+    return _rgl.apply(this, arguments);
+  };
+  // Recibo avulso
+  var _rav = window.raAbrir; if (_rav) window.raAbrir = function () { var r = _rav.apply(this, arguments); addExtOpts(el('ra-femp')); return r; };
+  var _ral = window.raLista; if (_ral) window.raLista = function () {
+    var s = el('ra-femp'), g = el('ra-fg'), v = s ? s.value : '';
+    if (v === '__ag' || v === '__sr') { if (g) g.value = v === '__ag' ? 'Agência' : 'Sem registro'; s.value = ''; var r = _ral.apply(this, arguments); s.value = v; return r; }
+    return _ral.apply(this, arguments);
+  };
+  // Funcionários › Relatório
+  manter('fr-emp', 'rdFuncRel', function () { rdFuncRelTabela(); });
+  // (o relatório já traz Agência/Sem registro junto da empresa; aqui só as opções de grupo)
+  var _frf = window._frFiltrados;
+  if (typeof _frf === 'function') window._frFiltrados = function () {
+    var s = el('fr-emp'), v = s ? s.value : '';
+    if (v !== '__ag' && v !== '__sr') return _frf.apply(this, arguments);
+    s.value = ''; var R; try { R = _frf.apply(this, arguments); } finally { s.value = v; }
+    var t = v === '__ag' ? 'agencia' : 'semreg'; R.list = R.list.filter(function (f) { return f._ext === t; }); return R;
+  };
+  // Funcionários › Aniversário de empresa (tempo de casa)
+  // Quebra de caixa › relatório
+  var _qr = window.qcRelatorio; if (_qr) window.qcRelatorio = function (chave) { var r = _qr.apply(this, arguments); if (!chave) { addExtOpts(el('qcr-emp')); } return r; };
 })();
 </script>
 </body>
