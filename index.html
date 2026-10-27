@@ -16269,6 +16269,10 @@ function rhPodeEnviar() {
   function statusTxt(r) { return { 'Concluída': '🟢 Realizada', 'A programar': '🟡 A programar', 'Agendada': '⚪ Programada', 'Em andamento': '🔵 Em andamento' }[r.st] || r.st || ''; }
 
   // ── tela ──
+  // Unid Trabalho = departamento do cadastro · Unid Registro = empresa do contrato (cadastro); se o cadastro estiver vazio, usa o que foi digitado/importado
+  function ferUT(r, f) { f = f || {}; var d = f.dep ? DB.g('departamentos').find(function (x) { return x.id === f.dep || x.nome === f.dep; }) : null; return (d ? d.nome : (f.dep && !/^[a-z0-9]{8,}$/i.test(f.dep) ? f.dep : '')) || (r && r.uTrab) || ''; }
+  function ferUR(r, f) { f = f || {}; var e = f.emp ? DB.g('empresas').find(function (x) { return x.id === f.emp; }) : null; return (e ? e.razao : '') || (r && r.uReg) || ''; }
+  window.ferUT = ferUT; window.ferUR = ferUR;
   window.rdFer = function () {
     var tb = el('tb-fer'); if (!tb) return;
     var lista = garantirPeriodos();
@@ -16282,13 +16286,14 @@ function rhPodeEnviar() {
       return '<button class="fer-tab' + (filtroAba === t[0] ? ' on' : '') + '" onclick="ferAba(\'' + t[0] + '\')">' + t[1] + '<b>' + cont[t[0]] + '</b></button>';
     }).join('');
     // unidades
-    var us = {}; ativos.forEach(function (r) { if (r.uTrab) us[r.uTrab] = 1; });
+    var fDe = function (r) { return funcs.find(function (x) { return x.id === r.fid; }) || {}; };
+    var us = {}; ativos.forEach(function (r) { var u = ferUT(r, fDe(r)); if (u) us[u] = 1; });
     var su = el('fer-unid'); if (su) { var atual = su.value; su.innerHTML = '<option value="">Todas as unidades</option>' + Object.keys(us).sort().map(function (u) { return '<option>' + esc(u) + '</option>'; }).join(''); su.value = us[atual] ? atual : ''; }
     var q = norm((el('fer-busca') || {}).value), un = (su || {}).value || '';
     var linhas = ativos.filter(function (r) {
       if (filtroAba !== 'todos' && corDe(r) !== filtroAba) return false;
-      if (un && r.uTrab !== un) return false;
-      if (q) { var f = funcs.find(function (x) { return x.id === r.fid; }) || {}; if (norm([f.n, r.car || f.car, r.uTrab, r.uReg, r.obs].join(' ')).indexOf(q) === -1) return false; }
+      if (un && ferUT(r, fDe(r)) !== un) return false;
+      if (q) { var f = funcs.find(function (x) { return x.id === r.fid; }) || {}; if (norm([f.n, r.car || f.car, ferUT(r, f), ferUR(r, f), r.obs].join(' ')).indexOf(q) === -1) return false; }
       return true;
     });
     var campo = (el('fer-sort-campo') || {}).value || 'nome', dir = (el('fer-sort-dir') || {}).value === 'desc' ? -1 : 1;
@@ -16299,7 +16304,7 @@ function rhPodeEnviar() {
       else if (campo === 'ret') { x = a.fim || a.ret || '9999'; y = b.fim || b.ret || '9999'; }
       else if (campo === 'status') { x = corDe(a); y = corDe(b); }
       else if (campo === 'lim') { x = a.lim || '9999'; y = b.lim || '9999'; }
-      else if (campo === 'unid') { x = (a.uTrab || 'zz') + norm(nomeDe(a)); y = (b.uTrab || 'zz') + norm(nomeDe(b)); }
+      else if (campo === 'unid') { x = (norm(ferUT(a, fDe(a))) || 'zz') + norm(nomeDe(a)); y = (norm(ferUT(b, fDe(b))) || 'zz') + norm(nomeDe(b)); }
       else { x = norm(nomeDe(a)) + perInicioAno(a) + (a.ini || ''); y = norm(nomeDe(b)) + perInicioAno(b) + (b.ini || ''); }
       return x < y ? -dir : x > y ? dir : 0;
     });
@@ -16309,7 +16314,7 @@ function rhPodeEnviar() {
       var f = funcs.find(function (x) { return x.id === r.fid; }) || {};
       var limAlerta = r.lim && r.st === 'A programar' && r.lim <= em60;
       return '<tr class="fer-' + corDe(r) + '">' +
-        '<td>' + esc(r.uTrab) + '</td><td>' + esc(r.uReg) + '</td><td>' + esc(r.car || f.car || '') + '</td>' +
+        '<td>' + esc(ferUT(r, f)) + '</td><td>' + esc(ferUR(r, f)) + '</td><td>' + esc(r.car || f.car || '') + '</td>' +
         '<td class="nome">' + esc(f.n || '—') + '</td><td>' + fdx(f.adm) + '</td>' +
         '<td>' + esc(r.per || (r.ai ? perLabel(parseInt(r.ai, 10)) : '')) + '</td>' +
         '<td' + (limAlerta ? ' class="fer-lim-alerta" title="Data limite próxima — programar!"' : '') + '>' + fdx(r.lim) + (limAlerta ? ' ⚠️' : '') + '</td>' +
@@ -16350,8 +16355,8 @@ function rhPodeEnviar() {
     var f = DB.g('funcionarios').find(function (x) { return x.id === v('ferf'); }); if (!f) return;
     var ult = ultimoDoFunc(DB.g('ferias'), f.id) || {};
     if (!v('fer-car')) el('fer-car').value = ult.car || f.car || '';
-    if (!v('fer-ut')) el('fer-ut').value = ult.uTrab || '';
-    if (!v('fer-ur')) el('fer-ur').value = ult.uReg || '';
+    if (!v('fer-ut')) el('fer-ut').value = ferUT(ult, f);
+    if (!v('fer-ur')) el('fer-ur').value = ferUR(ult, f);
     if (!v('fer-per') && f.adm) { var p = periodoDoAno(f, anoAtual(f) || parseInt(f.adm, 10)); el('fer-per').value = p.per; el('ferai').value = p.ai; el('feraf').value = p.af; el('fer-lim').value = p.lim; }
   };
   window.ferPerMudou = function () {
@@ -16380,7 +16385,8 @@ function rhPodeEnviar() {
     el('ferai').value = r.ai || ''; el('feraf').value = r.af || ''; el('feri').value = r.ini || '';
     el('ferd').value = r.dias || ''; el('ferr').value = r.ret || '';
     el('ferst').value = r.st || 'Agendada'; el('ferob').value = r.obs || '';
-    el('fer-ut').value = r.uTrab || ''; el('fer-ur').value = r.uReg || ''; el('fer-car').value = r.car || '';
+    var fR = DB.g('funcionarios').find(function (x) { return x.id === r.fid; }) || {};
+    el('fer-ut').value = ferUT(r, fR); el('fer-ur').value = ferUR(r, fR); el('fer-car').value = r.car || '';
     el('fer-per').value = r.per || (r.ai ? perLabel(parseInt(r.ai, 10)) : ''); el('fer-lim').value = r.lim || '';
     el('fer-sant').value = r.saldoAnt == null ? '' : r.saldoAnt; el('fer-mes').value = (r.mes || '').slice(0, 7);
     el('fer-fim').value = r.fim || (r.ret ? addDias(r.ret, -1) : ''); el('fer-saldo').value = r.saldo == null ? '' : r.saldo;
@@ -16411,7 +16417,7 @@ function rhPodeEnviar() {
     var aoa = [['Unid Trabalho','Unid Registro','Cargo/Função','Funcionário','Data de admissão','Periodo aquisitivo','Data limite de saída','Saldo Ant.','Mês','Início gozo','Fim gozo','Dias a descansar','Saldo','Observações','Situação']];
     linhas.forEach(function (r) {
       var f = funcs.find(function (x) { return x.id === r.fid; }) || {};
-      aoa.push([r.uTrab || '', r.uReg || '', r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, mesTxt(r.mes), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), r.dias || '', r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, '')]);
+      aoa.push([ferUT(r, f), ferUR(r, f), r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, mesTxt(r.mes), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), r.dias || '', r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, '')]);
     });
     var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = aoa[0].map(function (h, i) { return { wch: i === 13 ? 50 : i === 3 ? 32 : 14 }; });
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Controle de Férias');
@@ -17776,7 +17782,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var c = cor(x), r = x.r;
         return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--gray-100);border-left:4px solid ' + c.bd + ';">' +
           '<div style="flex:1;min-width:200px;"><strong>' + esc(x.f.n) + '</strong>' +
-          '<div style="font-size:12px;color:var(--gray-600);">' + esc(r.car || x.f.car || '') + (r.uTrab ? ' · ' + esc(r.uTrab) : '') +
+          '<div style="font-size:12px;color:var(--gray-600);">' + esc(r.car || x.f.car || '') + ((window.ferUT ? ferUT(r, x.f) : r.uTrab) ? ' · ' + esc(window.ferUT ? ferUT(r, x.f) : r.uTrab) : '') +
           ' · período ' + esc(r.per || (r.ai ? fd(r.ai) + ' a ' + fd(r.af) : '')) + ' · data limite <strong>' + fd(r.lim) + '</strong>' +
           (x.tardia ? ' · <span style="color:#b71c1c;">programada para ' + fd(r.ini) + ', depois da data limite</span>' : '') + '</div></div>' +
           '<span style="font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:20px;background:' + c.bg + ';color:' + c.tx + ';">' + txtDias(x) + '</span>' +
