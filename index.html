@@ -8896,6 +8896,7 @@ async function gerarFlashXLSX() {
     itensModelo.push({ f: f, dep: depNome, dias: dias, vt: vtDia, vr: vrDia, va: va, comb: comb, assim: assim, bonus: bonus, odonto: odonto, med: med, tot: (typeof window.benefModeloTot === 'function' ? window.benefModeloTot(f.id) : null) });
   });
 
+  try { document.querySelectorAll('#flash-tbody tr[data-ext]').forEach(function (tr) { var fx = tr.dataset.ext, x = window.benefPessoaDe ? window.benefPessoaDe(fx) : null; if (!x) return; var dpn = (deps.find(function (d) { return d.id === x.p.dep; }) || {}).nome || ''; itensModelo.push({ f: x.p, dep: dpn, dias: 0, vt: 0, vr: 0, va: 0, comb: 0, assim: 0, bonus: 0, odonto: 0, med: 0, tot: window.benefModeloTot(fx) }); }); } catch (e) {}
   var blob   = window.benefModeloBlob(itensModelo, emp);
   var nomeArq = 'Pedido_Beneficios_' + ((emp && (emp.razao || emp.nome)) || '').replace(/[^A-Za-z0-9À-ÿ]+/g, '_') + '_' + de + '_a_' + ate + '.xlsx';
   var a = document.createElement('a');
@@ -22132,7 +22133,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { if (Array.prototype.some.call(tr.querySelectorAll('input.b3'), function (i) { return parseFloat(i.value) > 0; })) q++; });
     box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.map(function (c) { return c[1] + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total: <strong>' + brl(T.mob + T.livre + T.bonus + T.alim) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus = ' + brl(T.livre + T.bonus) + ')</span>';
   }
-  window.b3Sugerir = function (fid) { var s = sugestao(fid); CAT.forEach(function (c) { var i = el(idDe(c[0], fid)); if (i && !i.dataset.man) { i.value = s[c[0]] > 0 ? s[c[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); } }); total(fid); };
+  window.b3Sugerir = function (fid) { if (String(fid).indexOf('x:') === 0) return; var s = sugestao(fid); CAT.forEach(function (c) { var i = el(idDe(c[0], fid)); if (i && !i.dataset.man) { i.value = s[c[0]] > 0 ? s[c[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); } }); total(fid); };
   window.b3Detalhe = function (on) { var t = el('flash-table'); if (t) t.classList.toggle('b3-det', !!on); };
   window.b3Limpar = function () { if (!confirm('Apagar os valores de Mobilidade, Livre e Alimentação + Refeição de todos?')) return; document.querySelectorAll('#flash-tbody input.b3').forEach(function (i) { i.value = ''; i.dataset.man = '1'; i.className = 'b3'; }); document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { var i = tr.querySelector('input.b3'); if (i) total(i.dataset.f); }); };
   window.b3Recalcular = function () { document.querySelectorAll('#flash-tbody input.b3').forEach(function (i) { delete i.dataset.man; }); document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { var i = tr.querySelector('input.b3'); if (i) b3Sugerir(i.dataset.f); }); };
@@ -22166,6 +22167,28 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       Array.prototype.forEach.call(tr.querySelectorAll('input[type=number]:not(.b3)'), function (o) { o.addEventListener('input', function () { b3Sugerir(fid); }); });
       total(fid);
     });
+    // Agência / Sem registro da empresa escolhida
+    try {
+      var empId = (el('flash-empresa') || {}).value || '', de = (el('flash-de') || {}).value, ate = (el('flash-ate') || {}).value, ff = (el('flash-func-filter') || {}).value;
+      if (empId && !ff && typeof window.benefExtLinhas === 'function') window.benefExtLinhas(empId).forEach(function (x) {
+        if (el('mob-' + x.fid)) return;
+        var c = x.p, dep = (DB.g('departamentos').find(function (d) { return d.id === c.dep; }) || {}).nome || '';
+        var dd = (typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22);
+        var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0 };
+        if (nv) ['mob', 'livre', 'alim', 'bonus'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
+        var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
+        tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
+        CAT.forEach(function (k) {
+          var td = document.createElement('td'); td.style.cssText = 'padding:5px 7px;vertical-align:middle;';
+          var i = document.createElement('input'); i.type = 'number'; i.step = '0.01'; i.min = '0'; i.id = idDe(k[0], x.fid); i.dataset.c = k[0]; i.dataset.f = x.fid;
+          i.value = s[k[0]] > 0 ? s[k[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : '');
+          i.oninput = function () { this.dataset.man = '1'; this.className = 'b3' + (this.value ? ' has-val' : ''); total(x.fid); };
+          td.appendChild(i); tr.appendChild(td);
+        });
+        var tt = document.createElement('td'); tt.id = 'b3tot-' + x.fid; tt.style.cssText = 'padding:5px 7px;font-weight:700;font-size:12px;color:var(--green-dark);white-space:nowrap;text-align:right;'; tr.appendChild(tt);
+        tb.appendChild(tr); total(x.fid);
+      });
+    } catch (e) { console.error(e); }
     if (!el('b3-totais')) { var w = tab.closest('.table-wrap') || tab; w.insertAdjacentHTML('afterend', '<div id="b3-totais" style="margin-top:8px;font-size:13px;"></div>'); }
     totGeral();
   }
@@ -22297,11 +22320,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return v;
   }
   function money(v) { return typeof fmtMoney === 'function' ? fmtMoney(v) : 'R$ ' + v.toFixed(2); }
+  // CLT + Agência / Sem registro (fid 'x:id')
+  function relPessoas(fe) {
+    var L = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).slice();
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (fe && c.emp !== fe)) return; L.push(Object.assign({}, c, { id: 'x:' + c.id, n: c.n + (c.tipo === 'agencia' ? ' (Agência)' : ' (Sem registro)') })); });
+    return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+  }
   window.rdBenefRel = function () {
     var sel = document.getElementById('benef-rel-emp');
     if (sel && sel.options.length <= 1) DB.g('empresas').slice().sort(function (a, b) { return (a.razao || a.nome || '').localeCompare(b.razao || b.nome || ''); }).forEach(function (e) { var o = document.createElement('option'); o.value = e.id; o.textContent = e.razao || e.nome; sel.appendChild(o); });
     var fe = (sel || {}).value || '';
-    var funcs = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    var funcs = relPessoas(fe);
     var atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
     var tb = document.getElementById('tb-benef-rel'); if (!tb) return;
     var th = tb.parentNode.querySelector('thead');
@@ -22325,7 +22354,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.exportBenefCSV = function () {
     var fe = (document.getElementById('benef-rel-emp') || {}).value || (document.getElementById('benef-emp-filter') || {}).value || '';
     var emps = DB.g('empresas'), deps = DB.g('departamentos'), atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
-    var funcs = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!fe || f.emp === fe); }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    var funcs = relPessoas(fe);
     var linhas = funcs.map(function (f) { return { f: f, v: valoresDo(f, atribs) }; }).filter(function (x) { return x.v.mob + x.v.livre + x.v.bonus + x.v.alim > 0; });
     if (!linhas.length) { alert('Nenhum benefício ativo para exportar.'); return; }
     var aoa = [['FUNCIONÁRIO', 'CPF', 'CARGO', 'DEPARTAMENTO', 'EMPRESA', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'BÔNUS (R$)', 'ALIMENTAÇÃO / REFEIÇÃO (R$)', 'TOTAL (R$)']];
@@ -22403,6 +22432,148 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     } catch (e) {}
     return r;
   };
+})();
+</script>
+<script>
+/* ════════ BENEFÍCIOS: atribuir a vários/todos de uma vez + Agência e Sem registro ════════ */
+(function () {
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição' };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  // pessoas: CLT (fid = id) + Agência / Sem registro (fid = 'x:' + id)
+  function pessoas(empF) {
+    var L = [];
+    DB.g('funcionarios').forEach(function (f) { if (f.st === 'Desligado' || f._ext || (empF && f.emp !== empF)) return; L.push({ fid: f.id, n: f.n, g: 'CLT', p: f }); });
+    DB.g('colab-ext').forEach(function (c) { if (c.st !== 'Ativo' || (empF && c.emp !== empF)) return; L.push({ fid: 'x:' + c.id, n: c.n, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', p: c }); });
+    return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+  }
+  window.benefPessoas = pessoas;
+  function pessoaDe(fid) { if (String(fid).indexOf('x:') === 0) { var c = DB.g('colab-ext').find(function (x) { return x.id === fid.slice(2); }); return c ? { fid: fid, n: c.n, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', p: c } : null; } var f = DB.g('funcionarios').find(function (x) { return x.id === fid; }); return f ? { fid: fid, n: f.n, g: 'CLT', p: f } : null; }
+  window.benefPessoaDe = pessoaDe;
+  var multi = false;
+  function injetar() {
+    var sel = el('batr-func'); if (!sel || el('batr-modo')) return;
+    var fg = sel.closest('.form-group');
+    fg.insertAdjacentHTML('beforebegin', '<div class="form-group form-full" id="batr-modo" style="margin-bottom:6px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<label class="btn btn-outline btn-sm batr-m" style="cursor:pointer;margin:0;"><input type="radio" name="batr-m" value="1" checked style="display:none;" onchange="batrModo(false)">👤 Um colaborador</label>' +
+      '<label class="btn btn-outline btn-sm batr-m" style="cursor:pointer;margin:0;"><input type="radio" name="batr-m" value="n" style="display:none;" onchange="batrModo(true)">👥 Vários / todos</label></div></div>');
+    fg.insertAdjacentHTML('afterend', '<div class="form-group form-full" id="batr-multi" style="display:none;">' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">' +
+      '<select id="batr-mg" onchange="batrLista()" style="padding:6px 8px;font-size:12.5px;"><option value="">Todos os grupos</option><option>CLT</option><option>Agência</option><option>Sem registro</option></select>' +
+      '<select id="batr-me" onchange="batrLista()" style="padding:6px 8px;font-size:12.5px;max-width:240px;"></select>' +
+      '<input id="batr-mq" type="search" placeholder="🔍 Buscar" oninput="batrLista()" style="padding:6px 8px;font-size:12.5px;flex:1;min-width:140px;">' +
+      '<button type="button" class="btn btn-outline btn-sm" onclick="batrTodos(true)">☑ Selecionar todos</button><button type="button" class="btn btn-outline btn-sm" onclick="batrTodos(false)">☐ Desmarcar</button></div>' +
+      '<div id="batr-ml" style="max-height:200px;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);padding:6px 10px;"></div>' +
+      '<div id="batr-mn" style="font-size:12px;color:var(--green-dark);margin-top:4px;font-weight:600;"></div>' +
+      '<div style="font-size:11.5px;color:var(--gray-500);margin-top:2px;">Só os benefícios com valor preenchido abaixo são aplicados; os que ficarem em branco não mudam o que cada um já tem.</div></div>');
+    var st = document.createElement('style'); st.textContent = '.batr-m:has(input:checked){background:var(--green);color:#fff;border-color:var(--green);}#batr-ml label{display:flex;gap:8px;align-items:center;font-size:13px;padding:3px 0;text-transform:none;letter-spacing:0;color:var(--gray-800);cursor:pointer;}#batr-ml small{color:var(--gray-400);}';
+    document.head.appendChild(st);
+  }
+  var marcados = {};
+  window.batrLista = function () {
+    var g = (el('batr-mg') || {}).value, e = (el('batr-me') || {}).value, q = sem((el('batr-mq') || {}).value);
+    var L = pessoas(e).filter(function (x) { return (!g || x.g === g) && (!q || sem(x.n).indexOf(q) !== -1); });
+    el('batr-ml').innerHTML = L.length ? L.map(function (x) { return '<label><input type="checkbox" style="width:auto;" data-fid="' + esc(x.fid) + '"' + (marcados[x.fid] ? ' checked' : '') + ' onchange="batrMarca(this)"> ' + esc(x.n) + ' <small>' + x.g + '</small></label>'; }).join('') : '<div style="color:var(--gray-400);font-size:12.5px;padding:6px;">Ninguém com esses filtros.</div>';
+    batrConta();
+  };
+  window.batrMarca = function (c) { if (c.checked) marcados[c.dataset.fid] = 1; else delete marcados[c.dataset.fid]; batrConta(); };
+  window.batrTodos = function (v) { document.querySelectorAll('#batr-ml input[type=checkbox]').forEach(function (c) { c.checked = v; if (v) marcados[c.dataset.fid] = 1; else delete marcados[c.dataset.fid]; }); batrConta(); };
+  function batrConta() { var n = Object.keys(marcados).length; if (el('batr-mn')) el('batr-mn').textContent = n + ' colaborador(es) selecionado(s)'; }
+  window.batrModo = function (m) {
+    multi = m; injetar();
+    el('batr-func').closest('.form-group').style.display = m ? 'none' : '';
+    el('batr-multi').style.display = m ? '' : 'none';
+    var info = el('batr-func-info'); if (info) info.style.display = m ? 'none' : (el('batr-func').value ? 'block' : 'none');
+    if (m) {
+      var se = el('batr-me'); se.innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.razao) + '</option>'; }).join('');
+      Object.keys(NOVOS).forEach(function (k) { var v = el('batr-' + k + '-val'), o = el('batr-' + k + '-obs'); if (v) v.value = ''; if (o) o.value = ''; try { batrUpdateCalc(k); } catch (e) {} });
+      batrLista();
+    }
+  };
+  // seletor único: inclui Agência e Sem registro
+  function completarSelect() {
+    var s = el('batr-func'); if (!s || s.querySelector('optgroup')) return;
+    var cur = s.value, clt = Array.prototype.slice.call(s.options).filter(function (o) { return o.value; }).map(function (o) { return '<option value="' + esc(o.value) + '">' + esc(o.textContent) + '</option>'; }).join('');
+    var ext = pessoas('').filter(function (x) { return x.g !== 'CLT'; }), grp = function (t) { var l = ext.filter(function (x) { return x.g === t; }); return l.length ? '<optgroup label="' + t + '">' + l.map(function (x) { return '<option value="' + esc(x.fid) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>' : ''; };
+    s.innerHTML = '<option value="">Selecione</option><optgroup label="Funcionários CLT">' + clt + '</optgroup>' + grp('Agência') + grp('Sem registro');
+    if (cur) s.value = cur;
+  }
+  var _om = window.openModal;
+  window.openModal = function (id) {
+    var r = _om.apply(this, arguments);
+    if (id === 'modal-benef-atr') { try { injetar(); completarSelect(); marcados = {}; var r1 = document.querySelector('input[name="batr-m"][value="1"]'); if (r1) r1.checked = true; batrModo(false); } catch (e) { console.error(e); } }
+    return r;
+  };
+  var _chg = window.onBatrFuncChange;
+  window.onBatrFuncChange = function () {
+    var v = (el('batr-func') || {}).value || '';
+    if (v.indexOf('x:') !== 0) return _chg.apply(this, arguments);
+    var x = pessoaDe(v), info = el('batr-func-info'); if (!x) return;
+    var c = x.p, emp = DB.g('empresas').find(function (e) { return e.id === c.emp; });
+    info.innerHTML = '<strong>' + esc(c.n) + '</strong> | ' + x.g + (c.agencia ? ' (' + esc(c.agencia) + ')' : '') + ' | ' + esc(c.car || '—') + ' | ' + (emp ? esc(emp.razao) : '—') + '<br><small style="opacity:.7;">CPF: ' + esc(c.cpf || '—') + '</small>';
+    info.style.display = 'block';
+    batrLoadExisting(v);
+  };
+  var _sav = window.savBenefAtrNovo;
+  window.savBenefAtrNovo = async function () {
+    if (!multi) return _sav.apply(this, arguments);
+    var fids = Object.keys(marcados); if (!fids.length) { alert('Selecione pelo menos um colaborador.'); return; }
+    var lin = Object.keys(NOVOS).map(function (k) { var v = el('batr-' + k + '-val'); return { k: k, preench: v && v.value !== '', val: (parseFloat((v || {}).value) || 0).toFixed(2), tipoCalc: (el('batr-' + k + '-tipo') || {}).value || 'mes', st: (el('batr-' + k + '-st') || {}).value || 'Ativo', obs: (el('batr-' + k + '-obs') || {}).value || '' }; }).filter(function (l) { return l.preench; });
+    if (!lin.length) { alert('Preencha o valor de pelo menos um benefício.'); return; }
+    if (!confirm('Aplicar ' + lin.map(function (l) { return NOVOS[l.k] + ' R$ ' + l.val.replace('.', ',') + (l.tipoCalc === 'dia' ? '/dia' : ''); }).join(', ') + '\npara ' + fids.length + ' colaborador(es)?')) return;
+    var ini = (el('batr-ini') || {}).value || td(), atribs = DB.g('benef-atrib'), n = 0;
+    fids.forEach(function (fid) {
+      lin.forEach(function (l) {
+        var i = atribs.findIndex(function (a) { return a.fid === fid && (a.tipoBase || a.tipo) === NOVOS[l.k]; });
+        var rec = { fid: fid, tipo: NOVOS[l.k], tipoBase: NOVOS[l.k], tipoCalc: l.tipoCalc, valor: l.val, fim: '', st: l.st, obs: l.obs };
+        if (i >= 0) atribs[i] = Object.assign({}, atribs[i], rec); else atribs.push(Object.assign({ id: uid(), ini: ini }, rec));
+        n++;
+      });
+    });
+    DB.s('benef-atrib', atribs);
+    if (typeof driveReady !== 'undefined' && driveReady) { try { await driveSync('benef-atrib'); } catch (e) {} }
+    closeModal('modal-benef-atr'); try { rdBenefFunc(); rdBenef(); } catch (e) {}
+    toast('Benefícios aplicados a ' + fids.length + ' colaborador(es) ✅');
+  };
+  // cards de Agência / Sem registro em "Benefícios por Funcionário"
+  var _rd = window.rdBenefFunc;
+  window.rdBenefFunc = function () {
+    var r = _rd.apply(this, arguments);
+    try {
+      var box = el('benef-func-cards'); if (!box) return r;
+      var fe = (el('benef-emp-filter') || {}).value || '', ff = (el('benef-func-filter') || {}).value || '';
+      if (ff) return r;
+      var atribs = DB.g('benef-atrib'), ext = pessoas(fe).filter(function (x) { return x.g !== 'CLT'; });
+      ext.forEach(function (x) {
+        var L = atribs.filter(function (a) { return a.fid === x.fid; }); if (!L.length || box.querySelector('[data-fid="' + x.fid + '"]')) return;
+        var ativos = L.filter(function (a) { return a.st !== 'Encerrado' && parseFloat(a.valor || 0) > 0; }), tot = ativos.reduce(function (s, a) { return s + (parseFloat(a.valor) || 0); }, 0);
+        var emp = DB.g('empresas').find(function (e) { return e.id === x.p.emp; });
+        var card = document.createElement('div'); card.className = 'benef-func-card'; card.dataset.fid = x.fid;
+        card.innerHTML = '<div class="benef-func-card-header"><input type="checkbox" class="benef-massa-chk" data-fid="' + esc(x.fid) + '" style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-right:4px;" onclick="event.stopPropagation();benefMassaUpdateCount()">' +
+          '<div class="bfc-avatar">' + esc((x.n || '?').charAt(0).toUpperCase()) + '</div><div class="bfc-info"><div class="bfc-name">' + esc(x.n) + ' <span class="badge badge-blue" style="font-size:10px;">' + x.g + '</span></div>' +
+          '<div class="bfc-meta">' + esc(x.p.car || '—') + (emp ? ' &nbsp;·&nbsp; ' + esc(emp.razao) : '') + '</div><div class="bfc-badges">' + ativos.map(function (a) { return '<span class="benef-tipo-pill" style="background:var(--gray-100);color:var(--gray-600)">📌 ' + esc(String(a.tipoBase || a.tipo).split(' ')[0]) + '</span>'; }).join('') + '</div></div>' +
+          '<div class="bfc-total">' + (tot > 0 ? 'R$ ' + tot.toFixed(2).replace('.', ',') : '—') + '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();abrirEditarBenef(\'' + esc(x.fid) + '\')">✏️ Editar</button><button class="btn-icon danger bdel" title="Excluir benefícios" onclick="event.stopPropagation();benefExcluirFunc(\'' + esc(x.fid) + '\')">&#128465;</button></div>' +
+          '<div class="bfc-toggle">▼</div></div>' +
+          '<div class="benef-func-card-body" id="benef-body-' + esc(x.fid) + '"><table><thead><tr><th>Benefício</th><th>Valor</th><th>Início</th><th>Status</th><th>Obs.</th><th></th></tr></thead><tbody>' +
+          L.map(function (a) { var v = parseFloat(a.valor || 0); return '<tr><td><span class="benef-tipo-pill" style="background:var(--gray-100);color:var(--gray-600)">📌 ' + esc(a.tipoBase || a.tipo) + '</span></td><td>' + (v > 0 ? '<strong>R$ ' + v.toFixed(2).replace('.', ',') + '</strong>' + (a.tipoCalc === 'dia' ? '/dia' : '') : 'R$ 0,00') + '</td><td>' + (a.ini ? fd(a.ini) : '—') + '</td><td><span class="badge ' + (a.st === 'Ativo' ? 'badge-green' : a.st === 'Suspenso' ? 'badge-yellow' : 'badge-red') + '">' + esc(a.st) + '</span></td><td style="color:var(--gray-500);font-size:11.5px;">' + esc(a.obs || '—') + '</td><td><button class="btn-icon danger bdel" onclick="event.stopPropagation();benefExcluirUm(\'' + esc(a.id) + '\')">&#128465;</button></td></tr>'; }).join('') + '</tbody></table></div>';
+        card.querySelector('.benef-func-card-header').onclick = function () { toggleBenefCard(x.fid); };
+        box.appendChild(card);
+      });
+      var vazio = el('benef-func-empty'); if (vazio && box.children.length) vazio.style.display = 'none';
+    } catch (e) { console.error(e); }
+    return r;
+  };
+  // nome no "Excluir"
+  var _ex = window.benefExcluirFunc;
+  if (_ex) window.benefExcluirFunc = function (fid) {
+    var x = pessoaDe(fid); if (!x || x.g === 'CLT') return _ex.apply(this, arguments);
+    if (!confirm('Excluir TODOS os benefícios de ' + x.n + '?')) return;
+    DB.s('benef-atrib', DB.g('benef-atrib').filter(function (a) { return a.fid !== fid; })); try { rdBenefFunc(); } catch (e) {} toast('Benefícios excluídos.');
+  };
+  // Gerar Arquivo de Benefício: linhas de Agência / Sem registro da empresa
+  window.benefExtLinhas = function (empId) { return pessoas(empId).filter(function (x) { return x.g !== 'CLT'; }); };
 })();
 </script>
 </body>
