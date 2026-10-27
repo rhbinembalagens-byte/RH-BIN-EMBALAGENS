@@ -1165,6 +1165,16 @@ document.addEventListener('DOMContentLoaded', function () {
         <option value="asc">↑ Crescente</option>
         <option value="desc">↓ Decrescente</option>
       </select>
+      <select class="sort-sel" id="fer-ord-lim" title="Ordenar pela data limite de saída" onchange="if(this.value)document.getElementById('fer-ord-ini').value='';rdFer()">
+        <option value="">📅 Data limite: —</option>
+        <option value="asc">📅 Data limite ↑ Crescente</option>
+        <option value="desc">📅 Data limite ↓ Decrescente</option>
+      </select>
+      <select class="sort-sel" id="fer-ord-ini" title="Ordenar pelo início do gozo" onchange="if(this.value)document.getElementById('fer-ord-lim').value='';rdFer()">
+        <option value="">🏖️ Início do gozo: —</option>
+        <option value="asc">🏖️ Início do gozo ↑ Crescente</option>
+        <option value="desc">🏖️ Início do gozo ↓ Decrescente</option>
+      </select>
     </div>
     <div class="table-wrap" style="overflow-x:auto;"><table id="fer-tabela">
       <thead><tr><th>Unid Trabalho</th><th>Unid Registro</th><th>Cargo/Função</th><th>Funcionário</th><th>Data de admissão</th><th>Período aquisitivo</th><th>Data limite de saída</th><th>Saldo Ant.</th><th>Mês</th><th>Início gozo</th><th>Fim gozo</th><th>Dias a descansar</th><th>Saldo</th><th>Observações</th><th>Situação</th><th>Ações</th></tr></thead>
@@ -16297,7 +16307,19 @@ function rhPodeEnviar() {
       return true;
     });
     var campo = (el('fer-sort-campo') || {}).value || 'nome', dir = (el('fer-sort-dir') || {}).value === 'desc' ? -1 : 1;
+    var oLim = (el('fer-ord-lim') || {}).value, oIni = (el('fer-ord-ini') || {}).value;
+    if (oLim) { campo = 'lim'; dir = oLim === 'desc' ? -1 : 1; } else if (oIni) { campo = 'ini'; dir = oIni === 'desc' ? -1 : 1; }
     function nomeDe(r) { var f = funcs.find(function (x) { return x.id === r.fid; }); return f ? f.n : ''; }
+    // datas em qualquer formato (AAAA-MM-DD, DD/MM/AAAA) → AAAA-MM-DD; vazias sempre no fim, nas duas direções
+    function isoD(s) { s = String(s || '').trim(); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0]; m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; }
+    if (campo === 'ini' || campo === 'lim' || campo === 'ret') {
+      var kD = function (r) { return isoD(campo === 'ini' ? r.ini : campo === 'lim' ? r.lim : (r.fim || (r.ret ? addDias(r.ret, -1) : ''))); };
+      linhas.sort(function (a, b) {
+        var x = kD(a), y = kD(b);
+        if (!x || !y) { if (x !== y) return x ? -1 : 1; return norm(nomeDe(a)).localeCompare(norm(nomeDe(b))); }
+        return x < y ? -dir : x > y ? dir : norm(nomeDe(a)).localeCompare(norm(nomeDe(b)));
+      });
+    } else
     linhas.sort(function (a, b) {
       var x, y;
       if (campo === 'ini') { x = a.ini || '9999'; y = b.ini || '9999'; }
