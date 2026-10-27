@@ -1298,7 +1298,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <div class="card" style="margin-bottom:0">
       <div class="card-header">
         <span class="card-title">⚡ Gerar Arquivo de Importação – Flash Benefícios</span>
-        <button class="btn btn-primary btn-sm" onclick="gerarFlashXLSX()">📄 Gerar XLSX Flash</button>
+        <button class="btn btn-primary btn-sm" onclick="gerarFlashXLSX()">📄 Gerar Compra</button>
       </div>
 
       <!-- Seleção de empresa e competência -->
@@ -8799,7 +8799,8 @@ async function gerarFlashXLSX() {
   var emp   = DB.g('empresas').find(function(e){ return e.id===empId; });
   var funcs = DB.g('funcionarios').filter(function(f){ return f.emp===empId && f.st!=='Desligado'; });
   var deps  = DB.g('departamentos');
-  if (!funcs.length) { alert('Nenhum funcionário ativo nesta empresa.'); return; }
+  var _extEmp = (typeof window.benefExtLinhas === 'function') ? window.benefExtLinhas(empId).length : 0;
+  if (!funcs.length && !_extEmp) { alert('Nenhum funcionário ativo nesta empresa.'); return; }
 
   var chkVT    = (document.getElementById('flash-chk-vt')    ||{checked:true}).checked;
   var chkVR    = (document.getElementById('flash-chk-vr')    ||{checked:true}).checked;
@@ -8896,7 +8897,7 @@ async function gerarFlashXLSX() {
     itensModelo.push({ f: f, dep: depNome, dias: dias, vt: vtDia, vr: vrDia, va: va, comb: comb, assim: assim, bonus: bonus, odonto: odonto, med: med, tot: (typeof window.benefModeloTot === 'function' ? window.benefModeloTot(f.id) : null) });
   });
 
-  try { document.querySelectorAll('#flash-tbody tr[data-ext]').forEach(function (tr) { var fx = tr.dataset.ext, x = window.benefPessoaDe ? window.benefPessoaDe(fx) : null; if (!x) return; var dpn = (deps.find(function (d) { return d.id === x.p.dep; }) || {}).nome || ''; itensModelo.push({ f: x.p, dep: dpn, dias: 0, vt: 0, vr: 0, va: 0, comb: 0, assim: 0, bonus: 0, odonto: 0, med: 0, tot: window.benefModeloTot(fx) }); }); } catch (e) {}
+  try { document.querySelectorAll('#flash-tbody tr[data-ext]').forEach(function (tr) { var fx = tr.dataset.ext, x = window.benefPessoaDe ? window.benefPessoaDe(fx) : null; if (!x || x.p.emp !== empId) return; var dpn = (deps.find(function (d) { return d.id === x.p.dep; }) || {}).nome || ''; itensModelo.push({ f: x.p, dep: dpn, dias: 0, vt: 0, vr: 0, va: 0, comb: 0, assim: 0, bonus: 0, odonto: 0, med: 0, tot: window.benefModeloTot(fx) }); }); } catch (e) {}
   var blob   = window.benefModeloBlob(itensModelo, emp);
   var nomeArq = 'Pedido_Beneficios_' + ((emp && (emp.razao || emp.nome)) || '').replace(/[^A-Za-z0-9À-ÿ]+/g, '_') + '_' + de + '_a_' + ate + '.xlsx';
   var a = document.createElement('a');
@@ -8940,7 +8941,7 @@ async function gerarFlashXLSX() {
   DB.s('flash-hist', hist);
   if (driveReady) driveSync('flash-hist');
 
-  toast('Arquivo gerado e salvo no histórico! ' + funcs.length + ' funcionário(s) — ' + periodo);
+  toast('Arquivo gerado e salvo no histórico! ' + itensModelo.length + ' colaborador(es) — ' + periodo);
 }
 
 // ============================================================
@@ -22133,6 +22134,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { if (Array.prototype.some.call(tr.querySelectorAll('input.b3'), function (i) { return parseFloat(i.value) > 0; })) q++; });
     box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.map(function (c) { return c[1] + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total: <strong>' + brl(T.mob + T.livre + T.bonus + T.alim) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus = ' + brl(T.livre + T.bonus) + ')</span>';
   }
+  window.b3TotGeral = function () { totGeral(); };
   window.b3Sugerir = function (fid) { if (String(fid).indexOf('x:') === 0) return; var s = sugestao(fid); CAT.forEach(function (c) { var i = el(idDe(c[0], fid)); if (i && !i.dataset.man) { i.value = s[c[0]] > 0 ? s[c[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); } }); total(fid); };
   window.b3Detalhe = function (on) { var t = el('flash-table'); if (t) t.classList.toggle('b3-det', !!on); };
   window.b3Limpar = function () { if (!confirm('Apagar os valores de Mobilidade, Livre e Alimentação + Refeição de todos?')) return; document.querySelectorAll('#flash-tbody input.b3').forEach(function (i) { i.value = ''; i.dataset.man = '1'; i.className = 'b3'; }); document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { var i = tr.querySelector('input.b3'); if (i) total(i.dataset.f); }); };
@@ -22574,6 +22576,219 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
   // Gerar Arquivo de Benefício: linhas de Agência / Sem registro da empresa
   window.benefExtLinhas = function (empId) { return pessoas(empId).filter(function (x) { return x.g !== 'CLT'; }); };
+})();
+</script>
+<script>
+/* ════════ GERAR ARQUIVO DE BENEFÍCIO: "Todas as empresas" (tabela única por empresa) e um arquivo de compra para cada empresa ════════ */
+(function () {
+  var TODAS = '__todas';
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function empresasComGente() {
+    return DB.g('empresas').filter(function (e) {
+      return DB.g('funcionarios').some(function (f) { return f.emp === e.id && f.st !== 'Desligado'; }) || (typeof window.benefExtLinhas === 'function' && window.benefExtLinhas(e.id).length);
+    }).sort(function (a, b) { return (a.razao || '').localeCompare(b.razao || ''); });
+  }
+  function addOpcao() {
+    var s = el('flash-empresa'); if (!s || s.querySelector('option[value="' + TODAS + '"]')) return;
+    var o = document.createElement('option'); o.value = TODAS; o.textContent = '🏢 Todas as empresas (um arquivo para cada)';
+    s.insertBefore(o, s.options[1] || null);
+  }
+  var _rdf = window.rdFlash;
+  window.rdFlash = function () {
+    var s = el('flash-empresa'), cur = s ? s.value : '';
+    var r = _rdf.apply(this, arguments); addOpcao();
+    if (cur === TODAS) { s.value = TODAS; renderFlashTable(); }
+    return r;
+  };
+  var _onemp = window.onFlashEmpChange;
+  window.onFlashEmpChange = function () {
+    if ((el('flash-empresa') || {}).value === TODAS) { if (el('flash-cnpj')) el('flash-cnpj').value = 'Um CNPJ por empresa'; renderFlashTable(); return; }
+    return _onemp.apply(this, arguments);
+  };
+  var _rt = window.renderFlashTable;
+  window.renderFlashTable = function () {
+    var s = el('flash-empresa'); if (!s || s.value !== TODAS) return _rt.apply(this, arguments);
+    var ff = el('flash-func-filter'), fval = ff ? ff.value : '', tb = el('flash-tbody'), linhas = [];
+    empresasComGente().forEach(function (e) {
+      s.value = e.id;
+      if (ff) { if (!Array.prototype.some.call(ff.options, function (o) { return o.value === fval; })) { var o = document.createElement('option'); o.value = fval; ff.appendChild(o); } }
+      _rt.apply(this, arguments);
+      if (ff && fval) ff.value = fval;
+      var rows = Array.prototype.slice.call(tb.querySelectorAll('tr')).filter(function (tr) { return tr.querySelector('input'); });
+      if (fval) { rows = rows.filter(function (tr) { return tr.querySelector('#dias-' + CSS.escape(fval)) || tr.dataset.ext === fval; }); }
+      if (!rows.length) return;
+      linhas.push({ e: e, rows: rows });
+    });
+    s.value = TODAS;
+    tb.innerHTML = '';
+    linhas.forEach(function (g) {
+      var h = document.createElement('tr'); h.className = 'b3-emp'; h.dataset.emp = g.e.id;
+      h.innerHTML = '<td colspan="19" style="background:var(--green-pale);font-weight:700;color:var(--green-dark);padding:7px 10px;">🏢 ' + esc(g.e.razao) + (g.e.cnpj ? ' <span style="font-weight:400;color:var(--gray-500);">· CNPJ ' + esc(g.e.cnpj) + '</span>' : '') + ' <span style="font-weight:400;color:var(--gray-500);">· ' + g.rows.length + ' colaborador(es)</span></td>';
+      tb.appendChild(h); g.rows.forEach(function (tr) { tr.dataset.emp = g.e.id; tb.appendChild(tr); });
+    });
+    if (!linhas.length) tb.innerHTML = '<tr><td colspan="19" style="text-align:center;padding:24px;color:var(--gray-400);">Nenhum colaborador ativo.</td></tr>';
+    // funcionário: lista com todos (CLT + Agência/Sem registro)
+    if (ff) {
+      var P = typeof window.benefPessoas === 'function' ? window.benefPessoas('') : [];
+      ff.innerHTML = '<option value="">Todos os funcionários</option>' + P.map(function (x) { return '<option value="' + esc(x.fid) + '">' + esc(x.n) + (x.g !== 'CLT' ? ' (' + x.g + ')' : '') + '</option>'; }).join('');
+      ff.value = fval;
+    }
+    if (el('flash-empty')) el('flash-empty').style.display = 'none'; if (el('flash-table')) el('flash-table').style.display = '';
+    try { window.b3TotGeral(); } catch (e) {}
+  };
+  // Gerar compra: com "Todas as empresas", um arquivo para cada empresa
+  var _ger = window.gerarFlashXLSX;
+  window.gerarFlashXLSX = async function () {
+    var s = el('flash-empresa'); if (!s || s.value !== TODAS) return _ger.apply(this, arguments);
+    var grupos = Array.prototype.map.call(document.querySelectorAll('#flash-tbody tr.b3-emp'), function (h) { return h.dataset.emp; });
+    if (!grupos.length) { alert('Nenhum colaborador na lista.'); return; }
+    if (!confirm('Gerar ' + grupos.length + ' arquivo(s) de compra — um para cada empresa?\n\nSe o navegador perguntar, permita baixar vários arquivos.')) return;
+    for (var i = 0; i < grupos.length; i++) {
+      s.value = grupos[i];
+      try { await _ger.apply(this, arguments); } catch (e) { console.error(e); }
+      await new Promise(function (r) { setTimeout(r, 700); });
+    }
+    s.value = TODAS;
+    toast(grupos.length + ' arquivo(s) de compra gerado(s) — um por empresa ✅');
+  };
+  addOpcao();
+})();
+</script>
+<script>
+/* ════════ GERAR DOCUMENTOS: RECIBO DE VALE-TRANSPORTE (colaboradores sem registro) — valores de Atribuir Benefícios (Mobilidade) ════════ */
+(function () {
+  var COR = '#e65100', K_HIST = 'recibos-vt';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K_HIST) === -1) { RT.LIST.push(K_HIST); if (RT.ALL && RT.ALL.indexOf(K_HIST) === -1) RT.ALL.push(K_HIST); }
+  var MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var FORMAS = ['Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function up(s) { return String(s || '').trim().toLocaleUpperCase('pt-BR'); }
+  function num(x) { var s = String(x == null ? '' : x).replace(/R\$|\s/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isFinite(n) ? n : 0; }
+  function brl(n) { return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function empDados(id) { var e = id ? DB.g('empresas').find(function (x) { return x.id === id; }) : null; if (e) return { razao: e.razao || '', cnpj: e.cnpj || '' }; var p = window.rhPerfil ? rhPerfil() : {}; return { razao: p.razao || 'BIN EMBALAGENS', cnpj: p.cnpj || '' }; }
+  // dias úteis do mês (seg-sex sem feriados; escala 6x1 = seg-sáb)
+  function diasMes(m, a, escala) {
+    var de = a + '-' + String(m + 1).padStart(2, '0') + '-01', ult = new Date(a, m + 1, 0).getDate(), ate = a + '-' + String(m + 1).padStart(2, '0') + '-' + ult;
+    var d = typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 22;
+    if (typeof escBase === 'function' && escBase(escala) === '56') { var fer = new Set(); if (typeof getFeriadosSPGlobal === 'function') getFeriadosSPGlobal(a).forEach(function (f) { fer.add(f); }); for (var i = 1; i <= ult; i++) { var dt = new Date(a, m, i), ds = a + '-' + String(m + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0'); if (dt.getDay() === 6 && !fer.has(ds)) d++; } }
+    return d;
+  }
+  // valor do VT: Mobilidade (ou VT antigo) cadastrado em Atribuir Benefícios
+  function vtDe(c) {
+    var L = DB.g('benef-atrib').filter(function (a) { return a.fid === 'x:' + c.id && a.st === 'Ativo' && parseFloat(a.valor) > 0; });
+    var b = L.find(function (a) { return (a.tipoBase || a.tipo) === 'Mobilidade'; }) || L.find(function (a) { return /^VT/i.test(a.tipoBase || a.tipo || ''); });
+    if (!b) return { v: 0, dia: true, tem: false };
+    return { v: parseFloat(b.valor) || 0, dia: b.tipoCalc ? b.tipoCalc === 'dia' : /^VT/i.test(b.tipoBase || ''), tem: true };
+  }
+  function pessoas() { return DB.g('colab-ext').filter(function (c) { return c.tipo === 'semreg' && c.st === 'Ativo'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); }); }
+  var LIN = {};
+  function injetar() {
+    if (el('modal-rvt')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-rvt"><div class="modal" style="max-width:1100px;">' +
+      '<div class="modal-header"><span class="modal-title">🚌 Recibo de Vale-Transporte — Sem registro</span><button class="modal-close" onclick="closeModal(\'modal-rvt\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">O valor vem de <strong>Benefícios › Atribuir</strong> (campo <strong>Mobilidade</strong>; se for por dia, multiplica pelos dias do mês). Tudo pode ser alterado antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
+      '<div class="form-grid">' +
+      '<div class="form-group"><label>Mês de referência</label><select id="rvt-mes" onchange="rvtLista(true)">' + MES.map(function (m, i) { return '<option value="' + i + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group"><label>Ano</label><input id="rvt-ano" type="number" min="2000" max="2100" onchange="rvtLista(true)"></div>' +
+      '<div class="form-group form-full"><label>Empresa no recibo</label><select id="rvt-emp"></select></div>' +
+      '<div class="form-group form-full"><label>Forma de pagamento</label><div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">' + ['', 'Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'].map(function (f) { return '<label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--gray-800);cursor:pointer;"><input type="radio" name="rvt-forma" value="' + f + '" style="width:auto;"' + (f ? '' : ' checked') + '> ' + (f || 'Marcar à mão') + '</label>'; }).join('') + '</div></div>' +
+      '<div class="form-group"><label>Cidade – UF</label><input id="rvt-cidade" type="text"></div>' +
+      '<div class="form-group"><label>Data do recibo <span style="font-weight:400;text-transform:none;">(vazio = preencher à mão)</span></label><input id="rvt-data" type="date"></div></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin:10px 0 6px;"><strong style="font-size:13.5px;color:var(--green-dark);">Colaboradores sem registro</strong><button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="rvtTodos(true)">☑ Selecionar todos</button><button type="button" class="btn btn-outline btn-sm" onclick="rvtTodos(false)">☐ Desmarcar</button></div>' +
+      '<div style="max-height:42vh;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);"><table id="rvt-tab" style="font-size:12.5px;"></table></div>' +
+      '<div id="rvt-tot" style="margin-top:8px;font-size:13px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-rvt\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="rvtGerar()">📄 Gerar recibo(s)</button></div></div></div>');
+    var st = document.createElement('style'); st.textContent = '#rvt-tab input[type=text]{padding:4px 6px;font-size:12.5px;width:100%;min-width:60px;}#rvt-tab td,#rvt-tab th{padding:5px 6px;white-space:nowrap;}#rvt-tab tr.on{background:#fff4ec;}'; document.head.appendChild(st);
+  }
+  window.rvtAbrir = function (pre) {
+    injetar(); LIN = {};
+    var h = new Date(); el('rvt-mes').value = String(h.getMonth()); el('rvt-ano').value = h.getFullYear();
+    el('rvt-emp').innerHTML = '<option value="">Empresa do cadastro de cada colaborador</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('') + '<option value="__perfil">Dados da empresa (⚙️ topo do sistema)</option>';
+    el('rvt-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP'; el('rvt-data').value = hoje();
+    rvtLista(true);
+    if (pre && LIN[pre]) { LIN[pre].ck = true; rvtLista(); }
+    el('modal-rvt').classList.add('open');
+  };
+  window.rvtLista = function (recalc) {
+    var m = +el('rvt-mes').value, a = +el('rvt-ano').value || new Date().getFullYear(), P = pessoas();
+    P.forEach(function (c) {
+      var L = LIN[c.id], b = vtDe(c), d = diasMes(m, a, c.escala);
+      if (!L) L = LIN[c.id] = { ck: b.tem, nome: up(c.n), cpf: c.cpf || '', cargo: up(c.car || ''), dias: '', vdia: '', total: '', man: false };
+      if (recalc && !L.man) { if (b.dia) { L.dias = b.v ? String(d) : ''; L.vdia = b.v ? brl(b.v) : ''; L.total = b.v ? brl(b.v * d) : ''; } else { L.dias = ''; L.vdia = ''; L.total = b.v ? brl(b.v) : ''; } }
+    });
+    var inp = function (id, c, v, w) { return '<td><input type="text" data-id="' + id + '" data-c="' + c + '" value="' + esc(v) + '" oninput="rvtEdit(this)"' + (w ? ' style="width:' + w + 'px"' : '') + '></td>'; };
+    el('rvt-tab').innerHTML = '<thead><tr><th></th><th>Nome no recibo</th><th>CPF</th><th>Dias</th><th>Valor/dia (R$)</th><th>Total (R$)</th><th>Cadastro</th></tr></thead><tbody>' +
+      (P.length ? P.map(function (c) { var L = LIN[c.id], b = vtDe(c);
+        return '<tr class="' + (L.ck ? 'on' : '') + '"><td><input type="checkbox" style="width:auto;" data-id="' + c.id + '"' + (L.ck ? ' checked' : '') + ' onchange="rvtCk(this)"></td>' + inp(c.id, 'nome', L.nome) + inp(c.id, 'cpf', L.cpf, 120) + inp(c.id, 'dias', L.dias, 55) + inp(c.id, 'vdia', L.vdia, 80) + inp(c.id, 'total', L.total, 90) +
+          '<td style="font-size:11px;color:var(--gray-500);">' + (b.tem ? 'Mobilidade R$ ' + brl(b.v) + (b.dia ? '/dia' : '/mês') : '<span style="color:#b26a00;">sem Mobilidade cadastrada</span>') + '</td></tr>'; }).join('') : '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum colaborador sem registro ativo.</td></tr>') + '</tbody>';
+    rvtTot();
+  };
+  window.rvtEdit = function (i) {
+    var L = LIN[i.dataset.id]; if (!L) return; L[i.dataset.c] = i.value; L.man = true;
+    if (i.dataset.c === 'dias' || i.dataset.c === 'vdia') { var t = num(L.dias) * num(L.vdia); if (t > 0) { L.total = brl(t); var tr = i.closest('tr'), ti = tr.querySelector('input[data-c=total]'); if (ti) ti.value = L.total; } }
+    if (!L.ck && num(L.total) > 0) { L.ck = true; var c = i.closest('tr').querySelector('input[type=checkbox]'); c.checked = true; i.closest('tr').classList.add('on'); }
+    rvtTot();
+  };
+  window.rvtCk = function (c) { var L = LIN[c.dataset.id]; if (L) L.ck = c.checked; c.closest('tr').classList.toggle('on', c.checked); rvtTot(); };
+  window.rvtTodos = function (v) { document.querySelectorAll('#rvt-tab tbody input[type=checkbox]').forEach(function (c) { c.checked = v; rvtCk(c); }); };
+  function rvtTot() { var M = Object.keys(LIN).filter(function (k) { return LIN[k].ck; }), t = M.reduce(function (s, k) { return s + num(LIN[k].total); }, 0); el('rvt-tot').innerHTML = '<strong>' + M.length + '</strong> recibo(s) · total <strong>R$ ' + brl(t) + '</strong>'; }
+  var CSS = '@page{size:A4;margin:1cm 2cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+    '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;min-height:29.7cm;padding:1cm 2cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}}' +
+    'p{margin:0;}.logo{text-align:center;margin-bottom:3pt;}.logo img{width:3.44cm;height:2.12cm;object-fit:contain;}.tit{text-align:center;font-size:14pt;font-weight:700;}' +
+    '.sub{text-align:center;font-size:8pt;font-style:italic;color:#B8862B;border-bottom:1.5pt solid #B8862B;padding-bottom:4pt;margin-bottom:6pt;}' +
+    'table.dados{width:100%;border-collapse:collapse;}table.dados td{border:.5pt solid #C9A961;padding:3pt 5pt;vertical-align:top;}.rot{font-size:8pt;font-weight:700;color:#B8862B;line-height:1.2;}.val{font-size:10pt;min-height:12pt;line-height:1.2;}' +
+    'td.vl{background:#F7EFD9;}.rs{font-size:11pt;font-weight:700;line-height:1.2;}.txt{font-size:10pt;text-align:justify;line-height:1.25;margin:8pt 0 6pt;}.forma{font-size:10pt;margin-bottom:3pt;}.local{font-size:10pt;margin:6pt 0 18pt;}' +
+    'table.ass{width:100%;border-collapse:collapse;}table.ass td{width:46.9%;text-align:center;font-size:9pt;padding:0;}table.ass td.gap{width:6.2%;}table.ass td div{border-top:.75pt solid #3A2E1A;padding-top:2pt;}' +
+    '.corte{text-align:center;font-size:7pt;color:#999;border-bottom:.75pt dashed #999;padding-bottom:4pt;margin:14pt 0;}.pre{font-weight:700;}.pg+.pg{break-before:page;page-break-before:always;}@media screen{.pg+.pg{border-top:2px dashed #bbb;margin-top:1cm;padding-top:1cm;}}' +
+    'table.rel{width:100%;border-collapse:collapse;font-size:9.5pt;margin:4pt 0 10pt;}table.rel td,table.rel th{border:.5pt solid #C9A961;padding:2.5pt 6pt;}table.rel th{background:#F7EFD9;color:#8a6420;text-align:left;font-size:8.5pt;}table.rel td.n,table.rel th.n{text-align:right;}table.rel tr.t td{font-weight:700;background:#F7EFD9;}';
+  function linha(n) { return '<span style="display:inline-block;min-width:' + (n || 10) * 5 + 'pt;border-bottom:.6pt solid #3A2E1A;">&nbsp;</span>'; }
+  function via(G, x, n) {
+    var cel = function (r, v) { return '<td><div class="rot">' + r + '</div><div class="val">' + (v ? esc(v) : '&nbsp;') + '</div></td>'; }, u = function (v, l) { return v ? '<span class="pre">' + esc(v) + '</span>' : linha(l); };
+    var ok = x.v > 0, dp = G.data ? G.data.split('-') : null, ref = MES[G.m] + '/' + G.a;
+    var det = x.dias && x.vdia ? ', correspondente a ' + u(String(x.dias), 4) + ' dia(s) × R$ ' + u(brl(x.vdia), 8) + ' por dia' : '';
+    return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">RECIBO DE VALE-TRANSPORTE</p><p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
+      '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup><tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('CPF', x.cpf) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('MÊS DE REFERÊNCIA', ref.toUpperCase()) + '</tr>' +
+      '<tr>' + cel('DIAS × VALOR POR DIA', x.dias && x.vdia ? x.dias + ' × R$ ' + brl(x.vdia) : '') + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
+      '<p class="txt">Recebi da empresa <b>' + esc(up(x.razao) || 'BIN EMBALAGENS') + '</b>, inscrita no CNPJ nº ' + u(x.cnpj, 20) + ', a importância de R$ ' + u(ok ? brl(x.v) : '', 14) + ' (' + u(ok ? (window.recPorExtenso ? recPorExtenso(x.v) : '') : '', 48) + '), referente ao <b>vale-transporte</b> do mês de ' + ref + det + ', destinado ao meu deslocamento residência–trabalho–residência, dando plena quitação do valor aqui recebido.</p>' +
+      '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
+      '<p class="local">' + esc(G.cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : linha(6)) + ' de ' + (dp ? MES[+dp[1] - 1] : linha(22)) + ' de ' + (dp ? dp[0] : linha(8)) + '.</p>' +
+      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table></div>';
+  }
+  function documento(G, L) {
+    var t = L.reduce(function (s, x) { return s + x.v; }, 0);
+    var rel = L.length > 1 ? '<div class="pg"><div class="tit">RELAÇÃO · VALE-TRANSPORTE SEM REGISTRO</div><div class="sub">' + MES[G.m] + '/' + G.a + ' · ' + L.length + ' recibo(s) · total R$ ' + brl(t) + '</div><table class="rel"><tr><th>Colaborador</th><th>CPF</th><th class="n">Dias</th><th class="n">Valor/dia</th><th class="n">Total</th></tr>' +
+      L.map(function (x) { return '<tr><td>' + esc(x.nome) + '</td><td>' + esc(x.cpf) + '</td><td class="n">' + (x.dias || '') + '</td><td class="n">' + (x.vdia ? 'R$ ' + brl(x.vdia) : '') + '</td><td class="n">R$ ' + brl(x.v) + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="4">TOTAL</td><td class="n">R$ ' + brl(t) + '</td></tr></table></div>' : '';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Recibo de Vale-Transporte ' + MES[G.m] + '-' + G.a + (L.length === 1 ? ' - ' + L[0].nome : '')) + '</title><style>' + CSS + '</style></head><body>' +
+      L.map(function (x) { return '<div class="pg">' + via(G, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(G, x, 2) + '</div>'; }).join('') + rel + '</body></html>';
+  }
+  window.rvtGerar = function () {
+    var ids = Object.keys(LIN).filter(function (k) { return LIN[k].ck; }); if (!ids.length) { alert('Marque pelo menos um colaborador.'); return; }
+    var empSel = el('rvt-emp').value, ext = DB.g('colab-ext');
+    var G = { m: +el('rvt-mes').value, a: +el('rvt-ano').value, forma: (document.querySelector('input[name="rvt-forma"]:checked') || {}).value || '', cidade: el('rvt-cidade').value.trim() || 'Guarulhos – SP', data: el('rvt-data').value };
+    var L = ids.map(function (id) { var x = LIN[id], c = ext.find(function (q) { return q.id === id; }) || {}, e = empDados(empSel === '__perfil' ? '' : (empSel || c.emp));
+      return { id: id, nome: up(x.nome), cpf: x.cpf, cargo: up(x.cargo), dias: num(x.dias) || '', vdia: num(x.vdia) || '', v: Math.round(num(x.total) * 100) / 100, razao: e.razao, cnpj: e.cnpj }; });
+    ls('rh_rec_cidade', G.cidade);
+    var H = DB.g(K_HIST); H.push(Object.assign({ id: 'rvt' + Date.now().toString(36), em: new Date().toISOString(), itens: L }, G)); DB.s(K_HIST, H);
+    closeModal('modal-rvt');
+    _abrirDocSimples(documento(G, L), ('Recibo_VT_' + MES[G.m] + '_' + G.a + '_' + (L.length === 1 ? L[0].nome : L.length + '_colaboradores')).replace(/[\s\/]+/g, '_'));
+  };
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="rec_vt_sr"]')) return;
+    var ref = grid.querySelector('[data-docbase="rec_avulso"]') || grid.querySelector('[data-docbase="termo_uni"]');
+    var h = '<div class="trein-card" data-docbase="rec_vt_sr" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">🚌 Recibo de Vale-Transporte (Sem registro)</div><div class="tc-meta">Recibo em 2 vias · modelo BIN</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'rec_vt_sr\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Vale-transporte do mês para os colaboradores sem registro. Puxa o valor de Mobilidade cadastrado em Benefícios › Atribuir (por dia × dias úteis do mês); tudo editável. Um ou todos de uma vez, com relação do total.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="rvtAbrir()">📄 Gerar Recibo</button></div></div>';
+    if (ref) ref.insertAdjacentHTML('afterend', h); else grid.insertAdjacentHTML('beforeend', h);
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
 })();
 </script>
 </body>
