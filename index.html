@@ -21904,5 +21904,89 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   injetar();
 })();
 </script>
+<script>
+/* ════════ FOTO NO CADASTRO DE AGÊNCIA E SEM REGISTRO (mesmo armazenamento das fotos dos CLT) ════════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  var _foto, _edit = null; // _foto: undefined = não mudou · null = removida · string = nova
+  function ext() { return DB.g('colab-ext'); }
+  function getF(id) { try { if (typeof fotoStoreLoad === 'function' && (!window._fotoStore || !Object.keys(_fotoStore).length)) fotoStoreLoad(); } catch (e) {} return typeof fotoStoreGet === 'function' ? fotoStoreGet(id) : null; }
+  function mostrar(src) {
+    var img = el('cx-foto-img'), ini = el('cx-foto-ini'), rm = el('cx-foto-rm');
+    if (!img) return;
+    if (src) { img.src = src; img.style.display = 'block'; ini.style.display = 'none'; rm.style.display = ''; }
+    else { img.removeAttribute('src'); img.style.display = 'none'; ini.style.display = ''; rm.style.display = 'none'; }
+  }
+  function injetar() {
+    var m = el('modal-colab-ext'); if (!m || el('cx-foto-box')) return;
+    var sec = m.querySelector('.uni-sec-tit'); if (!sec) return;
+    sec.insertAdjacentHTML('beforebegin',
+      '<div id="cx-foto-box" style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">' +
+      '<div style="width:90px;height:90px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;overflow:hidden;border:3px solid var(--green);flex-shrink:0;">' +
+      '<span id="cx-foto-ini">👤</span><img id="cx-foto-img" alt="" style="display:none;width:100%;height:100%;object-fit:cover;"></div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">' +
+      '<label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">📷 Alterar foto<input type="file" id="cx-foto" accept="image/*" style="display:none;" onchange="cxFotoArquivo(this)"></label>' +
+      '<button type="button" class="btn btn-outline btn-sm" id="cx-foto-rm" style="display:none;" onclick="cxFotoRemover()">✕ Remover foto</button>' +
+      '<span style="font-size:11.5px;color:var(--gray-400);">JPG, PNG, WEBP, HEIC… A foto é ajustada (recorte quadrado) e salva com o cadastro.</span></div></div>');
+  }
+  window.cxFotoArquivo = function (inp) {
+    var f = inp.files && inp.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function (e) {
+      var src = e.target.result, im = new Image();
+      im.onload = function () {
+        var cv = document.createElement('canvas'); cv.width = cv.height = 400;
+        var cx = cv.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+        var s = Math.min(im.naturalWidth, im.naturalHeight);
+        cx.drawImage(im, (im.naturalWidth - s) / 2, (im.naturalHeight - s) / 2, s, s, 0, 0, 400, 400);
+        _foto = cv.toDataURL('image/jpeg', 0.92); mostrar(_foto);
+      };
+      im.onerror = function () { _foto = src; mostrar(src); };
+      im.src = src;
+    };
+    rd.readAsDataURL(f); inp.value = '';
+  };
+  window.cxFotoRemover = function () { _foto = null; mostrar(null); };
+  function abrir(id) { injetar(); _foto = undefined; _edit = id || null; mostrar(id ? getF(id) : null); }
+  var _novo = window.cxNovo, _ed = window.cxEditar, _sal = window.cxSalvar, _exc = window.cxExcluir, _efe = window.cxEfetivar, _rd = window.rdColabExt;
+  if (_novo) window.cxNovo = function (t) { var r = _novo.apply(this, arguments); abrir(null); return r; };
+  if (_ed) window.cxEditar = function (id) { var r = _ed.apply(this, arguments); abrir(id); return r; };
+  if (_sal) window.cxSalvar = function () {
+    var antes = {}; ext().forEach(function (c) { antes[c.id] = 1; });
+    var foto = _foto, edit = _edit;
+    var r = _sal.apply(this, arguments);
+    var aberto = el('modal-colab-ext') && el('modal-colab-ext').classList.contains('open');
+    if (!aberto && foto !== undefined && typeof fotoStoreSet === 'function') {
+      var id = edit || (ext().find(function (c) { return !antes[c.id]; }) || {}).id;
+      if (id) { fotoStoreSet(id, foto); try { if (typeof syncFotoStoreToDrive === 'function') syncFotoStoreToDrive(); } catch (e) {} }
+      _foto = undefined;
+      var c = id && ext().find(function (x) { return x.id === id; }); if (c && window.rdColabExt) rdColabExt(c.tipo);
+    }
+    return r;
+  };
+  if (_exc) window.cxExcluir = function (id) { var r = _exc.apply(this, arguments); if (!ext().some(function (c) { return c.id === id; }) && getF(id) && typeof fotoStoreSet === 'function') fotoStoreSet(id, null); return r; };
+  // ao efetivar como CLT, a foto vai junto para o cadastro de Funcionários
+  if (_efe) window.cxEfetivar = function (id) {
+    var r = _efe.apply(this, arguments);
+    try { var c = ext().find(function (x) { return x.id === id; }), f = getF(id); if (c && c.cltId && f && !fotoStoreGet(c.cltId)) fotoStoreSet(c.cltId, f); } catch (e) {}
+    return r;
+  };
+  // miniatura da foto na lista
+  if (_rd) window.rdColabExt = function (t) {
+    var r = _rd.apply(this, arguments);
+    try {
+      var tb = el('cx-tb-' + t); if (!tb) return r;
+      Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+        var b = tr.querySelector('button[onclick^="cxEditar("]'), td1 = tr.firstElementChild; if (!b || !td1 || td1.querySelector('.cx-av')) return;
+        var id = (b.getAttribute('onclick').match(/cxEditar\('([^']+)'/) || [])[1], c = ext().find(function (x) { return x.id === id; }) || {}, src = getF(id);
+        var av = '<div class="cx-av" style="width:36px;height:36px;border-radius:50%;flex-shrink:0;overflow:hidden;border:2px solid var(--green);background:var(--green);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;">' +
+          (src ? '<img src="' + src + '" alt="" style="width:100%;height:100%;object-fit:cover;">' : String(c.n || '?').charAt(0).toUpperCase()) + '</div>';
+        td1.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">' + av + '<div>' + td1.innerHTML + '</div></div>';
+      });
+    } catch (e) {}
+    return r;
+  };
+})();
+</script>
 </body>
 </html>
