@@ -22113,8 +22113,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function sugestao(fid) {
     var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0 };
     var v = { vt: n('vt-' + fid) * d, vr: n('vr-' + fid) * d, va: n('va-' + fid), comb: n('comb-' + fid), assim: n('assim-' + fid), bonus: n('bonus-' + fid), odonto: n('odonto-' + fid), med: n('med-' + fid) };
+    var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(fid) : null;
+    if (nv) { ['mob', 'livre', 'alim', 'bonus'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
+    else {
     Object.keys(v).forEach(function (k) { if (k === 'bonus') return; if (m[k] && t[m[k]] != null) t[m[k]] += v[k]; });
     t.bonus = v.bonus;
+    }
     Object.keys(t).forEach(function (k) { t[k] = Math.round(t[k] * 100) / 100; });
     return t;
   }
@@ -22182,6 +22186,92 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     } catch (e) {}
     return r;
   };
+})();
+</script>
+<script>
+/* ════════ BENEFÍCIOS › ATRIBUIR AO FUNCIONÁRIO: só Mobilidade, Livre, Bônus e Alimentação / Refeição ════════ */
+(function () {
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição' };
+  var ANTIGOS_CARTAO = ['VT – Vale Transporte', 'VR – Vale Refeição', 'VA – Vale Alimentação', 'Combustível', 'Assiduidade', 'Triênio']; // substituídos pelos novos
+  var COR = { mob: ['#e65100', '🚌'], livre: ['#6a1b9a', '🆓'], alim: ['#1565c0', '🍽️'] };
+  function el(id) { return document.getElementById(id); }
+  var S = 'font-size:12px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-family:inherit;';
+  function linha(k) {
+    return '<tr id="batr-row-' + k + '"><td><strong style="color:' + COR[k][0] + ';">' + COR[k][1] + ' ' + NOVOS[k] + '</strong></td>' +
+      '<td><select id="batr-' + k + '-tipo" onchange="batrUpdateCalc(\'' + k + '\')" style="' + S + 'width:100%;"><option value="dia">Por dia</option><option value="mes">Mensal fixo</option></select></td>' +
+      '<td><input type="number" id="batr-' + k + '-val" step="0.01" min="0" placeholder="0,00" oninput="batrUpdateCalc(\'' + k + '\')" style="width:100%;padding:5px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;"></td>' +
+      '<td id="batr-' + k + '-calc" style="font-size:12px;color:var(--gray-400);text-align:center;">—</td>' +
+      '<td><select id="batr-' + k + '-st" style="' + S + '"><option value="Ativo">Ativo</option><option value="Suspenso">Suspenso</option><option value="Encerrado">Encerrado</option></select></td>' +
+      '<td><input type="text" id="batr-' + k + '-obs" placeholder="Obs." style="width:100%;padding:5px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px;font-family:inherit;"></td></tr>';
+  }
+  function montar() {
+    var tb = el('batr-tbody'); if (!tb || el('batr-row-mob')) return;
+    ['vt', 'vr', 'va', 'comb', 'assim', 'odonto', 'med', 'trienio'].forEach(function (k) { var r = el('batr-row-' + k); if (r) r.style.display = 'none'; });
+    var b = el('batr-row-bonus');
+    if (b) {
+      b.insertAdjacentHTML('beforebegin', linha('mob') + linha('livre'));
+      b.insertAdjacentHTML('afterend', linha('alim'));
+      var t = b.querySelector('td strong'); if (t) t.textContent = '💰 Bônus';
+      var tp = el('batr-bonus-tipo'); if (tp && !tp.querySelector('option[value="dia"]')) { tp.innerHTML = '<option value="mes">Mensal</option><option value="dia">Por dia</option>'; tp.setAttribute('onchange', "batrUpdateCalc('bonus')"); }
+      var bv = el('batr-bonus-val'); if (bv) bv.setAttribute('oninput', "batrUpdateCalc('bonus')");
+      var bc = b.children[3]; if (bc && !bc.id) { bc.id = 'batr-bonus-calc'; }
+    }
+    var dica = Array.prototype.find.call(document.querySelectorAll('#modal-benef-atr div'), function (d) { return /Deixe o valor em branco/.test(d.textContent) && !d.children.length; });
+    if (dica) dica.textContent = '💡 Deixe em branco ou 0,00 o que o funcionário não recebe. O Bônus vai somado na coluna Livre da planilha de pedido. Assistência médica/odontológica cadastradas antes continuam valendo (plano de saúde na folha).';
+  }
+  window.BATR_TIPOS = NOVOS;
+  try { BATR_TIPOS = NOVOS; } catch (e) {}
+  function antigosTexto(fid) {
+    var L = DB.g('benef-atrib').filter(function (a) { return a.fid === fid && a.st !== 'Encerrado' && parseFloat(a.valor) > 0 && ANTIGOS_CARTAO.indexOf(a.tipoBase || a.tipo) !== -1; });
+    return L.map(function (a) { return (a.tipoBase || a.tipo).split(' ')[0] + ' R$ ' + parseFloat(a.valor).toFixed(2).replace('.', ',') + ((a.tipoCalc || '') === 'dia' || /^V[TR]/.test(a.tipoBase || '') ? '/dia' : ''); }).join(' · ');
+  }
+  window.batrLoadExisting = function (fid) {
+    montar();
+    Object.keys(NOVOS).forEach(function (k) { ['val', 'obs'].forEach(function (c) { var e = el('batr-' + k + '-' + c); if (e) e.value = ''; }); var st = el('batr-' + k + '-st'); if (st) st.value = 'Ativo'; });
+    DB.g('benef-atrib').filter(function (a) { return a.fid === fid; }).forEach(function (a) {
+      var k = Object.keys(NOVOS).find(function (x) { return NOVOS[x] === (a.tipoBase || a.tipo); }); if (!k) return;
+      var v = el('batr-' + k + '-val'), o = el('batr-' + k + '-obs'), s = el('batr-' + k + '-st'), t = el('batr-' + k + '-tipo');
+      if (v && a.valor && parseFloat(a.valor) > 0) v.value = parseFloat(a.valor).toFixed(2); if (o && a.obs) o.value = a.obs; if (s && a.st) s.value = a.st;
+      if (t && a.tipoCalc && t.querySelector('option[value="' + a.tipoCalc + '"]')) t.value = a.tipoCalc;
+    });
+    Object.keys(NOVOS).forEach(function (k) { try { batrUpdateCalc(k); } catch (e) {} });
+    var info = el('batr-func-info'), ant = antigosTexto(fid);
+    if (info) { var x = info.querySelector('.batr-ant'); if (x) x.remove(); if (ant) info.insertAdjacentHTML('beforeend', '<div class="batr-ant" style="margin-top:6px;font-size:12px;color:var(--gray-600);">📎 Benefícios do cadastro anterior (referência): ' + ant + '</div>'); }
+  };
+  // salva só os 4 novos; mantém os demais registros (assist. médica/odonto etc.). Os antigos de cartão viram "Encerrado" quando há valor nos novos.
+  window.savBenefAtrNovo = async function () {
+    var fid = (el('batr-func') || {}).value; if (!fid) { alert('Selecione um funcionário.'); return; }
+    var ini = (el('batr-ini') || {}).value || td(), atribs = DB.g('benef-atrib'), nomes = Object.keys(NOVOS).map(function (k) { return NOVOS[k]; });
+    var novos = Object.keys(NOVOS).map(function (k) {
+      var ant = atribs.find(function (a) { return a.fid === fid && (a.tipoBase || a.tipo) === NOVOS[k]; });
+      return { id: ant ? ant.id : uid(), fid: fid, tipo: NOVOS[k], tipoBase: NOVOS[k], tipoCalc: (el('batr-' + k + '-tipo') || {}).value || 'mes', valor: (parseFloat((el('batr-' + k + '-val') || {}).value) || 0).toFixed(2),
+        ini: ant && ant.ini ? ant.ini : ini, fim: '', st: (el('batr-' + k + '-st') || {}).value || 'Ativo', obs: (el('batr-' + k + '-obs') || {}).value || '' };
+    });
+    var temNovo = novos.some(function (n) { return parseFloat(n.valor) > 0; });
+    var resto = atribs.filter(function (a) { return !(a.fid === fid && nomes.indexOf(a.tipoBase || a.tipo) !== -1); }).map(function (a) {
+      if (temNovo && a.fid === fid && ANTIGOS_CARTAO.indexOf(a.tipoBase || a.tipo) !== -1 && a.st !== 'Encerrado') return Object.assign({}, a, { st: 'Encerrado', fim: ini, obs: ((a.obs ? a.obs + ' · ' : '') + 'substituído por Mobilidade/Livre/Bônus/Alimentação') });
+      return a;
+    });
+    DB.s('benef-atrib', resto.concat(novos));
+    if (typeof driveReady !== 'undefined' && driveReady) { try { await driveSync('benef-atrib'); } catch (e) {} }
+    closeModal('modal-benef-atr');
+    try { rdBenefFunc(); rdBenef(); } catch (e) {}
+    toast('Benefícios do funcionário salvos!');
+  };
+  try { savBenefAtr = function () { return window.savBenefAtrNovo(); }; } catch (e) {}
+  var _om = window.openModal;
+  window.openModal = function (id) { var r = _om.apply(this, arguments); if (id === 'modal-benef-atr') { try { montar(); } catch (e) {} } return r; };
+  // Gerar arquivo: a sugestão usa os novos benefícios quando existirem
+  window.benefNovosDoFunc = function (fid) {
+    var o = null; DB.g('benef-atrib').forEach(function (a) {
+      if (a.fid !== fid || a.st !== 'Ativo') return; var k = Object.keys(NOVOS).find(function (x) { return NOVOS[x] === (a.tipoBase || a.tipo); }); if (!k) return;
+      if (k === 'bonus' && !o) return; // bônus sozinho não muda a regra antiga
+      o = o || {}; o[k] = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' };
+    });
+    if (o) DB.g('benef-atrib').forEach(function (a) { if (a.fid === fid && a.st === 'Ativo' && (a.tipoBase || a.tipo) === 'Bônus') o.bonus = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' }; });
+    return o;
+  };
+  montar();
 })();
 </script>
 </body>
