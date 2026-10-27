@@ -22348,5 +22348,62 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
 })();
 </script>
+<script>
+/* ════════ BENEFÍCIOS POR FUNCIONÁRIO: excluir (funcionário inteiro, um benefício, ou selecionados) ════════ */
+(function () {
+  function salvar(l) { DB.s('benef-atrib', l); try { if (typeof driveReady !== 'undefined' && driveReady) driveSync('benef-atrib'); } catch (e) {} try { rdBenefFunc(); } catch (e) {} try { if (typeof benefMassaUpdateCount === 'function') benefMassaUpdateCount(); } catch (e) {} }
+  function nomeF(fid) { var f = DB.g('funcionarios').find(function (x) { return x.id === fid; }); return f ? f.n : 'este funcionário'; }
+  window.benefExcluirFunc = function (fid) {
+    if (!confirm('Excluir TODOS os benefícios de ' + nomeF(fid) + '?\n\nO funcionário continua cadastrado; só os benefícios são removidos.')) return;
+    salvar(DB.g('benef-atrib').filter(function (a) { return a.fid !== fid; })); toast('Benefícios excluídos.');
+  };
+  window.benefExcluirUm = function (id) {
+    var a = DB.g('benef-atrib').find(function (x) { return x.id === id; }); if (!a) return;
+    if (!confirm('Excluir o benefício "' + (a.tipoBase || a.tipo) + '" de ' + nomeF(a.fid) + '?')) return;
+    var aberto = a.fid; salvar(DB.g('benef-atrib').filter(function (x) { return x.id !== id; }));
+    try { var b = document.getElementById('benef-body-' + aberto); if (b && !b.classList.contains('open')) toggleBenefCard(aberto); } catch (e) {}
+    toast('Benefício excluído.');
+  };
+  window.benefExcluirSelecionados = function () {
+    var fids = Array.prototype.map.call(document.querySelectorAll('.benef-massa-chk:checked'), function (c) { return c.dataset.fid; });
+    if (!fids.length) return;
+    if (!confirm('Excluir os benefícios de ' + fids.length + ' funcionário(s) selecionado(s)?\n\nOs funcionários continuam cadastrados.')) return;
+    salvar(DB.g('benef-atrib').filter(function (a) { return fids.indexOf(a.fid) === -1; })); toast('Benefícios excluídos.');
+  };
+  var _rd = window.rdBenefFunc;
+  if (typeof _rd === 'function') window.rdBenefFunc = function () {
+    var r = _rd.apply(this, arguments);
+    try {
+      var todos = DB.g('benef-atrib');
+      document.querySelectorAll('#benef-func-cards .benef-func-card').forEach(function (card) {
+        var fid = card.dataset.fid, eb = Array.prototype.find.call(card.querySelectorAll('.benef-func-card-header button'), function (x) { return /Editar/.test(x.textContent); }), act = eb ? eb.parentNode : null;
+        if (act && !act.querySelector('.bdel')) {
+          var b = document.createElement('button'); b.className = 'btn-icon danger bdel'; b.title = 'Excluir benefícios deste funcionário'; b.innerHTML = '&#128465;';
+          b.onclick = function (e) { e.stopPropagation(); benefExcluirFunc(fid); }; act.appendChild(b);
+        }
+        var L = todos.filter(function (a) { return a.fid === fid; }), body = document.getElementById('benef-body-' + fid);
+        if (body) {
+          var hr = body.querySelector('thead tr'); if (hr && !hr.querySelector('.bdel-h')) hr.insertAdjacentHTML('beforeend', '<th class="bdel-h"></th>');
+          Array.prototype.forEach.call(body.querySelectorAll('tbody tr'), function (tr, i) {
+            if (!L[i] || tr.querySelector('.bdel')) return;
+            tr.insertAdjacentHTML('beforeend', '<td><button class="btn-icon danger bdel" title="Excluir este benefício" onclick="event.stopPropagation();benefExcluirUm(\'' + L[i].id + '\')">&#128465;</button></td>');
+          });
+        }
+      });
+    } catch (e) { console.error(e); }
+    return r;
+  };
+  var _cnt = window.benefMassaUpdateCount;
+  if (typeof _cnt === 'function') window.benefMassaUpdateCount = function () {
+    var r = _cnt.apply(this, arguments);
+    try {
+      var n = document.querySelectorAll('.benef-massa-chk:checked').length, ref = document.getElementById('benef-massa-btn'), b = document.getElementById('benef-del-sel');
+      if (!b && ref) { ref.insertAdjacentHTML('afterend', '<button class="btn btn-outline btn-sm" id="benef-del-sel" onclick="benefExcluirSelecionados()" style="display:none;color:#c62828;border-color:#ef9a9a;">🗑️ Excluir selecionados (<span id="benef-del-n">0</span>)</button>'); b = document.getElementById('benef-del-sel'); }
+      if (b) { b.style.display = n ? '' : 'none'; document.getElementById('benef-del-n').textContent = n; }
+    } catch (e) {}
+    return r;
+  };
+})();
+</script>
 </body>
 </html>
