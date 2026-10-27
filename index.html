@@ -8724,7 +8724,7 @@ function renderFlashTable() {
     var inpDias = document.createElement('input');
     inpDias.type = 'number'; inpDias.min = '1'; inpDias.max = '31';
     inpDias.id = 'dias-'+f.id; // Use escala do cadastro para determinar dias: "55"=Seg-Sex, "56"=Seg-Sab
-    var diasCalc = (escBase(f.escala) === '56') ? diasUteisComSab : diasUteisPeriodo;
+    var diasCalc = (typeof window.escDiasPeriodo === 'function' && flashDe && flashAte) ? window.escDiasPeriodo(f.escala, flashDe, flashAte) : ((escBase(f.escala) === '56') ? diasUteisComSab : diasUteisPeriodo);
     inpDias.value = diasCalc || '22';
     inpDias.style.cssText = 'width:52px;border:1.5px solid #7a1215;border-radius:5px;padding:4px 5px;font-size:13px;font-weight:700;color:#7a1215;font-family:inherit;text-align:center;';
     inpDias.title = 'Dias trabalhados no período';
@@ -8864,7 +8864,7 @@ async function gerarFlashXLSX() {
     }
 
     var diasInp = getInp('dias-'+f.id);
-    var diasFallback = (escBase(f.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0)||22);
+    var diasFallback = (typeof window.escDiasPeriodo === 'function') ? window.escDiasPeriodo(f.escala, de, ate) : ((escBase(f.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0)||22));
     var dias = diasInp !== null ? diasInp : diasFallback;
 
     var vtDia  = chkVT    ? (getInp('vt-'+f.id)    !== null ? getInp('vt-'+f.id)    : findBenef(function(t){ return t==='VT – Vale Transporte'||t.toUpperCase().startsWith('VT'); })) : 0;
@@ -9290,6 +9290,7 @@ var BATR_TIPOS = {
 function batrGetDias() {
   var fid = (document.getElementById('batr-func')||{}).value;
   var func = fid ? DB.g('funcionarios').find(function(f){return f.id===fid;}) : null;
+  if (typeof window.escDiasMes === 'function') { var fx = fid && fid.indexOf('x:') === 0 ? DB.g('colab-ext').find(function(c){return c.id===fid.slice(2);}) : func; return window.escDiasMes(fx ? fx.escala : ''); }
   var escala = func ? escBase(func.escala||'55') : '55';
   return escala === '56' ? 26 : 22;
 }
@@ -22176,7 +22177,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (empId && !ff && typeof window.benefExtLinhas === 'function') window.benefExtLinhas(empId).forEach(function (x) {
         if (el('mob-' + x.fid)) return;
         var c = x.p, dep = (DB.g('departamentos').find(function (d) { return d.id === c.dep; }) || {}).nome || '';
-        var dd = (typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22);
+        var dd = (typeof window.escDiasPeriodo === 'function' && de && ate) ? window.escDiasPeriodo(c.escala, de, ate) : ((typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22));
         var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0 };
         if (nv) ['mob', 'livre', 'alim', 'bonus'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
         var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
@@ -22315,7 +22316,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var c = m[k]; return c === 'mob' || c === 'livre' || c === 'alim' ? c : '';
   }
   function porDia(a) { var t = String(a.tipoBase || a.tipo || '').toUpperCase(); return a.tipoCalc ? a.tipoCalc === 'dia' : /^V[TR]/.test(t); }
-  function dias(f) { return typeof escBase === 'function' && escBase(f.escala) === '56' ? 26 : 22; }
+  function dias(f) { if (typeof window.escDiasMes === 'function') return window.escDiasMes(f.escala); return typeof escBase === 'function' && escBase(f.escala) === '56' ? 26 : 22; }
   function valoresDo(f, atribs) {
     var v = { mob: 0, livre: 0, bonus: 0, alim: 0 };
     atribs.forEach(function (a) { if (a.fid !== f.id) return; var c = catDe(a.tipoBase || a.tipo); if (!c) return; var x = parseFloat(a.valor) || 0; v[c] += porDia(a) ? x * dias(f) : x; });
@@ -22680,6 +22681,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // dias úteis do mês (seg-sex sem feriados; escala 6x1 = seg-sáb)
   function diasMes(m, a, escala) {
     var de = a + '-' + String(m + 1).padStart(2, '0') + '-01', ult = new Date(a, m + 1, 0).getDate(), ate = a + '-' + String(m + 1).padStart(2, '0') + '-' + ult;
+    if (typeof window.escDiasPeriodo === 'function') return window.escDiasPeriodo(escala, de, ate);
     var d = typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 22;
     if (typeof escBase === 'function' && escBase(escala) === '56') { var fer = new Set(); if (typeof getFeriadosSPGlobal === 'function') getFeriadosSPGlobal(a).forEach(function (f) { fer.add(f); }); for (var i = 1; i <= ult; i++) { var dt = new Date(a, m, i), ds = a + '-' + String(m + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0'); if (dt.getDay() === 6 && !fer.has(ds)) d++; } }
     return d;
@@ -22868,6 +22870,170 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // Funcionários › Aniversário de empresa (tempo de casa)
   // Quebra de caixa › relatório
   var _qr = window.qcRelatorio; if (_qr) window.qcRelatorio = function (chave) { var r = _qr.apply(this, arguments); if (!chave) { addExtOpts(el('qcr-emp')); } return r; };
+})();
+</script>
+<script>
+/* ════════ ESCALAS: folgas por dia da semana (5x2 folga dom/seg, dom/ter...), excluir de verdade, vincular funcionários em lote, dias do período nos benefícios ════════ */
+(function () {
+  var DS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], MESN = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function nrm(s) { return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function todas() { return DB.g('escalas'); }
+  function acharEsc(valor) { if (!valor) return null; return todas().find(function (x) { return !x.oculto && (x.valor === valor || x.nome === valor); }) || null; }
+  // regra da escala: folgas (dias da semana), 12x36, trabalha em feriados
+  function regra(valor) {
+    var e = acharEsc(valor), b;
+    if (e && Array.isArray(e.folgas)) return { folgas: e.folgas, x1236: false, feriado: !!e.trabFeriado };
+    if (e && e.x1236) return { folgas: [], x1236: true, feriado: true };
+    b = (e && e.base) || (typeof escBase === 'function' ? escBase(valor || '55') : '55');
+    if (b === '12x36') return { folgas: [], x1236: true, feriado: true };
+    return { folgas: b === '56' ? [0] : [0, 6], x1236: false, feriado: false };
+  }
+  window.escRegra = regra;
+  window.escDiasPeriodo = function (valor, de, ate) {
+    if (!de || !ate) return 22;
+    var d1 = new Date(de + 'T12:00:00'), d2 = new Date(ate + 'T12:00:00'); if (isNaN(d1) || isNaN(d2) || d1 > d2) return 0;
+    var R = regra(valor), tot = Math.round((d2 - d1) / 864e5) + 1;
+    if (R.x1236) return Math.ceil(tot / 2);
+    var fer = {}; if (!R.feriado && typeof getFeriadosSPGlobal === 'function') for (var y = d1.getFullYear(); y <= d2.getFullYear(); y++) getFeriadosSPGlobal(y).forEach(function (f) { fer[f] = 1; });
+    var n = 0, c = new Date(d1); while (c <= d2) { if (R.folgas.indexOf(c.getDay()) === -1 && !fer[iso(c)]) n++; c.setDate(c.getDate() + 1); }
+    return n;
+  };
+  window.escDiasMes = function (valor, m, a) { var h = new Date(); if (m == null) { m = h.getMonth(); a = h.getFullYear(); } return escDiasPeriodo(valor, iso(new Date(a, m, 1)), iso(new Date(a, m + 1, 0))); };
+  function descRegra(e) {
+    var R = regra(e.valor || e.nome);
+    if (R.x1236) return '12x36 (dia sim, dia não)';
+    var f = R.folgas.slice().sort().map(function (d) { return DS[d]; });
+    return (7 - R.folgas.length) + 'x' + R.folgas.length + ' · folga ' + (f.length ? f.join(' e ') : '—') + (R.feriado ? ' · trabalha feriados' : '');
+  }
+  // lista sem as excluídas e sem repetidas
+  window.estEscalas = function () {
+    var l = todas();
+    if (!l.length) return EST_ESCALAS_PADRAO.map(function (e, i) { return Object.assign({ id: 'esc' + i }, e); });
+    var vv = {};
+    return l.filter(function (e) { if (e.oculto) return false; var k = e.valor || e.nome; if (vv[k]) return false; vv[k] = 1; return true; })
+      .map(function (e) { return e.valor ? e : Object.assign({}, e, { valor: e.nome }); })
+      .sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || '', 'pt-BR'); });
+  };
+  function usam(valor) { return DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && f.escala === valor; }).length + DB.g('colab-ext').filter(function (c) { return (c.st || 'Ativo') === 'Ativo' && c.escala === valor; }).length; }
+  window.rdEstEscalas = function () {
+    var tb = el('est-tb-esc'); if (!tb) return;
+    var h = new Date(), ref = MESN[h.getMonth()] + '/' + h.getFullYear();
+    var th = tb.parentNode.querySelector('thead tr'); if (th) th.innerHTML = '<th>Escala</th><th>Horário</th><th>Folgas · dias em ' + ref + '</th><th>Funcionários</th><th>Ações</th>';
+    tb.innerHTML = estEscalas().map(function (e) {
+      var k = esc(e.id || e.valor);
+      return '<tr><td><strong>' + esc(e.nome) + '</strong>' + (e.desc ? '<div class="est-sub">' + esc(e.desc) + '</div>' : '') + '</td><td>' + esc(e.horario || '—') + '</td>' +
+        '<td>' + esc(descRegra(e)) + ' · <strong>' + escDiasMes(e.valor) + ' dias</strong></td>' +
+        '<td><span class="est-pill">👥 ' + usam(e.valor) + '</span></td>' +
+        '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" title="Vincular funcionários a esta escala" onclick="escVincular(\'' + k + '\')">👥 Vincular</button> ' +
+        '<button class="btn-icon" title="Editar" onclick="estEditar(\'esc\',\'' + k + '\')">✏️</button> <button class="btn-icon danger" title="Excluir" onclick="estExcluir(\'esc\',\'' + k + '\')">🗑</button></td></tr>';
+    }).join('') || '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--gray-400);">Nenhuma escala. Clique em + Nova escala.</td></tr>';
+  };
+  function porChave(k) { return todas().find(function (x) { return x.id === k; }) || todas().find(function (x) { return !x.oculto && (x.valor === k || x.nome === k); }); }
+  // excluir: remove a escala (e as repetidas) e não deixa voltar pela sincronização automática
+  var _exc = window.estExcluir;
+  window.estExcluir = function (tipo, id) {
+    if (tipo !== 'esc') return _exc.apply(this, arguments);
+    if (!todas().length && typeof estSyncEscalas === 'function') estSyncEscalas();
+    var r = porChave(id); if (!r) { alert('Escala não encontrada.'); return; }
+    var val = r.valor || r.nome, n = usam(val);
+    var outras = estEscalas().filter(function (e) { return e.valor !== val; });
+    var msg = 'Excluir a escala "' + r.nome + '"?';
+    if (n) msg += '\n\n' + n + ' funcionário(s) estão nela. Depois de excluir, use 👥 Vincular em outra escala para passá-los.';
+    if (!confirm(msg)) return;
+    var l = todas().filter(function (x) { return !((x.valor || x.nome) === val || nrm(x.nome) === nrm(r.nome)); });
+    l.push({ id: 'oc-' + Date.now().toString(36), nome: r.nome, valor: val, oculto: 1 });
+    DB.s('escalas', l);
+    rdEstEscalas(); toast('Escala excluída.');
+  };
+  // formulário: folgas por dia da semana
+  var _abrir = window._estAbrirForm;
+  window._estAbrirForm = function (tipo, id) {
+    var r = _abrir.apply(this, arguments);
+    if (tipo !== 'esc') return r;
+    var b = el('estf-base'); if (!b) return r;
+    var e = id ? porChave(id) : null, R = e ? regra(e.valor || e.nome) : { folgas: [0, 6], x1236: false, feriado: false };
+    var g = b.closest('.form-group'); g.classList.add('form-full');
+    g.innerHTML = '<label>Dias de folga na semana (cálculo de VT/VR e da compra de benefícios)</label><input type="hidden" id="estf-base" value="' + esc((e && e.base) || '55') + '">' +
+      '<div id="esc-folgas" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px;">' + DS.map(function (d, i) { return '<label class="esc-dia"><input type="checkbox" value="' + i + '"' + (R.folgas.indexOf(i) !== -1 ? ' checked' : '') + ' onchange="escPrev()"> ' + d + '</label>'; }).join('') + '</div>' +
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;"><label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;margin:0;"><input type="checkbox" id="esc-1236" style="width:auto;"' + (R.x1236 ? ' checked' : '') + ' onchange="escPrev()"> 12x36 (trabalha dia sim, dia não)</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:400;margin:0;"><input type="checkbox" id="esc-fer" style="width:auto;"' + (R.feriado && !R.x1236 ? ' checked' : '') + ' onchange="escPrev()"> Trabalha nos feriados</label></div>' +
+      '<div id="esc-prev" style="margin-top:6px;font-size:12.5px;color:var(--green-dark);font-weight:600;"></div>';
+    if (!el('esc-css')) { var st = document.createElement('style'); st.id = 'esc-css'; st.textContent = '.esc-dia{display:flex;gap:5px;align-items:center;padding:5px 10px;border:1.5px solid var(--gray-200);border-radius:20px;font-size:13px;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--gray-800);margin:0;}.esc-dia:has(input:checked){background:#fbe9e7;border-color:#e57373;color:#b71c1c;font-weight:700;}.esc-dia input{width:auto;}'; document.head.appendChild(st); }
+    escPrev();
+    return r;
+  };
+  function lerForm() {
+    var f = Array.prototype.map.call(document.querySelectorAll('#esc-folgas input:checked'), function (i) { return +i.value; });
+    return { folgas: f, x1236: !!(el('esc-1236') || {}).checked, fer: !!(el('esc-fer') || {}).checked };
+  }
+  window.escPrev = function () {
+    var F = lerForm(), p = el('esc-prev'); if (!p) return;
+    document.querySelectorAll('#esc-folgas input').forEach(function (i) { i.disabled = F.x1236; });
+    var h = new Date(), de = iso(new Date(h.getFullYear(), h.getMonth(), 1)), ate = iso(new Date(h.getFullYear(), h.getMonth() + 1, 0));
+    var tot = Math.round((new Date(ate) - new Date(de)) / 864e5) + 1, n;
+    if (F.x1236) n = Math.ceil(tot / 2);
+    else { var fer = {}; if (!F.fer && typeof getFeriadosSPGlobal === 'function') getFeriadosSPGlobal(h.getFullYear()).forEach(function (x) { fer[x] = 1; }); n = 0; for (var d = 1; d <= tot; d++) { var c = new Date(h.getFullYear(), h.getMonth(), d); if (F.folgas.indexOf(c.getDay()) === -1 && !fer[iso(c)]) n++; } }
+    el('estf-base').value = F.x1236 ? '12x36' : (F.folgas.length === 1 && F.folgas[0] === 0 ? '56' : '55');
+    p.textContent = F.x1236 ? '12x36 · ' + n + ' dias em ' + MESN[h.getMonth()] + '/' + h.getFullYear() : (7 - F.folgas.length) + 'x' + F.folgas.length + ' · ' + n + ' dias de trabalho em ' + MESN[h.getMonth()] + '/' + h.getFullYear() + (F.fer ? '' : ' (sem os feriados)');
+  };
+  var _sal = window.estSalvar;
+  window.estSalvar = function () {
+    var t = (window._estEdit || {}).tipo, F = t === 'esc' ? lerForm() : null, nome = t === 'esc' ? ((el('estf-nome') || {}).value || '').trim() : '';
+    if (t === 'esc' && !F.x1236 && F.folgas.length === 7) { alert('Marque os dias de folga (não pode ser todos os dias).'); return; }
+    var r = _sal.apply(this, arguments);
+    if (t === 'esc' && nome && !(el('modal-est-form') || {}).classList.contains('open')) {
+      var l = todas(), i = l.findIndex(function (x) { return !x.oculto && nrm(x.nome) === nrm(nome); });
+      if (i >= 0) { l[i] = Object.assign({}, l[i], { folgas: F.x1236 ? null : F.folgas, x1236: F.x1236, trabFeriado: F.fer }); if (!l[i].folgas) delete l[i].folgas; DB.s('escalas', l); }
+      rdEstEscalas();
+    }
+    return r;
+  };
+  // ── vincular funcionários a uma escala, em lote ──
+  var VK = null, MARC = {};
+  window.escVincular = function (k) {
+    var e = porChave(k); if (!e) return; VK = e.valor || e.nome; MARC = {};
+    if (!el('modal-esc-vinc')) document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-esc-vinc"><div class="modal" style="max-width:760px;"><div class="modal-header"><span class="modal-title" id="ev-tit"></span><button class="modal-close" onclick="closeModal(\'modal-esc-vinc\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;">Marque quem trabalha nesta escala. Quem já está nela vem marcado; desmarcando, a pessoa fica sem escala.</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><select id="ev-g" onchange="escVLista()"><option value="">Todos os vínculos</option><option>CLT</option><option>Agência</option><option>Sem registro</option></select><select id="ev-e" onchange="escVLista()"></select><select id="ev-d" onchange="escVLista()"></select>' +
+      '<input id="ev-q" type="search" placeholder="🔍 Buscar" oninput="escVLista()" style="flex:1;min-width:140px;"><button type="button" class="btn btn-outline btn-sm" onclick="escVTodos(true)">☑ Marcar todos da lista</button><button type="button" class="btn btn-outline btn-sm" onclick="escVTodos(false)">☐ Desmarcar</button></div>' +
+      '<div style="max-height:46vh;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);"><table id="ev-tab" style="font-size:12.5px;"></table></div><div id="ev-n" style="margin-top:6px;font-size:13px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-esc-vinc\')">Cancelar</button><button class="btn btn-primary" onclick="escVSalvar()">💾 Salvar vínculos</button></div></div></div>');
+    el('ev-tit').textContent = '👥 Vincular funcionários · ' + e.nome;
+    el('ev-e').innerHTML = '<option value="">Todas as empresas</option>' + DB.g('empresas').map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.razao) + '</option>'; }).join('');
+    el('ev-d').innerHTML = '<option value="">Todos os departamentos</option>' + DB.g('departamentos').map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.nome) + '</option>'; }).join('');
+    pessoas().forEach(function (p) { if (p.escala === VK) MARC[p.k] = 1; });
+    escVLista(); el('modal-esc-vinc').classList.add('open');
+  };
+  function pessoas() {
+    var L = [];
+    DB.g('funcionarios').forEach(function (f) { if (f.st === 'Desligado' || f._ext) return; L.push({ k: 'f:' + f.id, n: f.n, g: 'CLT', emp: f.emp, dep: f.dep, escala: f.escala || '' }); });
+    DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') !== 'Ativo') return; L.push({ k: 'x:' + c.id, n: c.n, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', emp: c.emp, dep: c.dep, escala: c.escala || '' }); });
+    return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+  }
+  window.escVLista = function () {
+    var g = el('ev-g').value, e = el('ev-e').value, d = el('ev-d').value, q = nrm(el('ev-q').value);
+    var L = pessoas().filter(function (p) { return (!g || p.g === g) && (!e || p.emp === e) && (!d || p.dep === d) && (!q || nrm(p.n).indexOf(q) !== -1); });
+    el('ev-tab').innerHTML = '<thead><tr><th></th><th>Colaborador</th><th>Vínculo</th><th>Escala atual</th></tr></thead><tbody>' + L.map(function (p) {
+      return '<tr><td><input type="checkbox" style="width:auto;" data-k="' + esc(p.k) + '"' + (MARC[p.k] ? ' checked' : '') + ' onchange="escVMarca(this)"></td><td><strong>' + esc(p.n) + '</strong></td><td>' + p.g + '</td><td style="color:' + (p.escala === VK ? 'var(--green-dark)' : 'var(--gray-500)') + ';">' + esc(p.escala ? (estEscalaNome(p.escala) || p.escala) : '—') + '</td></tr>';
+    }).join('') + '</tbody>';
+    el('ev-n').innerHTML = '<strong>' + Object.keys(MARC).length + '</strong> marcado(s) nesta escala';
+  };
+  window.escVMarca = function (c) { if (c.checked) MARC[c.dataset.k] = 1; else delete MARC[c.dataset.k]; el('ev-n').innerHTML = '<strong>' + Object.keys(MARC).length + '</strong> marcado(s) nesta escala'; };
+  window.escVTodos = function (v) { document.querySelectorAll('#ev-tab tbody input').forEach(function (c) { c.checked = v; escVMarca(c); }); };
+  window.escVSalvar = function () {
+    var entra = 0, sai = 0;
+    var fs = DB.g('funcionarios').map(function (f) { var k = 'f:' + f.id; if (f.st === 'Desligado' || f._ext) return f; if (MARC[k] && f.escala !== VK) { entra++; return Object.assign({}, f, { escala: VK }); } if (!MARC[k] && f.escala === VK) { sai++; return Object.assign({}, f, { escala: '' }); } return f; });
+    var xs = DB.g('colab-ext').map(function (c) { var k = 'x:' + c.id; if ((c.st || 'Ativo') !== 'Ativo') return c; if (MARC[k] && c.escala !== VK) { entra++; return Object.assign({}, c, { escala: VK }); } if (!MARC[k] && c.escala === VK) { sai++; return Object.assign({}, c, { escala: '' }); } return c; });
+    if (!entra && !sai) { closeModal('modal-esc-vinc'); return; }
+    if (sai && !confirm(sai + ' pessoa(s) foram desmarcadas e ficarão sem escala. Continuar?')) return;
+    DB.s('funcionarios', fs); DB.s('colab-ext', xs);
+    closeModal('modal-esc-vinc'); rdEstEscalas();
+    toast(entra + ' vinculado(s)' + (sai ? ', ' + sai + ' retirado(s)' : '') + ' ✅');
+  };
 })();
 </script>
 </body>
