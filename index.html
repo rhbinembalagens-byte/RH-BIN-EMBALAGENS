@@ -4276,6 +4276,7 @@ function rdFunc() {
     var td5 = document.createElement('td');
     td5.style.fontSize = '12px';
     td5.textContent = empNome;
+    if (emp && emp.cnpj) { var cnpjEl = document.createElement('div'); cnpjEl.style.cssText = 'font-size:10.5px;color:var(--gray-400);white-space:nowrap;'; cnpjEl.textContent = emp.cnpj; td5.appendChild(cnpjEl); }
 
     var td5b = document.createElement('td');
     td5b.style.fontSize = '12px';
