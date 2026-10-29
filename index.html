@@ -23246,5 +23246,44 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
 })();
 </script>
+<script>
+/* ════════ FUNCIONÁRIOS CLT: 📤 Excel (igual ao de Agência e Sem registro) ════════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function fdx(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : (s || ''); }
+  function nb(v) { var s = String(v == null ? '' : v).trim(); if (!s) return ''; var n = parseFloat(s.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')); return isNaN(n) ? s : n; }
+  window.cltExportar = function () {
+    var emps = {}, deps = {};
+    DB.g('empresas').forEach(function (e) { emps[e.id] = e; }); DB.g('departamentos').forEach(function (d) { deps[d.id] = d; });
+    var l = DB.g('funcionarios').filter(function (f) { return !f._ext; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+    if (!l.length) { alert('Nenhum funcionário para exportar.'); return; }
+    var cab = ['Nome', 'CPF', 'RG', 'Nascimento', 'Sexo', 'Telefone', 'E-mail', 'Endereço', 'CEP', 'Empresa', 'CNPJ', 'Departamento', 'Cargo', 'Escala', 'Cód. funcionário', 'Admissão', 'Salário', 'Status', 'Data de desligamento', 'Motivo / observação do desligamento', 'Uniforme (camisa/calça/calçado)'];
+    var linhas = l.map(function (f) {
+      var e = emps[f.emp] || {}, d = deps[f.dep];
+      return [f.n, f.cpf, f.rg, fdx(f.nas), f.sex, f.tel, f.email, f.end, f.cep, e.razao, e.cnpj, d ? d.nome : (f.dep && !/^[a-z0-9]{8,}$/i.test(f.dep) ? f.dep : ''), f.car,
+        (typeof estEscalaNome === 'function' ? estEscalaNome(f.escala) : f.escala), f.codEpr, fdx(f.adm), nb(f.sal), f.st || 'Ativo', fdx(f.dtDesl), f.motDesl,
+        [f.tamCamisa, f.tamCalca, f.tamCalcado].filter(Boolean).join(' / ')].map(function (x) { return x == null ? '' : x; });
+    });
+    var h = new Date(), nome = 'Funcionarios_CLT_' + String(h.getDate()).padStart(2, '0') + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + h.getFullYear();
+    if (typeof XLSX === 'undefined') {
+      var csv = [cab].concat(linhas).map(function (r) { return r.map(function (x) { return typeof x === 'number' ? String(x).replace('.', ',') : '"' + String(x).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })); a.download = nome + '.csv'; a.click(); return;
+    }
+    var ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
+    ws['!cols'] = cab.map(function (c) { return { wch: /^Nome|Endere|Empresa|Motivo/.test(c) ? 32 : 15 }; });
+    for (var r = 1; r <= linhas.length; r++) { var ad = XLSX.utils.encode_cell({ r: r, c: 16 }); if (ws[ad] && ws[ad].t === 'n') ws[ad].z = '#,##0.00'; }
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Funcionários CLT'); XLSX.writeFile(wb, nome + '.xlsx');
+    if (typeof toast === 'function') toast('📤 ' + linhas.length + ' funcionário(s) exportado(s)');
+  };
+  function botao() {
+    if (el('btn-clt-xls')) return;
+    var bs = document.querySelectorAll('#sec-funcionarios .card-header button');
+    var ref = Array.prototype.find.call(bs, function (x) { return /Importar planilha/.test(x.textContent); }) || Array.prototype.find.call(bs, function (x) { return /Importar desligados/.test(x.textContent); });
+    if (ref) ref.insertAdjacentHTML('afterend', '<button class="btn btn-outline" id="btn-clt-xls" onclick="cltExportar()" title="Exportar os funcionários CLT para Excel">📤 Excel</button>');
+  }
+  if (document.readyState !== 'loading') botao(); else document.addEventListener('DOMContentLoaded', botao);
+  if (typeof window.rdFunc === 'function') { var _r = window.rdFunc; window.rdFunc = function () { var x = _r.apply(this, arguments); try { botao(); } catch (e) {} return x; }; }
+})();
+</script>
 </body>
 </html>
