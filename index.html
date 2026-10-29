@@ -23373,5 +23373,81 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   var _rf = window.rdFlash; if (typeof _rf === 'function') window.rdFlash = function () { var r = _rf.apply(this, arguments); try { botoes(); } catch (e) {} return r; };
 })();
 </script>
+<script>
+/* ════════ EMPRESAS: transferir funcionários de uma empresa (CNPJ) para outra ════════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  var SUG = { de: '36503021000177', para: '38294858000189' };
+  function emps() { return DB.g('empresas').slice().sort(function (a, b) { return (a.razao || '').localeCompare(b.razao || ''); }); }
+  function opts(sel) { return '<option value="">Selecione</option>' + emps().map(function (e) { return '<option value="' + esc(e.id) + '"' + (e.id === sel ? ' selected' : '') + '>' + esc(e.razao) + (e.cnpj ? ' · ' + esc(e.cnpj) : '') + '</option>'; }).join(''); }
+  window.trfAbrir = function () {
+    if (!el('modal-trf')) document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-trf"><div class="modal" style="max-width:820px;">' +
+      '<div class="modal-header"><span class="modal-title">🔁 Transferir funcionários entre empresas</span><button class="modal-close" onclick="closeModal(\'modal-trf\')">×</button></div>' +
+      '<div class="form-grid"><div class="form-group form-full"><label>De (empresa atual)</label><select id="trf-de" onchange="trfLista()"></select></div>' +
+      '<div class="form-group form-full"><label>Para (nova empresa)</label><select id="trf-para" onchange="trfLista()"></select></div></div>' +
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:6px 0 8px;">' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;margin:0;"><input type="checkbox" id="trf-ext" checked style="width:auto;" onchange="trfLista()"> Incluir Agência e Sem registro</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;margin:0;"><input type="checkbox" id="trf-desl" style="width:auto;" onchange="trfLista()"> Incluir desligados / encerrados</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;margin:0;" title="Departamentos vinculados à empresa de origem passam para a nova empresa"><input type="checkbox" id="trf-deps" checked style="width:auto;"> Mover também os departamentos da empresa de origem</label></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><strong id="trf-n" style="font-size:13px;"></strong><button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="trfTodos(true)">☑ Marcar todos</button><button type="button" class="btn btn-outline btn-sm" onclick="trfTodos(false)">☐ Desmarcar</button></div>' +
+      '<div style="max-height:42vh;overflow:auto;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);"><table id="trf-tab" style="font-size:12.5px;"></table></div>' +
+      '<div style="font-size:12px;color:var(--gray-500);margin-top:6px;">O histórico fica registrado no cadastro de cada um (empresa anterior e data). Matrícula/cód. funcionário não muda.</div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-trf\')">Cancelar</button><button class="btn btn-primary" onclick="trfConfirmar()">🔁 Transferir selecionados</button></div></div></div>');
+    var E = emps(), de = E.find(function (e) { return dig(e.cnpj) === SUG.de; }), pa = E.find(function (e) { return dig(e.cnpj) === SUG.para; });
+    el('trf-de').innerHTML = opts(de ? de.id : ''); el('trf-para').innerHTML = opts(pa ? pa.id : '');
+    trfLista(); el('modal-trf').classList.add('open');
+  };
+  function pessoas() {
+    var de = el('trf-de').value, ext = el('trf-ext').checked, desl = el('trf-desl').checked, L = [];
+    if (!de) return L;
+    DB.g('funcionarios').forEach(function (f) { if (f._ext || f.emp !== de) return; if (!desl && f.st === 'Desligado') return; L.push({ k: 'f:' + f.id, n: f.n, cpf: f.cpf, car: f.car, g: 'CLT', st: f.st || 'Ativo' }); });
+    if (ext) DB.g('colab-ext').forEach(function (c) { if (c.emp !== de) return; if (!desl && (c.st || 'Ativo') !== 'Ativo') return; L.push({ k: 'x:' + c.id, n: c.n, cpf: c.cpf, car: c.car, g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', st: c.st || 'Ativo' }); });
+    return L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+  }
+  window.trfLista = function () {
+    var L = pessoas();
+    el('trf-tab').innerHTML = el('trf-de').value ? (L.length ? '<thead><tr><th></th><th>Nome</th><th>CPF</th><th>Cargo</th><th>Vínculo</th><th>Status</th></tr></thead><tbody>' + L.map(function (p) {
+      return '<tr><td><input type="checkbox" class="trf-ck" data-k="' + esc(p.k) + '" checked style="width:auto;" onchange="trfConta()"></td><td><strong>' + esc(p.n) + '</strong></td><td>' + esc(p.cpf || '') + '</td><td>' + esc(p.car || '') + '</td><td>' + p.g + '</td><td>' + esc(p.st) + '</td></tr>'; }).join('') + '</tbody>'
+      : '<tr><td style="padding:16px;color:var(--gray-400);">Nenhum colaborador nesta empresa com esses filtros.</td></tr>') : '<tr><td style="padding:16px;color:var(--gray-400);">Escolha a empresa de origem.</td></tr>';
+    trfConta();
+  };
+  window.trfTodos = function (v) { document.querySelectorAll('.trf-ck').forEach(function (c) { c.checked = v; }); trfConta(); };
+  window.trfConta = function () { el('trf-n').textContent = document.querySelectorAll('.trf-ck:checked').length + ' selecionado(s) para transferir'; };
+  window.trfConfirmar = function () {
+    var de = el('trf-de').value, pa = el('trf-para').value;
+    if (!de || !pa) { alert('Escolha as duas empresas.'); return; }
+    if (de === pa) { alert('A empresa de destino precisa ser diferente da de origem.'); return; }
+    var sel = {}; document.querySelectorAll('.trf-ck:checked').forEach(function (c) { sel[c.dataset.k] = 1; });
+    var n = Object.keys(sel).length; if (!n) { alert('Nenhum colaborador marcado.'); return; }
+    var E = DB.g('empresas'), eDe = E.find(function (e) { return e.id === de; }) || {}, ePa = E.find(function (e) { return e.id === pa; }) || {};
+    if (!confirm('Transferir ' + n + ' colaborador(es)\n\nDE: ' + eDe.razao + (eDe.cnpj ? ' (' + eDe.cnpj + ')' : '') + '\nPARA: ' + ePa.razao + (ePa.cnpj ? ' (' + ePa.cnpj + ')' : '') + '\n\nConfirma?')) return;
+    // código de empresa usado pelos funcionários que já estão na empresa de destino
+    var cods = {}; DB.g('funcionarios').forEach(function (f) { if (f.emp === pa && f.codEmp) cods[f.codEmp] = (cods[f.codEmp] || 0) + 1; });
+    var codPara = Object.keys(cods).sort(function (a, b) { return cods[b] - cods[a]; })[0] || '';
+    var reg = { de: de, deRazao: eDe.razao || '', deCnpj: eDe.cnpj || '', para: pa, paraRazao: ePa.razao || '', data: hoje() };
+    var F = DB.g('funcionarios').map(function (f) {
+      if (!sel['f:' + f.id]) return f;
+      var o = Object.assign({}, f, { emp: pa, transf: (f.transf || []).concat([Object.assign({ codEmpAnt: f.codEmp || '' }, reg)]) });
+      if (codPara) o.codEmp = codPara;
+      return o;
+    });
+    var X = DB.g('colab-ext').map(function (c) { return sel['x:' + c.id] ? Object.assign({}, c, { emp: pa, transf: (c.transf || []).concat([reg]) }) : c; });
+    DB.s('funcionarios', F); DB.s('colab-ext', X);
+    var nd = 0;
+    if (el('trf-deps').checked) { var D = DB.g('departamentos').map(function (d) { if (d.emp === de) { nd++; return Object.assign({}, d, { emp: pa }); } return d; }); if (nd) DB.s('departamentos', D); }
+    closeModal('modal-trf');
+    try { rdEmp(); } catch (e) {} try { rdFunc(); } catch (e) {}
+    toast('🔁 ' + n + ' colaborador(es) transferido(s) para ' + (ePa.razao || 'a nova empresa') + (nd ? ' · ' + nd + ' departamento(s) movido(s)' : '') + (codPara ? ' · cód. empresa ' + codPara : ''));
+  };
+  function botao() {
+    var b = document.querySelector('#sec-empresas .card-header button'); if (!b || el('btn-trf')) return;
+    b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-trf" onclick="trfAbrir()" style="margin-left:auto;margin-right:8px;">🔁 Transferir funcionários</button>');
+  }
+  if (document.readyState !== 'loading') botao(); else document.addEventListener('DOMContentLoaded', botao);
+})();
+</script>
 </body>
 </html>
