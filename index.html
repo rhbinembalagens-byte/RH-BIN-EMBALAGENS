@@ -23036,5 +23036,156 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
 })();
 </script>
+<script>
+/* ════════ RECIBO DE BÔNUS POR RESULTADO: cálculo pela tabela "Bonificação e dimensionamento de equipe" ════════
+   Por departamento (loja): faturamento do mês → faixa → GERENTE (valor cheio), SUB GERENTE (valor cheio) e EQUIPE (valor × teto de colaboradores),
+   o valor da equipe é dividido entre os colaboradores do departamento (sem gerente e subgerente) que não tiveram falta nem atestado no mês. */
+(function () {
+  var K_TAB = 'bonus-tab', K_OC = 'bonus-ocorr', K_FAT = 'dep-fat';
+  [K_TAB, K_OC].forEach(function (k) { if (window.RT && RT.LIST && RT.LIST.indexOf(k) === -1) { RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); } });
+  var PADRAO = [[160000,720,240,200],[200000,900,272.22,222.22],[240000,1080,300,240],[300000,1350,325,250],[350000,1470,390,250],[400000,1680,410,250],[450000,1890,430,250],[500000,2100,450,250],[550000,2310,470,250],[600000,2520,490,250],[650000,2730,510,250],[700000,2940,530,250],[800000,3360,570,250],[900000,3780,610,250],[1000000,4200,650,250],[1100000,4400,800,250],[1200000,4800,850,250],[1300000,4940,1030,250],[1400000,5320,1090,250],[1500000,5700,1150,250],[1600000,6080,1210,250],[1700000,6460,1270,250],[1800000,6840,1330,250],[1900000,7220,1390,250],[2000000,7600,1450,250]]
+    .map(function (x) { return { fat: x[0], ger: x[1], sub: x[2], eq: x[3] }; });
+  var MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var PAP = { ger: 'Gerente', sub: 'Subgerente', eq: 'Equipe', nao: 'Não participa' };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function nrm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); }
+  function num(s) { s = String(s == null ? '' : s).replace(/[^\d,.-]/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); var n = parseFloat(s); return isNaN(n) ? 0 : n; }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function tab() { var t = DB.g(K_TAB); return (t && t.length ? t : PADRAO).slice().sort(function (a, b) { return a.fat - b.fat; }); }
+  function linhaTab(fat) { var f = null; tab().forEach(function (x) { if (fat >= x.fat) f = x; }); return f; }
+  function papelAuto(car) { var c = nrm(car); if (/SUB\s*-?\s*GERENTE|SUBGERENTE/.test(c)) return 'sub'; if (/GERENTE/.test(c)) return 'ger'; return 'eq'; }
+  var C = null; // competência
+  function chave(pk) { return C.m + '-' + C.a + '-' + pk; }
+  function oc(pk) { return DB.g(K_OC).find(function (x) { return x.k === chave(pk); }) || null; }
+  function faltasFolha(pk) { return DB.g('folha-lanc').filter(function (x) { return x.pk === pk && +x.mes === C.m && +x.ano === C.a && x.tipo === 'falta'; }).reduce(function (s, x) { return s + (parseFloat(x.dias) || 0); }, 0); }
+  function pessoasDep(dep) {
+    var L = [];
+    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado' && f.dep === dep) L.push({ pk: 'f:' + f.id, n: f.n, car: f.car || '', g: 'CLT' }); });
+    DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') === 'Ativo' && c.dep === dep) L.push({ pk: 'x:' + c.id, n: c.n, car: c.car || '', g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro' }); });
+    return L.map(function (p) { var o = oc(p.pk); p.papel = o && o.papel ? o.papel : papelAuto(p.car); p.faltas = o && o.faltas != null ? o.faltas : faltasFolha(p.pk); p.atest = o && o.atest != null ? o.atest : 0; return p; })
+      .sort(function (a, b) { var o = { ger: 0, sub: 1, eq: 2, nao: 3 }; return o[a.papel] - o[b.papel] || (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+  }
+  function fatDe(dep) { var r = DB.g(K_FAT).find(function (x) { return x.dep === dep && x.mes === C.m && x.ano === C.a; }); return r ? r.valor : 0; }
+  // cálculo de um departamento
+  function calcDep(d) {
+    var fat = fatDe(d.id), T = fat ? linhaTab(fat) : null, F = fat && window.dimFaixa ? dimFaixa(fat) : null, teto = F && !F.abaixo ? F.teto : 0;
+    var P = pessoasDep(d.id);
+    P.forEach(function (p) { p.perde = p.papel !== 'nao' && ((+p.faltas || 0) + (+p.atest || 0)) > 0; p.valor = 0; });
+    var eqOk = P.filter(function (p) { return p.papel === 'eq' && !p.perde; }), pool = T && teto ? r2(T.eq * teto) : 0, cota = eqOk.length ? r2(pool / eqOk.length) : 0;
+    P.forEach(function (p) { if (!T || p.perde || p.papel === 'nao') return; p.valor = p.papel === 'ger' ? T.ger : p.papel === 'sub' ? T.sub : cota; });
+    return { dep: d, fat: fat, T: T, F: F, teto: teto, pool: pool, cota: cota, nEq: P.filter(function (p) { return p.papel === 'eq'; }).length, nOk: eqOk.length, P: P, total: r2(P.reduce(function (s, p) { return s + p.valor; }, 0)) };
+  }
+  function deps() { return DB.g('departamentos').slice().sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || '', 'pt-BR'); }); }
+  function injetar() {
+    if (el('modal-bonus-calc')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-bonus-calc"><div class="modal" style="max-width:1150px;">' +
+      '<div class="modal-header"><span class="modal-title">🏆 Bônus por resultado — cálculo por departamento</span><button class="modal-close" onclick="closeModal(\'modal-bonus-calc\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;line-height:1.5;">Pela tabela <strong>Bonificação e dimensionamento de equipe</strong>: o faturamento do mês define a faixa do departamento. <strong>Gerente</strong> e <strong>Subgerente</strong> recebem o valor cheio da faixa. A <strong>Equipe</strong> recebe o valor da coluna Equipe × teto de colaboradores, dividido entre os colaboradores do departamento (sem gerente e subgerente). <strong>Quem tem 1 ou mais faltas ou atestados no mês perde o bônus</strong>, e o valor da equipe é redividido entre os que continuam com direito. Faltas já vêm dos lançamentos da folha; ajuste à vontade.</div>' +
+      '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">' +
+      '<div class="form-group" style="margin:0;"><label>Competência</label><select id="bc-mes" onchange="bcComp()">' + MES.map(function (m, i) { return '<option value="' + i + '">' + m + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group" style="margin:0;width:90px;"><label>Ano</label><input id="bc-ano" type="number" onchange="bcComp()"></div>' +
+      '<div class="form-group" style="margin:0;min-width:200px;"><label>Departamento</label><select id="bc-dep" onchange="bcRender()"></select></div>' +
+      '<button class="btn btn-outline" onclick="bcTabela()" style="margin-left:auto;">⚙️ Valores da tabela</button><button class="btn btn-outline" onclick="bcRelatorio()">🖨️ Relatório do cálculo</button></div>' +
+      '<div id="bc-corpo" style="max-height:56vh;overflow:auto;"></div>' +
+      '<div id="bc-tot" style="margin-top:8px;font-size:13.5px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-bonus-calc\')">Fechar</button><button class="btn btn-primary" style="background:#6a1b9a;border-color:#6a1b9a;" onclick="bcRecibos()">📄 Gerar recibos de bônus com estes valores</button></div></div></div>');
+    var st = document.createElement('style'); st.textContent = '.bc-dep{border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);margin-bottom:12px;overflow:hidden;}.bc-h{background:#f3e5f5;padding:8px 12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px;}.bc-h strong.t{font-size:14px;color:#4a148c;}.bc-dep table td,.bc-dep table th{padding:5px 8px;font-size:12.5px;white-space:nowrap;}.bc-dep input[type=number]{width:60px;padding:3px 5px;}.bc-dep tr.perde td{color:#b71c1c;background:#fff5f5;}.bc-dep select{padding:3px 5px;font-size:12px;}';
+    document.head.appendChild(st);
+  }
+  window.bcAbrir = function () {
+    injetar(); var h = new Date(); if (!C) C = { m: h.getMonth(), a: h.getFullYear() };
+    el('bc-mes').value = String(C.m); el('bc-ano').value = C.a;
+    el('bc-dep').innerHTML = '<option value="">Todos os departamentos com faturamento</option>' + deps().map(function (d) { return '<option value="' + esc(d.id) + '">' + esc(d.nome) + '</option>'; }).join('');
+    bcRender(); el('modal-bonus-calc').classList.add('open');
+  };
+  window.bcComp = function () { C = { m: +el('bc-mes').value, a: +el('bc-ano').value || new Date().getFullYear() }; bcRender(); };
+  function lista() { var f = el('bc-dep').value; return deps().filter(function (d) { return f ? d.id === f : (fatDe(d.id) > 0); }).map(calcDep); }
+  window.bcRender = function () {
+    if (!C) bcComp();
+    var R = lista(), G = 0;
+    el('bc-corpo').innerHTML = R.length ? R.map(function (r) {
+      G += r.total; var d = r.dep;
+      var cab = '<div class="bc-h"><strong class="t">🏬 ' + esc(d.nome) + '</strong><label style="display:flex;gap:5px;align-items:center;margin:0;text-transform:none;font-weight:600;">Faturamento R$ <input type="text" value="' + (r.fat ? brl(r.fat) : '') + '" placeholder="0,00" style="width:120px;padding:3px 6px;" onchange="bcFat(\'' + esc(d.id) + '\',this.value)"></label>' +
+        (r.T ? '<span>Faixa a partir de <strong>R$ ' + brl(r.T.fat) + '</strong>' + (r.F ? ' · porte ' + esc(r.F.porte) : '') + '</span><span>Gerente <strong>R$ ' + brl(r.T.ger) + '</strong></span><span>Subgerente <strong>R$ ' + brl(r.T.sub) + '</strong></span><span>Equipe <strong>R$ ' + brl(r.T.eq) + '</strong> × teto <strong>' + r.teto + '</strong> = <strong>R$ ' + brl(r.pool) + '</strong></span><span>' + r.nOk + ' de ' + r.nEq + ' da equipe com direito → <strong>R$ ' + brl(r.cota) + '</strong> cada</span>'
+          : '<span style="color:#b26a00;">' + (r.fat ? 'Faturamento abaixo da primeira faixa — sem bônus.' : 'Informe o faturamento do mês.') + '</span>') +
+        '<span style="margin-left:auto;font-weight:700;">Total R$ ' + brl(r.total) + '</span></div>';
+      var linhas = r.P.map(function (p) {
+        return '<tr class="' + (p.perde ? 'perde' : '') + '"><td><strong>' + esc(p.n) + '</strong> <span style="font-size:10.5px;color:var(--gray-400);">' + esc(p.car || '') + (p.g !== 'CLT' ? ' · ' + p.g : '') + '</span></td>' +
+          '<td><select onchange="bcOc(\'' + esc(p.pk) + '\',\'papel\',this.value)">' + Object.keys(PAP).map(function (k) { return '<option value="' + k + '"' + (p.papel === k ? ' selected' : '') + '>' + PAP[k] + '</option>'; }).join('') + '</select></td>' +
+          '<td><input type="number" min="0" step="1" value="' + (p.faltas || 0) + '" onchange="bcOc(\'' + esc(p.pk) + '\',\'faltas\',this.value)"></td>' +
+          '<td><input type="number" min="0" step="1" value="' + (p.atest || 0) + '" onchange="bcOc(\'' + esc(p.pk) + '\',\'atest\',this.value)"></td>' +
+          '<td>' + (p.papel === 'nao' ? '—' : p.perde ? '❌ perdeu (falta/atestado)' : '✅ com direito') + '</td><td style="text-align:right;font-weight:700;">' + (p.valor ? 'R$ ' + brl(p.valor) : '—') + '</td></tr>';
+      }).join('');
+      return '<div class="bc-dep">' + cab + '<table style="width:100%;"><thead><tr><th>Colaborador</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Situação</th><th style="text-align:right;">Bônus</th></tr></thead><tbody>' + (linhas || '<tr><td colspan="6" style="color:var(--gray-400);">Ninguém neste departamento.</td></tr>') + '</tbody></table></div>';
+    }).join('') : '<div style="padding:20px;text-align:center;color:var(--gray-400);">Nenhum departamento com faturamento lançado em ' + MES[C.m] + '/' + C.a + '. Escolha um departamento acima para lançar o faturamento aqui, ou lance em Departamentos e Cargos.</div>';
+    el('bc-tot').innerHTML = 'Total do bônus em ' + MES[C.m] + '/' + C.a + ': <strong>R$ ' + brl(G) + '</strong>';
+  };
+  window.bcFat = function (dep, v) { var n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === C.m && x.ano === C.a); }); if (n > 0) L.push({ id: uid(), dep: dep, mes: C.m, ano: C.a, valor: r2(n), em: new Date().toISOString() }); DB.s(K_FAT, L); setTimeout(bcRender, 0); };
+  window.bcOc = function (pk, campo, v) {
+    var L = DB.g(K_OC), k = chave(pk), i = L.findIndex(function (x) { return x.k === k; }), cur = i >= 0 ? L[i] : null;
+    if (!cur) { var p = null; deps().some(function (d) { p = pessoasDep(d.id).find(function (q) { return q.pk === pk; }); return !!p; }); cur = { k: k, pk: pk, mes: C.m, ano: C.a, papel: p ? p.papel : 'eq', faltas: p ? p.faltas : 0, atest: p ? p.atest : 0 }; }
+    cur[campo] = campo === 'papel' ? v : (parseFloat(v) || 0);
+    if (i >= 0) L[i] = cur; else L.push(cur);
+    DB.s(K_OC, L); setTimeout(bcRender, 0);
+  };
+  // recibos: abre o Recibo de Bônus em grupo com os valores calculados
+  window.bcRecibos = function () {
+    var V = {}; lista().forEach(function (r) { r.P.forEach(function (p) { if (p.valor > 0) V[p.pk] = (V[p.pk] || 0) + p.valor; }); });
+    if (!Object.keys(V).length) { alert('Nenhum valor de bônus calculado.'); return; }
+    closeModal('modal-bonus-calc');
+    recAbrir('rec_bon');
+    var gr = document.querySelector('input[name="rc-modo"][value="grp"]'); if (gr) gr.checked = true;
+    el('rc-periodo').value = MES[C.m] + '/' + C.a;
+    if (el('rc-grupo')) el('rc-grupo').value = 'todos'; if (el('rc-gemp')) el('rc-gemp').value = '';
+    recModo();
+    setTimeout(function () {
+      document.querySelectorAll('#rc-gtab tbody tr[data-pk]').forEach(function (tr) {
+        var v = V[tr.getAttribute('data-pk')], i = tr.querySelector('.g-val'), ck = tr.querySelector('input.ck');
+        if (i) { i.value = v ? brl(v) : ''; i.dataset.manual = '1'; } if (ck) ck.checked = !!v;
+      });
+      if (typeof recGrupoTotal === 'function') recGrupoTotal();
+      toast('Valores do bônus preenchidos — confira e clique em 📄 Gerar recibo.');
+    }, 150);
+  };
+  window.bcRelatorio = function () {
+    var R = lista(); if (!R.length) { alert('Nada para imprimir.'); return; }
+    var G = 0, css = '@page{size:A4 landscape;margin:1cm;}body{font-family:Calibri,Arial,sans-serif;color:#3A2E1A;font-size:10pt;}h1{font-size:15pt;margin:0 0 2pt;}.sub{color:#8a6420;font-size:9pt;margin-bottom:8pt;}table{width:100%;border-collapse:collapse;margin:4pt 0 10pt;}td,th{border:.5pt solid #C9A961;padding:3pt 6pt;}th{background:#F7EFD9;color:#8a6420;text-align:left;font-size:8.5pt;}td.n{text-align:right;}tr.p td{color:#b71c1c;}h3{margin:10pt 0 2pt;font-size:11.5pt;color:#4a148c;}.i{font-size:9pt;color:#555;}';
+    var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bônus por resultado ' + MES[C.m] + '-' + C.a + '</title><style>' + css + '</style></head><body>' + (window.rhLogo ? '<img src="' + window.rhLogo + '" style="height:46px;float:right;">' : '') +
+      '<h1>Bônus por resultado — ' + MES[C.m] + '/' + C.a + '</h1><div class="sub">Tabela Bonificação e dimensionamento de equipe · quem tem falta ou atestado no mês perde o bônus; o valor da equipe é redividido entre os demais.</div>' +
+      R.map(function (r) { G += r.total; return '<h3>' + esc(r.dep.nome) + '</h3><div class="i">Faturamento R$ ' + brl(r.fat) + (r.T ? ' · faixa a partir de R$ ' + brl(r.T.fat) + ' · Gerente R$ ' + brl(r.T.ger) + ' · Subgerente R$ ' + brl(r.T.sub) + ' · Equipe R$ ' + brl(r.T.eq) + ' × teto ' + r.teto + ' = R$ ' + brl(r.pool) + ' ÷ ' + r.nOk + ' com direito = R$ ' + brl(r.cota) : ' · sem faixa') + '</div>' +
+        '<table><tr><th>Colaborador</th><th>Cargo</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Situação</th><th>Bônus</th></tr>' + r.P.map(function (p) { return '<tr' + (p.perde ? ' class="p"' : '') + '><td>' + esc(p.n) + '</td><td>' + esc(p.car) + '</td><td>' + PAP[p.papel] + '</td><td class="n">' + (p.faltas || 0) + '</td><td class="n">' + (p.atest || 0) + '</td><td>' + (p.papel === 'nao' ? 'não participa' : p.perde ? 'perdeu' : 'com direito') + '</td><td class="n">R$ ' + brl(p.valor) + '</td></tr>'; }).join('') +
+        '<tr><th colspan="6">TOTAL DO DEPARTAMENTO</th><th class="n">R$ ' + brl(r.total) + '</th></tr></table>'; }).join('') +
+      '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3></body></html>';
+    _abrirDocSimples(h, 'Bonus_resultado_' + MES[C.m] + '_' + C.a);
+  };
+  // editor dos valores da tabela (gerente, subgerente, equipe por faixa)
+  window.bcTabela = function () {
+    var T = tab();
+    if (!el('modal-bc-tab')) document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-bc-tab"><div class="modal" style="max-width:640px;"><div class="modal-header"><span class="modal-title">⚙️ Valores de bonificação por faixa</span><button class="modal-close" onclick="closeModal(\'modal-bc-tab\')">×</button></div>' +
+      '<div style="font-size:12px;color:var(--gray-600);margin-bottom:8px;">O teto de colaboradores de cada faixa é o da Tabela de dimensionamento (Departamentos e Cargos).</div><div style="max-height:60vh;overflow:auto;"><table id="bct" style="font-size:12.5px;"></table></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="if(confirm(\'Voltar aos valores da planilha original?\')){DB.s(\'' + K_TAB + '\',[]);bcTabela();bcRender();}">↺ Valores originais</button><button class="btn btn-outline" onclick="closeModal(\'modal-bc-tab\')">Cancelar</button><button class="btn btn-primary" onclick="bcTabSalvar()">💾 Salvar</button></div></div></div>');
+    el('bct').innerHTML = '<thead><tr><th>Faturamento a partir de</th><th>Gerente (R$)</th><th>Subgerente (R$)</th><th>Equipe por pessoa (R$)</th><th>Teto</th></tr></thead><tbody>' + T.map(function (x) {
+      var F = window.dimFaixa ? dimFaixa(x.fat) : null, i = function (c, v) { return '<td><input type="text" data-c="' + c + '" value="' + brl(v) + '" style="width:110px;padding:3px 6px;"></td>'; };
+      return '<tr>' + i('fat', x.fat) + i('ger', x.ger) + i('sub', x.sub) + i('eq', x.eq) + '<td>' + (F ? F.teto : '—') + '</td></tr>';
+    }).join('') + '</tbody>';
+    el('modal-bc-tab').classList.add('open');
+  };
+  window.bcTabSalvar = function () {
+    var L = Array.prototype.map.call(document.querySelectorAll('#bct tbody tr'), function (tr) { var o = {}; tr.querySelectorAll('input').forEach(function (i) { o[i.dataset.c] = r2(num(i.value)); }); return o; }).filter(function (x) { return x.fat > 0; });
+    DB.s(K_TAB, L); closeModal('modal-bc-tab'); bcRender(); toast('Tabela salva ✅');
+  };
+  // botão no cartão do Recibo de Bônus
+  function botao() {
+    var c = document.querySelector('#doc-grid [data-docbase="rec_bon"]'); if (!c || c.querySelector('.bc-btn')) return;
+    var b = Array.prototype.find.call(c.querySelectorAll('button'), function (x) { return /Gerar Recibo/.test(x.textContent); });
+    if (b) b.insertAdjacentHTML('afterend', '<button class="btn btn-outline btn-sm bc-btn" onclick="bcAbrir()">🧮 Calcular bônus (faturamento × equipe)</button>');
+  }
+  botao();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); try { botao(); } catch (e) {} return r; }; }
+})();
+</script>
 </body>
 </html>
