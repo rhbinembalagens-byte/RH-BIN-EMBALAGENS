@@ -23187,5 +23187,56 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); try { botao(); } catch (e) {} return r; }; }
 })();
 </script>
+<script>
+/* ════════ FUNCIONÁRIOS › AGÊNCIA: tempo contratado e quem já completou 3 meses ════════ */
+(function () {
+  var so3 = false;
+  function el(id) { return document.getElementById(id); }
+  function hoje() { var d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function dt(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function addMeses(d, n) { var r = new Date(d.getFullYear(), d.getMonth() + n, d.getDate()); if (r.getDate() !== d.getDate()) r = new Date(d.getFullYear(), d.getMonth() + n + 1, 0); return r; }
+  // tempo entre o início e hoje (ou a saída/efetivação)
+  function tempo(c) {
+    var ini = dt(c.ini); if (!ini) return null;
+    var fim = (c.st && c.st !== 'Ativo' && dt(c.fimData)) || hoje(); if (fim < ini) return { m: 0, d: 0, ok: false, falta: Math.round((addMeses(ini, 3) - fim) / 864e5), txt: 'começa em ' + ini.toLocaleDateString('pt-BR') };
+    var m = (fim.getFullYear() - ini.getFullYear()) * 12 + fim.getMonth() - ini.getMonth(); if (addMeses(ini, m) > fim) m--;
+    var d = Math.round((fim - addMeses(ini, m)) / 864e5), tres = addMeses(ini, 3);
+    var a = Math.floor(m / 12), mm = m % 12, partes = [];
+    if (a) partes.push(a + (a === 1 ? ' ano' : ' anos')); if (mm) partes.push(mm + (mm === 1 ? ' mês' : ' meses')); if (d || !partes.length) partes.push(d + (d === 1 ? ' dia' : ' dias'));
+    return { m: m, d: d, ok: fim >= tres, tres: tres, falta: Math.round((tres - fim) / 864e5), txt: partes.length > 1 ? partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1] : partes[0] };
+  }
+  window.agTempo = tempo;
+  window.agSo3 = function (v) { so3 = v; rdColabExt('agencia'); };
+  var _rd = window.rdColabExt;
+  if (typeof _rd === 'function') window.rdColabExt = function (t) {
+    var r = _rd.apply(this, arguments);
+    if (t !== 'agencia') return r;
+    try {
+      var tb = el('cx-tb-agencia'); if (!tb) return r;
+      var thead = tb.parentNode.querySelector('thead tr'), ths = Array.prototype.slice.call(thead.children);
+      var iIni = ths.findIndex(function (th) { return /^In[ií]cio$/i.test(th.textContent.trim()); });
+      if (!thead.querySelector('.ag-tempo-h') && iIni >= 0) ths[iIni].insertAdjacentHTML('afterend', '<th class="ag-tempo-h">Tempo contratado</th>');
+      // filtro "completaram 3 meses"
+      var busca = el('cx-busca-agencia');
+      if (busca && !el('ag-so3')) busca.insertAdjacentHTML('afterend', '<label style="display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap;margin:0 0 0 8px;cursor:pointer;"><input type="checkbox" id="ag-so3" style="width:auto;" onchange="agSo3(this.checked)"> ✅ Só quem completou 3 meses</label>');
+      if (el('ag-so3')) el('ag-so3').checked = so3;
+      var L = DB.g('colab-ext'), n3 = 0, nAtivos3 = 0;
+      Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
+        var b = tr.querySelector('button[onclick^="cxEditar("]'); if (!b) { var td0 = tr.querySelector('td[colspan]'); if (td0) td0.colSpan = (+td0.colSpan || 8) + 1; return; }
+        var id = (b.getAttribute('onclick').match(/cxEditar\('([^']+)'/) || [])[1], c = L.find(function (x) { return x.id === id; }) || {}, T = tempo(c);
+        var cel = '<td class="ag-tempo">' + (T ? '<div style="font-weight:600;">' + T.txt + '</div>' + (T.ok ? '<span class="badge badge-green" title="Completou 3 meses em ' + T.tres.toLocaleDateString('pt-BR') + '">✅ 3 meses completos</span>' : '<span style="font-size:11px;color:var(--gray-400);">' + (T.falta > 0 ? 'faltam ' + T.falta + ' dia(s) p/ 3 meses' : '') + '</span>') : '—') + '</td>';
+        if (iIni >= 0 && tr.children[iIni] && !tr.querySelector('.ag-tempo')) tr.children[iIni].insertAdjacentHTML('afterend', cel);
+        if (T && T.ok && (c.st || 'Ativo') === 'Ativo') nAtivos3++;
+        if (T && T.ok) n3++;
+        tr.style.display = so3 && !(T && T.ok) ? 'none' : '';
+      });
+      // card no topo
+      var st = el('cx-stats-agencia');
+      if (st && !st.querySelector('.ag3-card')) st.insertAdjacentHTML('beforeend', '<div class="stat-card ag3-card" style="border-top:3px solid #2e7d32;cursor:pointer;" title="Mostrar só quem completou 3 meses" onclick="agSo3(true)"><div class="stat-value" style="font-size:24px;font-weight:700;color:#2e7d32;">' + DB.g('colab-ext').filter(function (c) { var T = tempo(c); return c.tipo === 'agencia' && (c.st || 'Ativo') === 'Ativo' && T && T.ok; }).length + '</div><div class="stat-label">Ativos com 3 meses ou mais</div></div>');
+    } catch (e) { console.error(e); }
+    return r;
+  };
+})();
+</script>
 </body>
 </html>
