@@ -22109,16 +22109,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS › GERAR ARQUIVO: lançar direto em Mobilidade, Livre e Alimentação + Refeição ════════ */
 (function () {
-  var CAT = [['mob', 'Mobilidade', '#e65100'], ['livre', 'Livre', '#6a1b9a'], ['bonus', 'Bônus (soma no Livre)', '#bf360c'], ['alim', 'Alimentação + Refeição', '#1565c0']];
+  var CAT = [['mob', 'Mobilidade', '#e65100'], ['livre', 'Livre', '#6a1b9a'], ['bonus', 'Bônus (soma no Livre)', '#bf360c'], ['alim', 'Alimentação + Refeição', '#1565c0'], ['dep', '💵 Depósito (separado)', '#2e7d32']];
   function el(id) { return document.getElementById(id); }
   function n(id) { return parseFloat((el(id) || {}).value) || 0; }
   function brl(v) { return 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   // sugestão pelos benefícios do cadastro (VT/VR por dia × dias) conforme o seletor de colunas
   function sugestao(fid) {
-    var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0 };
+    var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 };
     var v = { vt: n('vt-' + fid) * d, vr: n('vr-' + fid) * d, va: n('va-' + fid), comb: n('comb-' + fid), assim: n('assim-' + fid), bonus: n('bonus-' + fid), odonto: n('odonto-' + fid), med: n('med-' + fid) };
     var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(fid) : null;
-    if (nv) { ['mob', 'livre', 'alim', 'bonus'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
+    if (nv) { ['mob', 'livre', 'alim', 'bonus', 'dep'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
     else {
     Object.keys(v).forEach(function (k) { if (k === 'bonus') return; if (m[k] && t[m[k]] != null) t[m[k]] += v[k]; });
     t.bonus = v.bonus;
@@ -22127,14 +22127,15 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return t;
   }
   // o Bônus vai somado na coluna Livre da planilha
-  function idDe(c, fid) { return (c === 'bonus' ? 'b3bonus' : c) + '-' + fid; }
+  function idDe(c, fid) { return (c === 'bonus' ? 'b3bonus' : c === 'dep' ? 'b3dep' : c) + '-' + fid; }
+  window.b3Dep = function (fid) { return n('b3dep-' + fid); };
   window.benefModeloTot = function (fid) { if (!el('mob-' + fid)) return null; return { mob: n('mob-' + fid), livre: Math.round((n('livre-' + fid) + n('b3bonus-' + fid)) * 100) / 100, alim: n('alim-' + fid), bonus: n('b3bonus-' + fid) }; };
   function total(fid) { var c = el('b3tot-' + fid); if (c) { var t = n('mob-' + fid) + n('livre-' + fid) + n('b3bonus-' + fid) + n('alim-' + fid); c.textContent = t > 0 ? brl(t) : '—'; } totGeral(); }
   function totGeral() {
-    var box = el('b3-totais'); if (!box) return; var T = { mob: 0, livre: 0, alim: 0, bonus: 0 }, q = 0;
+    var box = el('b3-totais'); if (!box) return; var T = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 }, q = 0;
     document.querySelectorAll('#flash-tbody input.b3').forEach(function (i) { T[i.dataset.c] += parseFloat(i.value) || 0; });
     document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { if (Array.prototype.some.call(tr.querySelectorAll('input.b3'), function (i) { return parseFloat(i.value) > 0; })) q++; });
-    box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.map(function (c) { return c[1] + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total: <strong>' + brl(T.mob + T.livre + T.bonus + T.alim) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus = ' + brl(T.livre + T.bonus) + ')</span>';
+    box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.filter(function (c) { return c[0] !== 'dep'; }).map(function (c) { return c[1] + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total cartão: <strong>' + brl(T.mob + T.livre + T.bonus + T.alim) + '</strong> · 💵 Depósito (relatório separado): <strong>' + brl(T.dep) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus = ' + brl(T.livre + T.bonus) + ')</span>';
   }
   window.b3TotGeral = function () { totGeral(); };
   window.b3Sugerir = function (fid) { if (String(fid).indexOf('x:') === 0) return; var s = sugestao(fid); CAT.forEach(function (c) { var i = el(idDe(c[0], fid)); if (i && !i.dataset.man) { i.value = s[c[0]] > 0 ? s[c[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); } }); total(fid); };
@@ -22145,7 +22146,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var tb = el('flash-tbody'), tab = el('flash-table'); if (!tb || !tab) return;
     if (!el('b3-css')) { var st = document.createElement('style'); st.id = 'b3-css'; st.textContent = '#flash-table:not(.b3-det) th:nth-child(n+4):nth-child(-n+14),#flash-table:not(.b3-det) td:nth-child(n+4):nth-child(-n+14){display:none;}#flash-table input.b3{width:96px;border:1.5px solid var(--gray-200);border-radius:5px;padding:5px 6px;font-size:12.5px;font-family:inherit;text-align:right;}#flash-table input.b3.has-val{background:#fbf1e4;border-color:var(--green);}'; document.head.appendChild(st); }
     var hr = tab.querySelector('thead tr');
-    if (hr && !hr.querySelector('.b3h')) hr.insertAdjacentHTML('beforeend', CAT.map(function (c) { return '<th class="b3h" style="color:' + c[2] + ';font-size:11px;min-width:100px;">' + c[1] + '<br><small>R$</small></th>'; }).join('') + '<th class="b3h" style="font-size:11px;">Total</th>');
+    if (hr && !hr.querySelector('.b3h')) hr.insertAdjacentHTML('beforeend', CAT.map(function (c) { return '<th class="b3h" style="color:' + c[2] + ';font-size:11px;min-width:100px;">' + c[1] + '<br><small>R$</small></th>'; }).join('') + '<th class="b3h" style="font-size:11px;">Total cartão</th>');
     // esconde a seleção antiga de benefícios (as colunas detalhadas continuam disponíveis em "Ver detalhamento")
     var chk = el('flash-benef-checks'); if (chk && chk.parentNode && !chk.parentNode.dataset.b3) {
       chk.parentNode.dataset.b3 = '1';
@@ -22178,8 +22179,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         if (el('mob-' + x.fid)) return;
         var c = x.p, dep = (DB.g('departamentos').find(function (d) { return d.id === c.dep; }) || {}).nome || '';
         var dd = (typeof window.escDiasPeriodo === 'function' && de && ate) ? window.escDiasPeriodo(c.escala, de, ate) : ((typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22));
-        var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0 };
-        if (nv) ['mob', 'livre', 'alim', 'bonus'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
+        var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 };
+        if (nv) ['mob', 'livre', 'alim', 'bonus', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
         var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
         tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
         CAT.forEach(function (k) {
@@ -22218,9 +22219,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS › ATRIBUIR AO FUNCIONÁRIO: só Mobilidade, Livre, Bônus e Alimentação / Refeição ════════ */
 (function () {
-  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição' };
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', dep: 'Depósito' };
   var ANTIGOS_CARTAO = ['VT – Vale Transporte', 'VR – Vale Refeição', 'VA – Vale Alimentação', 'Combustível', 'Assiduidade', 'Triênio']; // substituídos pelos novos
-  var COR = { mob: ['#e65100', '🚌'], livre: ['#6a1b9a', '🆓'], alim: ['#1565c0', '🍽️'] };
+  var COR = { mob: ['#e65100', '🚌'], livre: ['#6a1b9a', '🆓'], alim: ['#1565c0', '🍽️'], dep: ['#2e7d32', '💵'] };
   function el(id) { return document.getElementById(id); }
   var S = 'font-size:12px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-family:inherit;';
   function linha(k) {
@@ -22237,7 +22238,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var b = el('batr-row-bonus');
     if (b) {
       b.insertAdjacentHTML('beforebegin', linha('mob') + linha('livre'));
-      b.insertAdjacentHTML('afterend', linha('alim'));
+      b.insertAdjacentHTML('afterend', linha('alim') + linha('dep'));
+      var rd = el('batr-row-dep'); if (rd) { var tdn = rd.querySelector('td strong'); if (tdn) tdn.insertAdjacentHTML('afterend', '<div style="font-size:10.5px;color:var(--gray-500);font-weight:400;">pago por depósito — relatório separado</div>'); var tp = el('batr-dep-tipo'); if (tp) tp.value = 'mes'; }
       var t = b.querySelector('td strong'); if (t) t.textContent = '💰 Bônus';
       var tp = el('batr-bonus-tipo'); if (tp && !tp.querySelector('option[value="dia"]')) { tp.innerHTML = '<option value="mes">Mensal</option><option value="dia">Por dia</option>'; tp.setAttribute('onchange', "batrUpdateCalc('bonus')"); }
       var bv = el('batr-bonus-val'); if (bv) bv.setAttribute('oninput', "batrUpdateCalc('bonus')");
@@ -22274,7 +22276,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       return { id: ant ? ant.id : uid(), fid: fid, tipo: NOVOS[k], tipoBase: NOVOS[k], tipoCalc: (el('batr-' + k + '-tipo') || {}).value || 'mes', valor: (parseFloat((el('batr-' + k + '-val') || {}).value) || 0).toFixed(2),
         ini: ant && ant.ini ? ant.ini : ini, fim: '', st: (el('batr-' + k + '-st') || {}).value || 'Ativo', obs: (el('batr-' + k + '-obs') || {}).value || '' };
     });
-    var temNovo = novos.some(function (n) { return parseFloat(n.valor) > 0; });
+    var temNovo = novos.some(function (n) { return n.tipoBase !== 'Depósito' && parseFloat(n.valor) > 0; });
     var resto = atribs.filter(function (a) { return !(a.fid === fid && nomes.indexOf(a.tipoBase || a.tipo) !== -1); }).map(function (a) {
       if (temNovo && a.fid === fid && ANTIGOS_CARTAO.indexOf(a.tipoBase || a.tipo) !== -1 && a.st !== 'Encerrado') return Object.assign({}, a, { st: 'Encerrado', fim: ini, obs: ((a.obs ? a.obs + ' · ' : '') + 'substituído por Mobilidade/Livre/Bônus/Alimentação') });
       return a;
@@ -22305,7 +22307,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 /* ════════ BENEFÍCIOS › RELATÓRIO GERAL e EXPORTAR: só Mobilidade, Livre, Bônus e Alimentação / Refeição (valores do mês) ════════ */
 (function () {
   var CAT = [['mob', 'Mobilidade', '🚌'], ['livre', 'Livre', '🆓'], ['bonus', 'Bônus', '💰'], ['alim', 'Alimentação / Refeição', '🍽️']];
-  var NOVO = { 'Mobilidade': 'mob', 'Livre': 'livre', 'Bônus': 'bonus', 'Alimentação / Refeição': 'alim' };
+  var NOVO = { 'Mobilidade': 'mob', 'Livre': 'livre', 'Bônus': 'bonus', 'Alimentação / Refeição': 'alim', 'Depósito': 'dep' };
   // benefícios antigos ainda ativos entram na coluna equivalente (VT/Combustível → Mobilidade; VR/VA → Alimentação; Assiduidade → Livre)
   function catDe(tipo) {
     if (NOVO[tipo]) return NOVO[tipo];
@@ -22318,7 +22320,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function porDia(a) { var t = String(a.tipoBase || a.tipo || '').toUpperCase(); return a.tipoCalc ? a.tipoCalc === 'dia' : /^V[TR]/.test(t); }
   function dias(f) { if (typeof window.escDiasMes === 'function') return window.escDiasMes(f.escala); return typeof escBase === 'function' && escBase(f.escala) === '56' ? 26 : 22; }
   function valoresDo(f, atribs) {
-    var v = { mob: 0, livre: 0, bonus: 0, alim: 0 };
+    var v = { mob: 0, livre: 0, bonus: 0, alim: 0, dep: 0 };
     atribs.forEach(function (a) { if (a.fid !== f.id) return; var c = catDe(a.tipoBase || a.tipo); if (!c) return; var x = parseFloat(a.valor) || 0; v[c] += porDia(a) ? x * dias(f) : x; });
     Object.keys(v).forEach(function (k) { v[k] = Math.round(v[k] * 100) / 100; });
     return v;
@@ -22339,14 +22341,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
     var tb = document.getElementById('tb-benef-rel'); if (!tb) return;
     var th = tb.parentNode.querySelector('thead');
-    if (th) th.innerHTML = '<tr><th>Funcionário</th>' + CAT.map(function (c) { return '<th style="text-align:right">' + c[1] + '</th>'; }).join('') + '<th style="text-align:right">Total</th></tr>';
-    var T = { mob: 0, livre: 0, bonus: 0, alim: 0 }, G = 0;
+    if (th) th.innerHTML = '<tr><th>Funcionário</th>' + CAT.map(function (c) { return '<th style="text-align:right">' + c[1] + '</th>'; }).join('') + '<th style="text-align:right">Total cartão</th><th style="text-align:right;color:#2e7d32">💵 Depósito</th></tr>';
+    var T = { mob: 0, livre: 0, bonus: 0, alim: 0, dep: 0 }, G = 0;
     if (!funcs.length) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--gray-400)">Nenhum funcionário ativo.</td></tr>'; document.getElementById('tf-benef-rel').innerHTML = ''; document.getElementById('benef-rel-cards').innerHTML = ''; return; }
     tb.innerHTML = funcs.map(function (f) {
-      var v = valoresDo(f, atribs), t = v.mob + v.livre + v.bonus + v.alim; CAT.forEach(function (c) { T[c[0]] += v[c[0]]; }); G += t;
-      return '<tr><td><strong>' + f.n + '</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (v[c[0]] > 0 ? money(v[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;font-weight:700;color:var(--green-dark)">' + (t > 0 ? money(t) : '—') + '</td></tr>';
+      var v = valoresDo(f, atribs), t = v.mob + v.livre + v.bonus + v.alim; CAT.forEach(function (c) { T[c[0]] += v[c[0]]; }); T.dep += v.dep; G += t;
+      return '<tr><td><strong>' + f.n + '</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (v[c[0]] > 0 ? money(v[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;font-weight:700;color:var(--green-dark)">' + (t > 0 ? money(t) : '—') + '</td><td style="text-align:right;color:#2e7d32;font-weight:600;">' + (v.dep > 0 ? money(v.dep) : '—') + '</td></tr>';
     }).join('');
-    document.getElementById('tf-benef-rel').innerHTML = '<tr><td><strong>TOTAL</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (T[c[0]] > 0 ? money(T[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;color:var(--green-dark)">' + money(G) + '</td></tr>';
+    document.getElementById('tf-benef-rel').innerHTML = '<tr><td><strong>TOTAL</strong></td>' + CAT.map(function (c) { return '<td style="text-align:right">' + (T[c[0]] > 0 ? money(T[c[0]]) : '—') + '</td>'; }).join('') + '<td style="text-align:right;color:var(--green-dark)">' + money(G) + '</td><td style="text-align:right;color:#2e7d32">' + money(T.dep) + '</td></tr>';
     var cf = (document.getElementById('benef-rel-mes') || { value: '' }).value || '', C = { mob: 0, livre: 0, bonus: 0, alim: 0 };
     DB.g('benef-compras').filter(function (c) { return !cf || c.comp === cf; }).forEach(function (c) { var k = catDe(c.tipoBase || c.tipo); if (k) C[k] += parseFloat(c.vtotal) || 0; });
     document.getElementById('benef-rel-cards').innerHTML = CAT.map(function (c) {
@@ -22354,24 +22356,24 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin:4px 0">' + c[1] + '</div>' +
         '<div style="font-size:11px;color:var(--gray-600)">Atribuído: <strong>' + money(T[c[0]]) + '</strong>/mês</div>' +
         '<div style="font-size:11px;color:var(--gray-600)">Comprado: <strong>' + money(C[c[0]]) + '</strong></div></div>';
-    }).join('');
+    }).join('') + '<div style="background:#fff;border-radius:var(--radius-sm);padding:16px;box-shadow:var(--shadow);border-top:3px solid #2e7d32"><div style="font-size:22px">💵</div><div style="font-weight:700;font-size:13px;color:#2e7d32;margin:4px 0">Depósito (separado do cartão)</div><div style="font-size:11px;color:var(--gray-600)">Atribuído: <strong>' + money(T.dep) + '</strong>/mês</div></div>';
   };
   window.exportBenefCSV = function () {
     var fe = (document.getElementById('benef-rel-emp') || {}).value || (document.getElementById('benef-emp-filter') || {}).value || '';
     var emps = DB.g('empresas'), deps = DB.g('departamentos'), atribs = DB.g('benef-atrib').filter(function (a) { return a.st === 'Ativo'; });
     var funcs = relPessoas(fe);
-    var linhas = funcs.map(function (f) { return { f: f, v: valoresDo(f, atribs) }; }).filter(function (x) { return x.v.mob + x.v.livre + x.v.bonus + x.v.alim > 0; });
+    var linhas = funcs.map(function (f) { return { f: f, v: valoresDo(f, atribs) }; }).filter(function (x) { return x.v.mob + x.v.livre + x.v.bonus + x.v.alim + x.v.dep > 0; });
     if (!linhas.length) { alert('Nenhum benefício ativo para exportar.'); return; }
-    var aoa = [['FUNCIONÁRIO', 'CPF', 'CARGO', 'DEPARTAMENTO', 'EMPRESA', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'BÔNUS (R$)', 'ALIMENTAÇÃO / REFEIÇÃO (R$)', 'TOTAL (R$)']];
+    var aoa = [['FUNCIONÁRIO', 'CPF', 'CARGO', 'DEPARTAMENTO', 'EMPRESA', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'BÔNUS (R$)', 'ALIMENTAÇÃO / REFEIÇÃO (R$)', 'TOTAL CARTÃO (R$)', 'DEPÓSITO (R$)']];
     linhas.forEach(function (x) {
       var f = x.f, d = deps.find(function (q) { return q.id === f.dep; }), e = emps.find(function (q) { return q.id === f.emp; }), v = x.v;
-      aoa.push([f.n || '', f.cpf || '', f.car || '', d ? d.nome : '', e ? e.razao : '', v.mob, v.livre, v.bonus, v.alim, Math.round((v.mob + v.livre + v.bonus + v.alim) * 100) / 100]);
+      aoa.push([f.n || '', f.cpf || '', f.car || '', d ? d.nome : '', e ? e.razao : '', v.mob, v.livre, v.bonus, v.alim, Math.round((v.mob + v.livre + v.bonus + v.alim) * 100) / 100, v.dep]);
     });
-    var tot = ['TOTAL', '', '', '', '']; for (var c = 5; c <= 9; c++) tot.push(Math.round(aoa.slice(1).reduce(function (s, r) { return s + r[c]; }, 0) * 100) / 100); aoa.push(tot);
+    var tot = ['TOTAL', '', '', '', '']; for (var c = 5; c <= 10; c++) tot.push(Math.round(aoa.slice(1).reduce(function (s, r) { return s + r[c]; }, 0) * 100) / 100); aoa.push(tot);
     var nomeEmp = fe ? ((emps.find(function (e) { return e.id === fe; }) || {}).razao || 'Geral') : 'Geral';
     if (typeof XLSX !== 'undefined') {
       var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 35 }, { wch: 16 }, { wch: 25 }, { wch: 22 }, { wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 14 }];
-      for (var r = 1; r < aoa.length; r++) for (var cc = 5; cc <= 9; cc++) { var ad = XLSX.utils.encode_cell({ r: r, c: cc }); if (ws[ad]) ws[ad].z = '#,##0.00'; }
+      for (var r = 1; r < aoa.length; r++) for (var cc = 5; cc <= 10; cc++) { var ad = XLSX.utils.encode_cell({ r: r, c: cc }); if (ws[ad]) ws[ad].z = '#,##0.00'; }
       var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Benefícios');
       XLSX.writeFile(wb, 'Beneficios_' + nomeEmp + '_' + td() + '.xlsx');
     } else {
@@ -22442,7 +22444,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS: atribuir a vários/todos de uma vez + Agência e Sem registro ════════ */
 (function () {
-  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição' };
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', dep: 'Depósito' };
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
@@ -23310,6 +23312,65 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     DB.g = function (k) { var l = g.apply(DB, arguments); if (k !== 'colab-ext') return l; return l.filter(function (c) { var at = (c.st || 'Ativo') === 'Ativo'; return sit === 'ativos' ? at : !at; }); };
     try { return _cx.call(this, t); } finally { DB.g = g; }
   };
+})();
+</script>
+<script>
+/* ════════ BENEFÍCIOS › GERAR ARQUIVO: RELATÓRIO DE DEPÓSITO (separado da compra no cartão) ════════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fdx(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : (s || ''); }
+  // linhas com valor de Depósito na tabela, agrupadas por empresa
+  function dados() {
+    var emps = {}, deps = {}; DB.g('empresas').forEach(function (e) { emps[e.id] = e; }); DB.g('departamentos').forEach(function (d) { deps[d.id] = d; });
+    var G = {};
+    document.querySelectorAll('#flash-tbody input.b3[data-c="dep"]').forEach(function (i) {
+      var v = Math.round((parseFloat(i.value) || 0) * 100) / 100; if (!(v > 0)) return;
+      var x = window.benefPessoaDe ? benefPessoaDe(i.dataset.f) : null; if (!x) return;
+      var p = x.p, ek = p.emp || '_', E = G[ek] = G[ek] || { e: emps[p.emp] || { razao: 'SEM EMPRESA NO CADASTRO', cnpj: '' }, L: [], t: 0 };
+      E.L.push({ n: p.n, cpf: p.cpf || '', g: x.g, dep: deps[p.dep] ? deps[p.dep].nome : '', car: p.car || '', conta: p.conta || p.pix || '', v: v }); E.t += v;
+    });
+    return Object.keys(G).map(function (k) { G[k].L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); }); return G[k]; }).sort(function (a, b) { return (a.e.razao || '').localeCompare(b.e.razao || ''); });
+  }
+  function periodo() { return fdx((el('flash-de') || {}).value) + ' a ' + fdx((el('flash-ate') || {}).value); }
+  window.depRelatorio = function () {
+    var D = dados(); if (!D.length) { alert('Nenhum valor de Depósito na tabela. Preencha a coluna 💵 Depósito (ou cadastre Depósito em Atribuir benefícios).'); return; }
+    var G = D.reduce(function (s, x) { return s + x.t; }, 0), n = D.reduce(function (s, x) { return s + x.L.length; }, 0);
+    var css = '@page{size:A4;margin:1.2cm;}body{font-family:Calibri,Arial,sans-serif;color:#3A2E1A;font-size:10pt;}h1{font-size:15pt;margin:0 0 2pt;}.sub{color:#8a6420;font-size:9pt;margin-bottom:10pt;}h3{font-size:11.5pt;margin:12pt 0 3pt;color:#2e7d32;}table{width:100%;border-collapse:collapse;}td,th{border:.5pt solid #C9A961;padding:3pt 6pt;}th{background:#F7EFD9;color:#8a6420;text-align:left;font-size:8.5pt;}td.n,th.n{text-align:right;}tr.t td{font-weight:700;background:#F7EFD9;}.ass{margin-top:30pt;display:flex;gap:40pt;}.ass div{flex:1;border-top:.75pt solid #3A2E1A;text-align:center;font-size:9pt;padding-top:2pt;}';
+    var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório de Depósito ' + esc(periodo()) + '</title><style>' + css + '</style></head><body>' + (window.rhLogo ? '<img src="' + window.rhLogo + '" style="height:46px;float:right;">' : '') +
+      '<h1>💵 Relatório de Depósito — Benefícios</h1><div class="sub">Período ' + esc(periodo()) + ' · ' + n + ' colaborador(es) · total R$ ' + brl(G) + ' · valores pagos por depósito (fora da compra no cartão)</div>' +
+      D.map(function (x) { return '<h3>' + esc(x.e.razao) + (x.e.cnpj ? ' · CNPJ ' + esc(x.e.cnpj) : '') + '</h3><table><tr><th>Colaborador</th><th>CPF</th><th>Vínculo</th><th>Departamento</th><th>Conta / PIX</th><th class="n">Valor</th></tr>' +
+        x.L.map(function (l) { return '<tr><td>' + esc(l.n) + '</td><td>' + esc(l.cpf) + '</td><td>' + l.g + '</td><td>' + esc(l.dep) + '</td><td>' + esc(l.conta) + '</td><td class="n">R$ ' + brl(l.v) + '</td></tr>'; }).join('') +
+        '<tr class="t"><td colspan="5">TOTAL DA EMPRESA (' + x.L.length + ')</td><td class="n">R$ ' + brl(x.t) + '</td></tr></table>'; }).join('') +
+      (D.length > 1 ? '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' : '') + '<div class="ass"><div>Responsável RH</div><div>Financeiro</div></div></body></html>';
+    _abrirDocSimples(h, 'Relatorio_Deposito_' + periodo().replace(/\//g, '-').replace(/\s+/g, '_'));
+  };
+  window.depExcel = function () {
+    var D = dados(); if (!D.length) { alert('Nenhum valor de Depósito na tabela.'); return; }
+    var aoa = [['EMPRESA', 'CNPJ', 'COLABORADOR', 'CPF', 'VÍNCULO', 'DEPARTAMENTO', 'CARGO', 'CONTA / PIX', 'VALOR (R$)']], G = 0;
+    D.forEach(function (x) { x.L.forEach(function (l) { aoa.push([x.e.razao, x.e.cnpj, l.n, l.cpf, l.g, l.dep, l.car, l.conta, l.v]); }); aoa.push(['TOTAL ' + x.e.razao, '', '', '', '', '', '', '', Math.round(x.t * 100) / 100]); G += x.t; });
+    aoa.push(['TOTAL GERAL', '', '', '', '', '', '', '', Math.round(G * 100) / 100]);
+    var nome = 'Deposito_Beneficios_' + periodo().replace(/\//g, '-').replace(/\s+/g, '_');
+    if (typeof XLSX !== 'undefined') {
+      var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 34 }, { wch: 20 }, { wch: 34 }, { wch: 15 }, { wch: 13 }, { wch: 18 }, { wch: 20 }, { wch: 26 }, { wch: 13 }];
+      for (var r = 1; r < aoa.length; r++) { var ad = XLSX.utils.encode_cell({ r: r, c: 8 }); if (ws[ad]) ws[ad].z = '#,##0.00'; }
+      var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Depósito'); XLSX.writeFile(wb, nome + '.xlsx');
+    } else {
+      var csv = '﻿' + aoa.map(function (r) { return r.map(function (v) { return typeof v === 'number' ? String(v).replace('.', ',') : '"' + String(v).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = nome + '.csv'; a.click();
+    }
+    toast('💵 Planilha de depósito gerada');
+  };
+  function botoes() {
+    var hd = document.querySelector('#bt-flash .card-header'); if (!hd || el('btn-dep-rel')) return;
+    var b = hd.querySelector('button');
+    var w = document.createElement('div'); w.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
+    w.innerHTML = '<button class="btn btn-outline btn-sm" id="btn-dep-rel" style="color:#2e7d32;border-color:#81c784;" onclick="depRelatorio()" title="Relatório dos valores pagos por depósito (separado da compra)">💵 Relatório de Depósito</button><button class="btn btn-outline btn-sm" style="color:#2e7d32;border-color:#81c784;" onclick="depExcel()">💵 Depósito (Excel)</button>';
+    if (b) { b.parentNode.insertBefore(w, b); w.appendChild(b); } else hd.appendChild(w);
+  }
+  botoes();
+  var _rf = window.rdFlash; if (typeof _rf === 'function') window.rdFlash = function () { var r = _rf.apply(this, arguments); try { botoes(); } catch (e) {} return r; };
 })();
 </script>
 </body>
