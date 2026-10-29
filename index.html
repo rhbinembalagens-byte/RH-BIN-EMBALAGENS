@@ -23216,15 +23216,23 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var thead = tb.parentNode.querySelector('thead tr'), ths = Array.prototype.slice.call(thead.children);
       var iIni = ths.findIndex(function (th) { return /^In[ií]cio$/i.test(th.textContent.trim()); });
       if (!thead.querySelector('.ag-tempo-h') && iIni >= 0) ths[iIni].insertAdjacentHTML('afterend', '<th class="ag-tempo-h">Tempo contratado</th>');
+      // cargo e salário antes da coluna Agência
+      var iAg = ths.findIndex(function (th) { return /^Ag[eê]ncia$/i.test(th.textContent.trim()); });
+      if (!thead.querySelector('.ag-car-h') && iAg >= 0) ths[iAg].insertAdjacentHTML('beforebegin', '<th class="ag-car-h">Cargo</th><th class="ag-sal-h" style="text-align:right;">Salário</th>');
+      if (iIni >= 0 && iAg >= 0 && iAg < iIni) iIni += 2;
       // filtro "completaram 3 meses"
       var busca = el('cx-busca-agencia');
       if (busca && !el('ag-so3')) busca.insertAdjacentHTML('afterend', '<label style="display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap;margin:0 0 0 8px;cursor:pointer;"><input type="checkbox" id="ag-so3" style="width:auto;" onchange="agSo3(this.checked)"> ✅ Só quem completou 3 meses</label>');
       if (el('ag-so3')) el('ag-so3').checked = so3;
       var L = DB.g('colab-ext'), n3 = 0, nAtivos3 = 0;
       Array.prototype.forEach.call(tb.querySelectorAll('tr'), function (tr) {
-        var b = tr.querySelector('button[onclick^="cxEditar("]'); if (!b) { var td0 = tr.querySelector('td[colspan]'); if (td0) td0.colSpan = (+td0.colSpan || 8) + 1; return; }
+        var b = tr.querySelector('button[onclick^="cxEditar("]'); if (!b) { var td0 = tr.querySelector('td[colspan]'); if (td0) td0.colSpan = (+td0.colSpan || 8) + 3; return; }
         var id = (b.getAttribute('onclick').match(/cxEditar\('([^']+)'/) || [])[1], c = L.find(function (x) { return x.id === id; }) || {}, T = tempo(c);
         var cel = '<td class="ag-tempo">' + (T ? '<div style="font-weight:600;">' + T.txt + '</div>' + (T.ok ? '<span class="badge badge-green" title="Completou 3 meses em ' + T.tres.toLocaleDateString('pt-BR') + '">✅ 3 meses completos</span>' : '<span style="font-size:11px;color:var(--gray-400);">' + (T.falta > 0 ? 'faltam ' + T.falta + ' dia(s) p/ 3 meses' : '') + '</span>') : '—') + '</td>';
+        if (iAg >= 0 && tr.children[iAg] && !tr.querySelector('.ag-car')) {
+          var sv = String(c.valor || '').trim(), sn = parseFloat(sv.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'));
+          tr.children[iAg].insertAdjacentHTML('beforebegin', '<td class="ag-car">' + (c.car ? String(c.car).replace(/</g, '&lt;') : '—') + '</td><td class="ag-sal" style="text-align:right;white-space:nowrap;">' + (sv ? (isNaN(sn) ? sv.replace(/</g, '&lt;') : sn.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })) : '—') + '</td>');
+        }
         if (iIni >= 0 && tr.children[iIni] && !tr.querySelector('.ag-tempo')) tr.children[iIni].insertAdjacentHTML('afterend', cel);
         if (T && T.ok && (c.st || 'Ativo') === 'Ativo') nAtivos3++;
         if (T && T.ok) n3++;
