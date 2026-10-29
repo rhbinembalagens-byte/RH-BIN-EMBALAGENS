@@ -22066,7 +22066,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var val = { vt: (it.vt || 0) * (it.dias || 0), vr: (it.vr || 0) * (it.dias || 0), va: it.va, comb: it.comb, assim: it.assim, bonus: it.bonus, odonto: it.odonto, med: it.med };
       if (it.tot) tot = { mob: +it.tot.mob || 0, livre: +it.tot.livre || 0, alim: +it.tot.alim || 0 };
       else Object.keys(val).forEach(function (k) { var c = m[k]; if (c && tot[c] != null) tot[c] += +val[k] || 0; });
-      var cel = [dig(emp && emp.cnpj), nomeCartao(f.n), dig(f.cpf), dataBR(f.nas), f.email || '', dig(f.tel), it.dep || '', '', '', f.codEpr || '', it.dep || ''];
+      var cel = [dig(emp && emp.cnpj), nomeCartao(f.n), dig(f.cpf), dataBR(f.nas), f.email || '', dig(f.tel), it.dep || '', '', '', '', ''];
       var rn = i + 2;
       return '<row r="' + rn + '" ht="20.0" customHeight="true">' + cel.map(function (v, c) { return v === '' ? '' : '<c r="' + colL(c) + rn + '" t="inlineStr" s="15"><is><t>' + x(v) + '</t></is></c>'; }).join('') +
         ['mob', 'livre', 'alim'].map(function (k, j) { var v = r2(tot[k]); return v > 0 ? '<c r="' + colL(11 + j) + rn + '" s="15"><v>' + v + '</v></c>' : ''; }).join('') + '</row>';
