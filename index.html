@@ -22581,7 +22581,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     DB.s('benef-atrib', DB.g('benef-atrib').filter(function (a) { return a.fid !== fid; })); try { rdBenefFunc(); } catch (e) {} toast('Benefícios excluídos.');
   };
   // Gerar Arquivo de Benefício: linhas de Agência / Sem registro da empresa
-  window.benefExtLinhas = function (empId) { return pessoas(empId).filter(function (x) { return x.g !== 'CLT'; }); };
+  // Gerar Compra: só CLT e Sem registro — colaboradores de Agência não entram na compra de benefícios
+  window.benefExtLinhas = function (empId) { return pessoas(empId).filter(function (x) { return x.g === 'Sem registro'; }); };
 })();
 </script>
 <script>
@@ -22640,6 +22641,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     // funcionário: lista com todos (CLT + Agência/Sem registro)
     if (ff) {
       var P = typeof window.benefPessoas === 'function' ? window.benefPessoas('') : [];
+      P = P.filter(function (x) { return x.g !== 'Agência'; });
       ff.innerHTML = '<option value="">Todos os funcionários</option>' + P.map(function (x) { return '<option value="' + esc(x.fid) + '">' + esc(x.n) + (x.g !== 'CLT' ? ' (' + x.g + ')' : '') + '</option>'; }).join('');
       ff.value = fval;
     }
@@ -22844,7 +22846,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   manter('benef-emp-filter', 'rdBenefFunc', function () { rdBenefFunc(); });
   manter('benef-rel-emp', 'rdBenefRel', function () { rdBenefRel(); });
   var _bm = window.batrModo; if (_bm) window.batrModo = function (m) { var r = _bm.apply(this, arguments); if (m) addExtOpts(el('batr-me')); return r; };
-  var _rdf = window.rdFlash; if (_rdf) window.rdFlash = function () { var s = el('flash-empresa'), cur = s ? s.value : ''; if (s) addExtOpts(s); if (s && (cur === '__ag' || cur === '__sr')) s.value = cur; var r = _rdf.apply(this, arguments); s = el('flash-empresa'); addExtOpts(s); if ((cur === '__ag' || cur === '__sr') && s.value !== cur) { s.value = cur; renderFlashTable(); } return r; };
+  function semAg(s) { var o = s && s.querySelector('option[value="__ag"]'); if (o) o.remove(); }
+  var _rdf = window.rdFlash; if (_rdf) window.rdFlash = function () { var s = el('flash-empresa'), cur = s ? s.value : ''; if (cur === '__ag') cur = ''; if (s) { addExtOpts(s); semAg(s); } if (s && (cur === '__ag' || cur === '__sr')) s.value = cur; var r = _rdf.apply(this, arguments); s = el('flash-empresa'); addExtOpts(s); semAg(s); if (cur === '__sr' && s.value !== cur) { s.value = cur; renderFlashTable(); } return r; };
   // Recibos em grupo (adiantamento, pagamento, 13º, bônus)
   var _ra = window.recAbrir; if (_ra) window.recAbrir = function () { var r = _ra.apply(this, arguments); addExtOpts(el('rc-gemp')); return r; };
   var _rgl = window.recGrupoLista; if (_rgl) window.recGrupoLista = function () {
