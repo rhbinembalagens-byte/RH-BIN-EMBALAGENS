@@ -22206,9 +22206,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     try {
       var H = DB.g('flash-hist');
       document.querySelectorAll('#hist-flash-lista button[data-hid][onclick^="reexportFlash"]').forEach(function (b) {
-        var hh = H.find(function (q) { return q.id === b.dataset.hid; }); if (!hh || !(hh.linhas || []).some(function (l) { return l.mob != null; })) return;
-        var T = { mob: 0, livre: 0, alim: 0, bonus: 0 }; hh.linhas.forEach(function (l) { T.mob += +l.mob || 0; T.livre += +l.livre || 0; T.alim += +l.alim || 0; T.bonus += +l.bonusLivre || 0; });
-        var card = b.closest('div[style*="border-radius:12px"]'), res = card && card.children[1];
+        var hh = H.find(function (q) { return q.id === b.dataset.hid; }); if (!hh) return;
+        var T = { mob: 0, livre: 0, alim: 0, bonus: 0 }; hh.linhas.forEach(function (l) { var x = window.histLinhaTot ? histLinhaTot(l) : l; T.mob += +x.mob || 0; T.livre += +x.livre || 0; T.alim += +x.alim || 0; T.bonus += +l.bonusLivre || 0; });
+        var card = b.closest('#hist-flash-lista > div'), res = card && card.children[1];
         if (res) res.innerHTML = [['mob', 'Mobilidade'], ['livre', 'Livre' + (T.bonus ? ' (com bônus ' + brl(T.bonus) + ')' : '')], ['alim', 'Alimentação + Refeição']].map(function (c) { return T[c[0]] ? '<span>' + c[1] + ': <strong>' + brl(T[c[0]]) + '</strong></span>' : ''; }).join('') + '<span style="margin-left:auto;font-weight:700;color:var(--green-dark);">Total: ' + brl(T.mob + T.livre + T.alim) + '</span>';
       });
     } catch (e) {}
@@ -23450,6 +23450,45 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-trf" onclick="trfAbrir()" style="margin-left:auto;margin-right:8px;">🔁 Transferir funcionários</button>');
   }
   if (document.readyState !== 'loading') botao(); else document.addEventListener('DOMContentLoaded', botao);
+})();
+</script>
+<script>
+/* ════════ HISTÓRICO DE PEDIDOS: valores iguais aos do arquivo de compra (Mobilidade, Livre c/ bônus, Alimentação + Refeição) ════════ */
+(function () {
+  // pedidos novos já guardam os totais do arquivo; pedidos antigos são convertidos pelo seletor de colunas
+  window.histLinhaTot = function (l) {
+    if (l.mob != null || l.livre != null || l.alim != null) return { mob: +l.mob || 0, livre: +l.livre || 0, alim: +l.alim || 0 };
+    var m = window.benefModeloMap ? benefModeloMap() : {}, t = { mob: 0, livre: 0, alim: 0 }, d = +l.dias || 0;
+    var v = { vt: (+l.vt || 0) * d, vr: (+l.vr || 0) * d, va: +l.va || 0, comb: +l.comb || 0, assim: +l.assim || 0, bonus: +l.bonus || 0, odonto: +l.odonto || 0, med: +l.med || 0 };
+    Object.keys(v).forEach(function (k) { var c = m[k]; if (c && t[c] != null) t[c] += v[k]; });
+    return t;
+  };
+  function r2(v) { return Math.round(v * 100) / 100; }
+  window.exportHistFlash = function () {
+    var fe = (document.getElementById('hist-flash-emp') || {}).value || '', fa = (document.getElementById('hist-flash-ano') || {}).value || '';
+    var H = DB.g('flash-hist').filter(function (h) { return (!fe || h.empId === fe) && (!fa || (h.de || '').indexOf(fa) === 0); }).sort(function (a, b) { return (a.de || '').localeCompare(b.de || '') || (a.empNome || '').localeCompare(b.empNome || ''); });
+    if (!H.length) { alert('Nenhum registro no histórico para exportar.'); return; }
+    var res = [['EMPRESA', 'PERÍODO', 'COLABORADORES', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'ALIMENTAÇÃO + REFEIÇÃO (R$)', 'TOTAL (R$)']], abas = [];
+    H.forEach(function (h, i) {
+      var T = { mob: 0, livre: 0, alim: 0 }, rows = [['COLABORADOR', 'CPF', 'DEPARTAMENTO', 'MOBILIDADE (R$)', 'LIVRE (R$)', 'ALIMENTAÇÃO + REFEIÇÃO (R$)', 'TOTAL (R$)']];
+      (h.linhas || []).forEach(function (l) { var x = histLinhaTot(l), t = r2(x.mob + x.livre + x.alim); T.mob += x.mob; T.livre += x.livre; T.alim += x.alim; rows.push([l.nome, l.cpf, l.dep, r2(x.mob), r2(x.livre), r2(x.alim), t]); });
+      rows.push(['TOTAL', '', '', r2(T.mob), r2(T.livre), r2(T.alim), r2(T.mob + T.livre + T.alim)]);
+      res.push([h.empNome, h.periodo, (h.linhas || []).length, r2(T.mob), r2(T.livre), r2(T.alim), r2(T.mob + T.livre + T.alim)]);
+      var nm = ((i + 1) + ' ' + String(h.empNome || '').split(' ')[0] + ' ' + String(h.de || '').slice(5, 7) + '-' + String(h.de || '').slice(0, 4)).replace(/[\/\\?*\[\]:]/g, '-').substring(0, 31);
+      abas.push([nm, rows]);
+    });
+    var tot = ['TOTAL GERAL', '', res.slice(1).reduce(function (s, r) { return s + r[2]; }, 0)]; for (var c = 3; c <= 6; c++) tot.push(r2(res.slice(1).reduce(function (s, r) { return s + r[c]; }, 0))); res.push(tot);
+    var nome = 'Historico_Pedidos_Beneficios_' + (typeof td === 'function' ? td() : '');
+    if (typeof XLSX === 'undefined') {
+      var csv = '﻿' + res.map(function (r) { return r.map(function (v) { return typeof v === 'number' ? String(v).replace('.', ',') : '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = nome + '.csv'; a.click(); return;
+    }
+    var fmt = function (ws, c0) { var R = XLSX.utils.decode_range(ws['!ref']); for (var r = 1; r <= R.e.r; r++) for (var c = c0; c <= R.e.c; c++) { var ad = XLSX.utils.encode_cell({ r: r, c: c }); if (ws[ad] && typeof ws[ad].v === 'number') ws[ad].z = '#,##0.00'; } };
+    var wb = XLSX.utils.book_new(), w0 = XLSX.utils.aoa_to_sheet(res); w0['!cols'] = [{ wch: 34 }, { wch: 26 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 14 }]; fmt(w0, 3);
+    XLSX.utils.book_append_sheet(wb, w0, 'Resumo por Período');
+    abas.forEach(function (a) { var ws = XLSX.utils.aoa_to_sheet(a[1]); ws['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 14 }]; fmt(ws, 3); XLSX.utils.book_append_sheet(wb, ws, a[0]); });
+    XLSX.writeFile(wb, nome + '.xlsx');
+  };
 })();
 </script>
 </body>
