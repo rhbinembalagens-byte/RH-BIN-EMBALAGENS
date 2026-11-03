@@ -20041,6 +20041,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var id = (b.getAttribute('onclick').match(/'dep','([^']+)'/) || [])[1]; if (!id) return;
       var fat = fatDe(id, c.m, c.a), f = window.dimFaixa(fat), n = contar(id);
       var tip = 'CLT: ' + n.clt + ' · Agência: ' + n.ag + ' · Sem registro: ' + n.sr + (n.ja ? ' · ' + n.ja + ' J.A contado(s) como meia pessoa (' + n.pessoas + ' pessoas = ' + fmtQ(n.tot) + ')' : '');
+      // coluna Vínculos: mesmas pessoas da conta (CLT + Agência + Sem registro); o 💼 é a quantidade de cargos do departamento
+      try { var ncar = DB.g('cargos').filter(function (cg) { return cg.dep === id; }).length;
+        tds[4].innerHTML = '<span class="est-pill" title="' + tip + '">👥 ' + n.pessoas + '</span> <span class="est-pill" title="Cargos cadastrados neste departamento (não são pessoas)">💼 ' + ncar + ' cargo' + (ncar === 1 ? '' : 's') + '</span>' +
+          '<div class="est-sub" style="white-space:nowrap;">' + n.pessoas + ' pessoa' + (n.pessoas === 1 ? '' : 's') + ': CLT ' + n.clt + ' · Ag. ' + n.ag + ' · S/reg. ' + n.sr + '</div>'; } catch (e) {}
       tds[4].insertAdjacentHTML('beforebegin',
         '<td class="dim-td"><input type="text" value="' + (fat ? fat.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') + '" placeholder="R$ 0,00" title="Faturamento realizado em ' + MES[c.m] + '/' + c.a + '" ' +
         'onchange="dimSetFat(\'' + id + '\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()" style="width:120px;text-align:right;padding:5px 7px;border:1.5px solid var(--gray-200);border-radius:6px;"></td>' +
