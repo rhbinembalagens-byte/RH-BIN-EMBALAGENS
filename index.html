@@ -23637,10 +23637,18 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var dias = Math.round((new Date(f + 'T12:00:00') - new Date(i + 'T12:00:00')) / 86400000) + 1;
       fer.push({ p: p, ini: i, fim: f, dias: dias, st: r.st || '', per: r.per || ((r.ai ? br(r.ai) : '') + (r.af ? ' a ' + br(r.af) : '')) });
     });
+    // valor pago: recibos de férias enviados (📎 Recibos de férias, no menu Férias)
+    var usados = {};
+    if (typeof window.ferRecibosDe === 'function') {
+      fer.forEach(function (x) { x.pago = 0; ferRecibosDe(x.p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri || ri > x.fim || rf < x.ini) return; usados[rc.id] = 1; x.pago += +rc.valor || 0; }); x.pago = Math.round(x.pago * 100) / 100; });
+      L.forEach(function (p) { ferRecibosDe(p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri || ri > P.ate || rf < P.de) return; usados[rc.id] = 1; fer.push({ p: p, ini: ri, fim: rf, dias: Math.round((new Date(rf + 'T12:00:00') - new Date(ri + 'T12:00:00')) / 86400000) + 1, st: 'Recibo enviado', per: '', pago: +rc.valor || 0 }); }); });
+    }
     fer.sort(function (x, y) { return x.ini.localeCompare(y.ini) || x.p.n.localeCompare(y.p.n); });
+    desl.forEach(function (p) { p.resc = typeof window.rescisoesDe === 'function' ? Math.round(rescisoesDe(p.id).reduce(function (s, r) { return s + (+r.valor || 0); }, 0) * 100) / 100 : 0; });
+    var ferPago = Math.round(fer.reduce(function (s, x) { return s + (x.pago || 0); }, 0) * 100) / 100, rescPago = Math.round(desl.reduce(function (s, x) { return s + (x.resc || 0); }, 0) * 100) / 100;
     var folha = Math.round(ativos.reduce(function (s, p) { return s + p.sal; }, 0) * 100) / 100;
     var porLoja = {}; ativos.forEach(function (p) { var k = p.loja || '(sem loja)'; porLoja[k] = porLoja[k] || { n: 0, sal: 0 }; porLoja[k].n++; porLoja[k].sal += p.sal; });
-    return { m: m, a: a, P: P, ativos: ativos, adm: adm, fer: fer, desl: desl, folha: folha, porLoja: porLoja, empId: empId, incExt: incExt };
+    return { m: m, a: a, P: P, ativos: ativos, adm: adm, fer: fer, desl: desl, folha: folha, ferPago: ferPago, rescPago: rescPago, porLoja: porLoja, empId: empId, incExt: incExt };
   }
 
   // ── janela ──
@@ -23670,7 +23678,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.rdrPrevia = function () {
     var D = sel(), c = function (ic, t, v, s) { return '<div style="flex:1;min-width:130px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-size:12px;color:var(--gray-600);">' + ic + ' ' + t + '</div><div style="font-size:20px;font-weight:700;">' + v + '</div>' + (s ? '<div style="font-size:11.5px;color:var(--gray-600);">' + s + '</div>' : '') + '</div>'; };
     el('rdr-previa').innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-      c('👥', 'Funcionários', D.ativos.length, 'Salários R$ ' + brl(D.folha)) + c('🟢', 'Admitidos', D.adm.length, '') + c('🏖️', 'Férias no mês', D.fer.length, '') + c('🔴', 'Desligados', D.desl.length, '') + '</div>' +
+      c('👥', 'Funcionários', D.ativos.length, 'Salários R$ ' + brl(D.folha)) + c('🟢', 'Admitidos', D.adm.length, '') + c('🏖️', 'Férias no mês', D.fer.length, D.ferPago ? 'Pago R$ ' + brl(D.ferPago) : '') + c('🔴', 'Desligados', D.desl.length, D.rescPago ? 'Rescisões R$ ' + brl(D.rescPago) : '') + '</div>' +
       '<div style="font-size:12px;color:var(--gray-600);margin-top:6px;">' + MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a + ' · funcionários ativos no fim do mês.</div>';
   };
   function titulo(D) { var e = D.empId ? emp(D.empId) : null; return { mes: MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a, emp: e ? e.razao + (e.cnpj ? ' · CNPJ ' + e.cnpj : '') : 'Todas as empresas', arq: 'Relatorio_Diretoria_' + String(D.m + 1).padStart(2, '0') + '-' + D.a + (e ? '_' + String(e.razao || '').replace(/[^\wÀ-ÿ]+/g, '_') : '') }; }
@@ -23685,13 +23693,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var h = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(T.arq) + '</title><style>' +
       '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#222;font-size:11px;margin:0}' +
       '.top{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid ' + COR + ';padding-bottom:8px;margin-bottom:10px}.top h1{font-size:17px;margin:0;color:' + COR + '}.top p{margin:2px 0 0;color:#555}' +
-      '.kp{display:flex;gap:8px;margin:8px 0 14px}.kp div{flex:1;border:1px solid #ccd;border-radius:6px;padding:8px;text-align:center}.kp b{display:block;font-size:18px;color:' + COR + '}' +
+      '.kp{display:flex;gap:8px;margin:8px 0 14px}.kp div{flex:1;border:1px solid #ccd;border-radius:6px;padding:8px;text-align:center}.kp b{display:block;font-size:18px;color:' + COR + '}.kp small{display:block;font-size:10px;color:#555}' +
       'h2{font-size:13px;background:' + COR + ';color:#fff;padding:5px 8px;margin:16px 0 6px;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}th{background:#e8eaf6}td.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f3f3f3}' +
       '.vz{color:#777;font-style:italic;margin:4px 0}.ad{display:flex;flex-wrap:wrap;gap:10px}.ad .c{width:calc(50% - 5px);display:flex;gap:10px;border:1px solid #ccd;border-radius:6px;padding:8px;box-sizing:border-box;page-break-inside:avoid}' +
       '.ad img,.ad .ph{width:70px;height:88px;object-fit:cover;border-radius:4px;flex-shrink:0}.ad .ph{background:#e8eaf6;color:' + COR + ';display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold}.ad .c div{line-height:1.5}' +
       'tr{page-break-inside:avoid}</style></head><body>' +
       '<div class="top"><div><h1>Relatório mensal de pessoal — ' + esc(T.mes) + '</h1><p>' + esc(T.emp) + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT') + '</p><p>Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p></div>' + logo + '</div>' +
-      '<div class="kp"><div>Funcionários<b>' + D.ativos.length + '</b></div><div>Total de salários<b>R$ ' + brl(D.folha) + '</b></div><div>Admitidos<b>' + D.adm.length + '</b></div><div>Férias no mês<b>' + D.fer.length + '</b></div><div>Desligados<b>' + D.desl.length + '</b></div></div>' +
+      '<div class="kp"><div>Funcionários<b>' + D.ativos.length + '</b></div><div>Total de salários<b>R$ ' + brl(D.folha) + '</b></div><div>Admitidos<b>' + D.adm.length + '</b></div><div>Férias no mês<b>' + D.fer.length + '</b>' + (D.ferPago ? '<small>pago R$ ' + brl(D.ferPago) + '</small>' : '') + '</div><div>Desligados<b>' + D.desl.length + '</b>' + (D.rescPago ? '<small>rescisões R$ ' + brl(D.rescPago) + '</small>' : '') + '</div></div>' +
       // 1. relação
       '<h2>1. Relação de funcionários — cargo, salário e loja</h2>' + (D.ativos.length ? '<table><thead><tr><th>#</th><th>Nome</th><th>Cargo</th><th>Salário</th><th>Loja</th><th>Empresa</th><th>Vínculo</th><th>Admissão</th></tr></thead><tbody>' +
         D.ativos.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.loja || '—') + '</td><td>' + esc(emp(x.emp).razao || '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + br(x.adm) + '</td></tr>'; }).join('') +
@@ -23700,11 +23708,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       // 2. admitidos
       '<h2>2. Admitidos no mês</h2>' + (D.adm.length ? '<div class="ad">' + D.adm.map(function (x) { var f = foto(x.fotoId); return '<div class="c">' + (f ? '<img src="' + f + '">' : '<span class="ph">' + esc(ini(x.n)) + '</span>') + '<div><b>' + esc(x.n) + '</b><br>Cargo: ' + esc(x.car || '—') + '<br>Loja: ' + esc(x.loja || '—') + '<br>Admissão: ' + br(x.adm) + '<br>Salário: ' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '<br>' + esc(x.vinc) + '</div></div>'; }).join('') + '</div>' : vazio('Nenhuma admissão no mês.')) +
       // 3. férias
-      '<h2>3. Férias no mês</h2>' + (D.fer.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Início</th><th>Fim</th><th>Dias</th><th>Período aquisitivo</th><th>Situação</th></tr></thead><tbody>' +
-        D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td></tr>'; }).join('') + '</tbody></table>' : vazio('Ninguém de férias no mês.')) +
+      '<h2>3. Férias no mês</h2>' + (D.fer.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Início</th><th>Fim</th><th>Dias</th><th>Período aquisitivo</th><th>Situação</th><th>Valor pago</th></tr></thead><tbody>' +
+        D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td><td class="n">' + (r.pago ? 'R$ ' + brl(r.pago) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL PAGO DE FÉRIAS</td><td class="n">R$ ' + brl(D.ferPago) + '</td></tr></tbody></table>' : vazio('Ninguém de férias no mês.')) +
       // 4. desligados
-      '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th></tr></thead><tbody>' +
-        D.desl.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td></tr>'; }).join('') + '</tbody></table>' : vazio('Nenhum desligamento no mês.')) +
+      '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th><th>Valor da rescisão</th></tr></thead><tbody>' +
+        D.desl.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td><td class="n">' + (x.resc ? 'R$ ' + brl(x.resc) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL DE RESCISÕES</td><td class="n">R$ ' + brl(D.rescPago) + '</td></tr></tbody></table>' : vazio('Nenhum desligamento no mês.')) +
       '</body></html>';
     registrar(D, 'pdf');
     if (typeof _abrirDocSimples === 'function') _abrirDocSimples(h, T.arq); else { var w = window.open('', '_blank'); if (w) { w.document.write(h); w.document.close(); setTimeout(function () { w.print(); }, 700); } }
@@ -23770,17 +23778,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }
       var lojas = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
       var abas = [
-        { nome: 'Resumo', linhas: [['Relatório mensal de pessoal — ' + T.mes], [sub], [], ['Item', 'Quantidade', 'Valor'], ['Funcionários (ativos no fim do mês)', D.ativos.length, D.folha], ['Admitidos no mês', D.adm.length, ''], ['Férias no mês', D.fer.length, ''], ['Desligados no mês', D.desl.length, ''], [], ['Loja', 'Funcionários', 'Total de salários']].concat(lojas.map(function (k) { return [k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]; })),
+        { nome: 'Resumo', linhas: [['Relatório mensal de pessoal — ' + T.mes], [sub], [], ['Item', 'Quantidade', 'Valor'], ['Funcionários (ativos no fim do mês)', D.ativos.length, D.folha], ['Admitidos no mês', D.adm.length, ''], ['Férias no mês (valor pago)', D.fer.length, D.ferPago || ''], ['Desligados no mês (rescisões)', D.desl.length, D.rescPago || ''], [], ['Loja', 'Funcionários', 'Total de salários']].concat(lojas.map(function (k) { return [k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]; })),
           est: { 0: 1, 3: 2, 9: 2 }, larg: [40, 14, 20], moeda: [2], fixa: 0 },
         aba('Funcionários', 'Relação de funcionários — cargo, salário e loja', ['Nome', 'Cargo', 'Salário', 'Loja', 'Empresa', 'CNPJ', 'Vínculo', 'Admissão'],
           D.ativos.map(function (x) { var e = emp(x.emp); return [x.n, x.car, x.sal || '', x.loja, e.razao || '', e.cnpj || '', x.vinc, br(x.adm)]; }), [38, 26, 15, 24, 34, 20, 18, 12], [2],
           ['TOTAL — ' + D.ativos.length + ' funcionário(s)', '', D.folha, '', '', '', '', '']),
         aba('Admitidos', 'Admitidos no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Salário', 'CPF'],
           D.adm.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), x.sal || '', x.cpf]; }), [38, 26, 24, 34, 18, 12, 15, 16], [6], D.adm.length ? ['TOTAL — ' + D.adm.length + ' admitido(s)', '', '', '', '', '', '', ''] : null),
-        aba('Férias', 'Férias no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação'],
-          D.fer.map(function (r) { return [r.p.n, r.p.car, r.p.loja, emp(r.p.emp).razao || '', br(r.ini), br(r.fim), r.dias, r.per, r.st]; }), [38, 26, 24, 34, 12, 12, 8, 26, 16], [], D.fer.length ? ['TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', ''] : null),
-        aba('Desligados', 'Desligados no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Desligamento', 'Salário', 'Motivo'],
-          D.desl.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), br(x.dtDesl), x.sal || '', x.mot]; }), [38, 26, 24, 34, 18, 12, 13, 15, 40], [7], D.desl.length ? ['TOTAL — ' + D.desl.length + ' desligado(s)', '', '', '', '', '', '', '', ''] : null)
+        aba('Férias', 'Férias no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação', 'Valor pago'],
+          D.fer.map(function (r) { return [r.p.n, r.p.car, r.p.loja, emp(r.p.emp).razao || '', br(r.ini), br(r.fim), r.dias, r.per, r.st, r.pago || '']; }), [38, 26, 24, 34, 12, 12, 8, 26, 16, 15], [9], D.fer.length ? ['TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', '', D.ferPago] : null),
+        aba('Desligados', 'Desligados no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Desligamento', 'Salário', 'Motivo', 'Valor da rescisão'],
+          D.desl.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), br(x.dtDesl), x.sal || '', x.mot, x.resc || '']; }), [38, 26, 24, 34, 18, 12, 13, 15, 40, 16], [7, 9], D.desl.length ? ['TOTAL — ' + D.desl.length + ' desligado(s)', '', '', '', '', '', '', '', '', D.rescPago] : null)
       ];
       var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx(abas)); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
@@ -23942,6 +23950,171 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<h2>Conferência do pedido de benefícios</h2><p>' + el('bconf-cab').innerHTML + ' · emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p><table>' + ULT.R.html + '</table><script>setTimeout(function(){window.print()},300)<\/script></body></html>');
     w.document.close();
   };
+})();
+</script>
+<script>
+/* ═══════ FÉRIAS: upload de 📎 Recibos de férias e 📎 Rescisões (PDF) → valores no Relatório mensal da diretoria ═══════ */
+(function () {
+  var K = { fer: 'ferias-recibos', resc: 'rescisoes' };
+  if (window.RT && RT.LIST) [K.fer, K.resc].forEach(function (k) { if (RT.LIST.indexOf(k) === -1) RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  var CFG = {
+    fer: { t: 'Recibos de férias', ic: '🏖️', pasta: 'Ferias', cor: '#00838f' },
+    resc: { t: 'Rescisões', ic: '📄', pasta: 'Rescisao', cor: '#c62828' }
+  };
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function num(s) { if (typeof s === 'number') return s; s = String(s == null ? '' : s).replace(/[^\d,.-]/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isNaN(n) ? 0 : Math.round(n * 100) / 100; }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function isoBr(s) { var m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
+  function br(i) { return i ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  function uidx() { return typeof uid === 'function' ? uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  // pessoas: CLT (inclusive desligados) + Agência / Sem registro
+  function pessoas() {
+    var L = DB.g('funcionarios').filter(function (f) { return !f._ext; }).map(function (f) { return { pk: 'f:' + f.id, n: f.n || '', cpf: dig(f.cpf), g: 'CLT', desl: f.st === 'Desligado', dtDesl: f.dtDesl || '' }; });
+    DB.g('colab-ext').forEach(function (c) { L.push({ pk: 'x:' + c.id, n: c.n || '', cpf: dig(c.cpf), g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', desl: c.st !== 'Ativo', dtDesl: c.fimData || '' }); });
+    return L.sort(function (a, b) { return a.n.localeCompare(b.n, 'pt-BR'); });
+  }
+  function pessoa(pk) { return pessoas().find(function (p) { return p.pk === pk; }) || null; }
+  // ── leitura do PDF ──
+  function script(src) { return new Promise(function (ok, er) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { er(new Error('sem internet para ler o PDF')); }; document.head.appendChild(s); }); }
+  async function textoPdf(buf) {
+    if (!window.pdfjsLib) await script('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var pdf = await pdfjsLib.getDocument({ data: buf }).promise, out = [];
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var tc = await (await pdf.getPage(i)).getTextContent(), lin = {};
+      tc.items.forEach(function (it) { if (!it.str || !it.str.trim()) return; var y = Math.round(it.transform[5] / 3); (lin[y] = lin[y] || []).push(it); });
+      Object.keys(lin).sort(function (a, b) { return b - a; }).forEach(function (y) { out.push(lin[y].sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (it) { return it.str.trim(); }).join(' ')); });
+    }
+    return out.join('\n');
+  }
+  var MOEDA = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
+  function valorLiquido(txt) {
+    var L = txt.split('\n'), i, m;
+    var pref = [/l[íi]quido\s+(a\s+receber|da\s+rescis|rescis)/i, /total\s+l[íi]quido/i, /valor\s+l[íi]quido/i, /l[íi]quido/i];
+    for (var k = 0; k < pref.length; k++) for (i = 0; i < L.length; i++) if (pref[k].test(L[i])) {
+      m = L[i].match(MOEDA); if (m) return num(m[m.length - 1]);
+      for (var j = 1; j <= 2 && i + j < L.length; j++) { m = L[i + j].match(MOEDA); if (m) return num(m[m.length - 1]); }
+    }
+    return 0;
+  }
+  function acharPessoa(txt) {
+    var P = pessoas(), d = dig(txt), T = ' ' + sem(txt) + ' ';
+    var c = (txt.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g) || []).map(dig);
+    var p = P.find(function (x) { return x.cpf.length === 11 && c.indexOf(x.cpf) !== -1; }); if (p) return { p: p, como: 'CPF' };
+    var best = null; P.forEach(function (x) { var n = sem(x.n); if (n.length > 6 && T.indexOf(' ' + n + ' ') !== -1 && (!best || n.length > sem(best.n).length)) best = x; });
+    return best ? { p: best, como: 'nome' } : { p: null, como: '' };
+  }
+  function datasFerias(txt) {
+    var t = txt.replace(/\s+/g, ' '), m = t.match(/gozo[^0-9]{0,60}(\d{2}\/\d{2}\/\d{4})\s*(?:a|at[ée]|-|à)\s*(\d{2}\/\d{2}\/\d{4})/i) || t.match(/(\d{2}\/\d{2}\/\d{4})\s*(?:a|at[ée]|à)\s*(\d{2}\/\d{2}\/\d{4})/g);
+    if (m && m.length === 3 && /\//.test(m[1])) return { ini: isoBr(m[1]), fim: isoBr(m[2]) };
+    if (m && m.length) { var last = String(m[m.length - 1]).match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{2}\/\d{2}\/\d{4})/); if (last) return { ini: isoBr(last[1]), fim: isoBr(last[2]) }; }
+    return { ini: '', fim: '' };
+  }
+  function dataAfast(txt) { var t = txt.replace(/\s+/g, ' '), m = t.match(/(?:data\s+d[eo]\s+)?(?:afastamento|desligamento|demiss[ãa]o)[^0-9]{0,40}(\d{2}\/\d{2}\/\d{4})/i); return m ? isoBr(m[1]) : ''; }
+  // ── janela ──
+  var TIPO = 'fer', NOVOS = [];
+  function injetar() {
+    if (el('modal-frup')) return;
+    document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-frup"><div class="modal" style="max-width:1100px;">' +
+      '<div class="modal-header"><span class="modal-title" id="frup-tit"></span><button class="modal-close" onclick="closeModal(\'modal-frup\')">×</button></div>' +
+      '<div id="frup-info" style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;"></div>' +
+      '<div style="background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;"><strong style="font-size:13px;">1. Enviar PDF(s)</strong> <input id="frup-arq" type="file" accept=".pdf" multiple onchange="frupLer()" style="margin-left:8px;"> <span id="frup-st" style="font-size:12.5px;margin-left:6px;"></span>' +
+      '<div id="frup-novos" style="margin-top:8px;"></div></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;"><strong style="font-size:13px;">2. Lançados</strong><select id="frup-mes" onchange="frupLista()" style="padding:4px 6px;"></select><input id="frup-ano" type="number" style="width:80px;padding:4px 6px;" onchange="frupLista()"><input id="frup-busca" type="search" placeholder="🔍 Buscar nome" oninput="frupLista()" style="padding:4px 8px;"><span id="frup-tot" style="margin-left:auto;font-size:13px;"></span></div>' +
+      '<div class="table-wrap" style="max-height:38vh;overflow:auto;"><table id="frup-tab" style="font-size:12.5px;"></table></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-frup\')">Fechar</button><button class="btn btn-primary" id="frup-salvar" onclick="frupSalvar()" disabled>💾 Salvar lançamentos</button></div></div></div>');
+    var MS = ['Todos os meses', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    el('frup-mes').innerHTML = MS.map(function (m, i) { return '<option value="' + (i - 1) + '">' + m + '</option>'; }).join('');
+  }
+  window.frupAbrir = function (tipo) {
+    TIPO = tipo === 'resc' ? 'resc' : 'fer'; NOVOS = []; injetar(); var C = CFG[TIPO], h = new Date();
+    el('frup-tit').textContent = C.ic + ' ' + C.t + ' — upload (PDF)';
+    el('frup-info').innerHTML = TIPO === 'fer' ? 'Envie os <strong>recibos de férias</strong> (PDF). O sistema lê o funcionário (CPF/nome), o período de gozo e o <strong>valor líquido pago</strong>; confira e ajuste antes de salvar. O valor sai no <strong>Relatório mensal da diretoria</strong> (Férias no mês). O arquivo vai para a pasta do funcionário no Drive.'
+      : 'Envie a <strong>rescisão</strong> (TRCT / recibo de rescisão, PDF) dos funcionários desligados. O sistema lê o funcionário, a data de afastamento e o <strong>valor líquido</strong>; confira e ajuste antes de salvar. O valor sai no <strong>Relatório mensal da diretoria</strong> (Desligados no mês). O arquivo vai para a pasta do funcionário no Drive.';
+    el('frup-arq').value = ''; el('frup-st').textContent = ''; el('frup-novos').innerHTML = ''; el('frup-salvar').disabled = true;
+    el('frup-ano').value = h.getFullYear(); el('frup-mes').value = '-1';
+    frupLista(); el('modal-frup').classList.add('open');
+  };
+  window.frupLer = async function () {
+    var fs = Array.prototype.slice.call(el('frup-arq').files || []); if (!fs.length) return;
+    el('frup-st').textContent = '⏳ lendo ' + fs.length + ' arquivo(s)…';
+    for (var i = 0; i < fs.length; i++) {
+      var f = fs[i], o = { id: uidx(), file: f, nome: f.name, pk: '', como: '', valor: 0, ini: '', fim: '', data: '', erro: '' };
+      try {
+        var t = await textoPdf(new Uint8Array(await f.arrayBuffer())), a = acharPessoa(t);
+        o.pk = a.p ? a.p.pk : ''; o.como = a.como; o.valor = valorLiquido(t);
+        if (TIPO === 'fer') { var d = datasFerias(t); o.ini = d.ini; o.fim = d.fim; } else { o.data = dataAfast(t) || (a.p && a.p.dtDesl ? String(a.p.dtDesl).slice(0, 10) : ''); }
+      } catch (e) { o.erro = e.message || String(e); }
+      NOVOS.push(o);
+    }
+    el('frup-st').textContent = '✅ ' + fs.length + ' lido(s) — confira abaixo';
+    desenharNovos();
+  };
+  window.frupNovoManual = function () { NOVOS.push({ id: uidx(), file: null, nome: '(sem arquivo)', pk: '', valor: 0, ini: '', fim: '', data: '' }); desenharNovos(); };
+  function opcoes(sel) { return '<option value="">— escolha o funcionário —</option>' + pessoas().map(function (p) { return '<option value="' + esc(p.pk) + '"' + (p.pk === sel ? ' selected' : '') + '>' + esc(p.n) + (p.g !== 'CLT' ? ' (' + p.g + ')' : '') + (p.desl ? ' · desligado' : '') + '</option>'; }).join(''); }
+  function desenharNovos() {
+    var fer = TIPO === 'fer';
+    el('frup-novos').innerHTML = NOVOS.length ? '<table style="font-size:12.5px;width:100%;"><thead><tr><th>Arquivo</th><th>Funcionário</th>' + (fer ? '<th>Início do gozo</th><th>Fim do gozo</th>' : '<th>Data do desligamento</th>') + '<th>Valor pago (líquido)</th><th></th></tr></thead><tbody>' +
+      NOVOS.map(function (o, i) {
+        return '<tr style="' + (!o.pk || !o.valor ? 'background:#fff7e6;' : '') + '"><td style="font-size:11.5px;max-width:200px;word-break:break-all;">' + esc(o.nome) + (o.erro ? '<div style="color:#c0392b;">' + esc(o.erro) + '</div>' : '') + '</td>' +
+          '<td><select style="max-width:280px;" onchange="frupSet(' + i + ',\'pk\',this.value)">' + opcoes(o.pk) + '</select>' + (o.como ? '<div style="font-size:10.5px;color:var(--green-dark);">✔ encontrado pelo ' + o.como + '</div>' : (o.pk ? '' : '<div style="font-size:10.5px;color:#c0392b;">não identificado — escolha</div>')) + '</td>' +
+          (fer ? '<td><input type="date" value="' + o.ini + '" onchange="frupSet(' + i + ',\'ini\',this.value)"></td><td><input type="date" value="' + o.fim + '" onchange="frupSet(' + i + ',\'fim\',this.value)"></td>' : '<td><input type="date" value="' + o.data + '" onchange="frupSet(' + i + ',\'data\',this.value)"></td>') +
+          '<td><input type="text" value="' + (o.valor ? brl(o.valor) : '') + '" placeholder="0,00" style="width:110px;text-align:right;" onchange="frupSet(' + i + ',\'valor\',this.value)"></td>' +
+          '<td><button class="btn-icon danger" title="Remover" onclick="frupSet(' + i + ',\'del\')">🗑</button></td></tr>';
+      }).join('') + '</tbody></table>' : '';
+    el('frup-novos').insertAdjacentHTML('beforeend', '<button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="frupNovoManual()">+ Lançar sem PDF</button>');
+    el('frup-salvar').disabled = !NOVOS.length;
+  }
+  window.frupSet = function (i, k, v) { if (k === 'del') { NOVOS.splice(i, 1); desenharNovos(); return; } NOVOS[i][k] = k === 'valor' ? num(v) : v; if (k === 'pk') { NOVOS[i].como = ''; desenharNovos(); } else if (k === 'valor') desenharNovos(); };
+  window.frupSalvar = async function () {
+    var fer = TIPO === 'fer', falta = NOVOS.filter(function (o) { return !o.pk || !(o.valor > 0) || (fer ? !o.ini : !o.data); });
+    if (falta.length) { alert('Confira: ' + falta.length + ' linha(s) sem funcionário, valor ou data.'); return; }
+    el('frup-salvar').disabled = true; el('frup-st').textContent = '⏳ salvando…';
+    var L = DB.g(K[TIPO]), podeDrive = typeof rhPodeEnviar === 'function' && rhPodeEnviar() && typeof uploadFileToDrive === 'function';
+    for (var i = 0; i < NOVOS.length; i++) {
+      var o = NOVOS[i], p = pessoa(o.pk) || { n: '' }, arq = o.file ? { name: o.file.name } : null;
+      if (o.file && podeDrive) { try { var up = await uploadFileToDrive(o.file, p.n); arq = { name: o.file.name, id: up.id, url: up.webViewLink }; } catch (e) { console.warn(e); } }
+      var r = { id: o.id, pk: o.pk, fid: o.pk.indexOf('f:') === 0 ? o.pk.slice(2) : o.pk, nome: p.n, valor: o.valor, arq: arq, em: new Date().toISOString() };
+      if (fer) { r.ini = o.ini; r.fim = o.fim || o.ini; } else r.data = o.data;
+      L.push(r);
+    }
+    DB.s(K[TIPO], L);
+    if (typeof toast === 'function') toast('💾 ' + NOVOS.length + ' lançamento(s) salvo(s)' + (podeDrive ? '' : ' (arquivo não enviado ao Drive — Drive desconectado)'));
+    NOVOS = []; el('frup-arq').value = ''; el('frup-st').textContent = ''; desenharNovos(); frupLista();
+  };
+  window.frupLista = function () {
+    var fer = TIPO === 'fer', m = +el('frup-mes').value, a = +el('frup-ano').value, q = sem(el('frup-busca').value);
+    var L = DB.g(K[TIPO]).filter(function (r) {
+      var d = fer ? r.ini : r.data; if (q && sem(r.nome).indexOf(q) === -1) return false;
+      if (m < 0) return true; if (fer) { var de = a + '-' + String(m + 1).padStart(2, '0') + '-01', ate = a + '-' + String(m + 1).padStart(2, '0') + '-31'; return r.ini <= ate && (r.fim || r.ini) >= de; }
+      return d && +d.slice(0, 4) === a && +d.slice(5, 7) === m + 1;
+    }).sort(function (x, y) { return String(fer ? y.ini : y.data).localeCompare(String(fer ? x.ini : x.data)); });
+    var T = L.reduce(function (s, r) { return s + (+r.valor || 0); }, 0);
+    el('frup-tot').innerHTML = L.length + ' lançamento(s) · total <strong>R$ ' + brl(T) + '</strong>';
+    el('frup-tab').innerHTML = '<thead><tr><th>Funcionário</th>' + (fer ? '<th>Gozo</th>' : '<th>Desligamento</th>') + '<th style="text-align:right;">Valor pago</th><th>Arquivo</th><th></th></tr></thead><tbody>' +
+      (L.length ? L.map(function (r) {
+        return '<tr><td><strong>' + esc(r.nome) + '</strong></td><td>' + (fer ? br(r.ini) + ' a ' + br(r.fim) : br(r.data)) + '</td>' +
+          '<td style="text-align:right;"><input type="text" value="' + brl(r.valor) + '" style="width:110px;text-align:right;" onchange="frupEditar(\'' + r.id + '\',this.value)"></td>' +
+          '<td style="font-size:11.5px;">' + (r.arq ? (r.arq.url ? '<a href="' + esc(r.arq.url) + '" target="_blank">📎 ' + esc(r.arq.name) + '</a>' : '📎 ' + esc(r.arq.name)) : '—') + '</td>' +
+          '<td><button class="btn-icon danger" title="Excluir lançamento" onclick="frupExcluir(\'' + r.id + '\')">🗑</button></td></tr>';
+      }).join('') : '<tr><td colspan="5" style="color:var(--gray-400);text-align:center;">Nenhum lançamento.</td></tr>') + '</tbody>';
+  };
+  window.frupEditar = function (id, v) { var L = DB.g(K[TIPO]), r = L.find(function (x) { return x.id === id; }); if (!r) return; r.valor = num(v); DB.s(K[TIPO], L); frupLista(); };
+  window.frupExcluir = function (id) { if (!confirm('Excluir este lançamento? (o arquivo no Drive não é apagado)')) return; DB.s(K[TIPO], DB.g(K[TIPO]).filter(function (x) { return x.id !== id; })); frupLista(); };
+  // para o relatório da diretoria
+  window.ferRecibosDe = function (rid) { return DB.g(K.fer).filter(function (r) { return (r.pk === 'f:' + rid || r.pk === rid || r.fid === rid); }); };
+  window.rescisoesDe = function (rid) { return DB.g(K.resc).filter(function (r) { return (r.pk === 'f:' + rid || r.pk === rid || r.fid === rid); }); };
+  // botões na tela de Férias
+  function botoes() {
+    var s = el('sec-ferias'); if (!s || el('btn-frup-fer')) return;
+    var b = s.querySelector('.card-header button[onclick="ferNovo()"]'); if (!b) return;
+    b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-frup-fer" onclick="frupAbrir(\'fer\')" title="Upload dos recibos de férias (valor pago vai para o relatório da diretoria)">📎 Recibos de férias</button><button class="btn btn-outline" id="btn-frup-resc" onclick="frupAbrir(\'resc\')" title="Upload das rescisões dos desligados (valor vai para o relatório da diretoria)">📎 Rescisões</button>');
+  }
+  botoes(); document.addEventListener('DOMContentLoaded', botoes);
+  if (typeof window.rdFer === 'function') { var _r = window.rdFer; window.rdFer = function () { var x = _r.apply(this, arguments); try { botoes(); } catch (e) {} return x; }; }
 })();
 </script>
 </body>
