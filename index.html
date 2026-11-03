@@ -24111,8 +24111,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function botoes() {
     var s = el('sec-ferias'); if (!s || el('btn-frup-fer')) return;
     var b = s.querySelector('.card-header button[onclick="ferNovo()"]'); if (!b) return;
-    b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-frup-fer" onclick="frupAbrir(\'fer\')" title="Upload dos recibos de férias (valor pago vai para o relatório da diretoria)">📎 Recibos de férias</button><button class="btn btn-outline" id="btn-frup-resc" onclick="frupAbrir(\'resc\')" title="Upload das rescisões dos desligados (valor vai para o relatório da diretoria)">📎 Rescisões</button>');
+    b.insertAdjacentHTML('beforebegin', '<button class="btn btn-outline" id="btn-frup-fer" onclick="frupAbrir(\'fer\')" title="Upload dos recibos de férias (valor pago vai para o relatório da diretoria)">📎 Recibos de férias</button>');
   }
+  // rescisões: no menu Funcionários (ao lado do 📤 Excel)
+  function botaoResc() {
+    if (el('btn-frup-resc')) return;
+    var x = el('btn-clt-xls'); if (!x) { setTimeout(botaoResc, 500); return; }
+    x.insertAdjacentHTML('afterend', '<button class="btn btn-outline" id="btn-frup-resc" onclick="frupAbrir(\'resc\')" title="Upload das rescisões dos desligados (valor vai para o relatório da diretoria)">📎 Rescisões</button>');
+  }
+  botaoResc(); document.addEventListener('DOMContentLoaded', function () { setTimeout(botaoResc, 0); });
+  if (typeof window.rdFunc === 'function') { var _rf = window.rdFunc; window.rdFunc = function () { var x = _rf.apply(this, arguments); try { botaoResc(); } catch (e) {} return x; }; }
   botoes(); document.addEventListener('DOMContentLoaded', botoes);
   if (typeof window.rdFer === 'function') { var _r = window.rdFer; window.rdFer = function () { var x = _r.apply(this, arguments); try { botoes(); } catch (e) {} return x; }; }
 })();
