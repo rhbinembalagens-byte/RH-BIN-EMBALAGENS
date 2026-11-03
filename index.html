@@ -24013,7 +24013,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (m && m.length) { var last = String(m[m.length - 1]).match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{2}\/\d{2}\/\d{4})/); if (last) return { ini: isoBr(last[1]), fim: isoBr(last[2]) }; }
     return { ini: '', fim: '' };
   }
-  function dataAfast(txt) { var t = txt.replace(/\s+/g, ' '), m = t.match(/(?:data\s+d[eo]\s+)?(?:afastamento|desligamento|demiss[ãa]o)[^0-9]{0,40}(\d{2}\/\d{2}\/\d{4})/i); return m ? isoBr(m[1]) : ''; }
+  function dataAfast(txt) {
+    // TRCT: cabeçalho "24 Data de Admissão 25 Data do Aviso Prévio 26 Data de Afastamento" e as datas na linha de baixo (a de afastamento é a última)
+    var L = String(txt || '').split('\n'), DT = /\d{2}\/\d{2}\/\d{4}/g;
+    for (var i = 0; i < L.length; i++) {
+      var k = L[i].search(/data\s+d[eo]\s+(afastamento|desligamento|demiss[ãa]o)/i); if (k < 0) continue;
+      var mesma = L[i].slice(k).match(DT); if (mesma) return isoBr(mesma[0]);
+      for (var j = 1; j <= 2 && i + j < L.length; j++) { var d = L[i + j].match(DT); if (d) return isoBr(d[d.length - 1]); }
+    }
+    var t = txt.replace(/\s+/g, ' '), m = t.match(/(?:afastamento|desligamento|demiss[ãa]o)[^0-9]{0,40}(\d{2}\/\d{2}\/\d{4})/i); return m ? isoBr(m[1]) : '';
+  }
   // ── janela ──
   var TIPO = 'fer', NOVOS = [];
   function injetar() {
@@ -24057,7 +24066,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function opcoes(sel) { return '<option value="">— escolha o funcionário —</option>' + pessoas().map(function (p) { return '<option value="' + esc(p.pk) + '"' + (p.pk === sel ? ' selected' : '') + '>' + esc(p.n) + (p.g !== 'CLT' ? ' (' + p.g + ')' : '') + (p.desl ? ' · desligado' : '') + '</option>'; }).join(''); }
   function desenharNovos() {
     var fer = TIPO === 'fer';
-    el('frup-novos').innerHTML = NOVOS.length ? '<table style="font-size:12.5px;width:100%;"><thead><tr><th>Arquivo</th><th>Funcionário</th>' + (fer ? '<th>Início do gozo</th><th>Fim do gozo</th>' : '<th>Data do desligamento</th>') + '<th>Valor pago (líquido)</th><th></th></tr></thead><tbody>' +
+    el('frup-novos').innerHTML = NOVOS.length ? '<table style="font-size:12.5px;width:100%;"><thead><tr><th>Arquivo</th><th>Funcionário</th>' + (fer ? '<th>Início do gozo</th><th>Fim do gozo</th>' : '<th>Data de afastamento</th>') + '<th>Valor pago (líquido)</th><th></th></tr></thead><tbody>' +
       NOVOS.map(function (o, i) {
         return '<tr style="' + (!o.pk || !o.valor ? 'background:#fff7e6;' : '') + '"><td style="font-size:11.5px;max-width:200px;word-break:break-all;">' + esc(o.nome) + (o.erro ? '<div style="color:#c0392b;">' + esc(o.erro) + '</div>' : '') + '</td>' +
           '<td><select style="max-width:280px;" onchange="frupSet(' + i + ',\'pk\',this.value)">' + opcoes(o.pk) + '</select>' + (o.como ? '<div style="font-size:10.5px;color:var(--green-dark);">✔ encontrado pelo ' + o.como + '</div>' : (o.pk ? '' : '<div style="font-size:10.5px;color:#c0392b;">não identificado — escolha</div>')) + '</td>' +
@@ -24094,7 +24103,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     }).sort(function (x, y) { return String(fer ? y.ini : y.data).localeCompare(String(fer ? x.ini : x.data)); });
     var T = L.reduce(function (s, r) { return s + (+r.valor || 0); }, 0);
     el('frup-tot').innerHTML = L.length + ' lançamento(s) · total <strong>R$ ' + brl(T) + '</strong>';
-    el('frup-tab').innerHTML = '<thead><tr><th>Funcionário</th>' + (fer ? '<th>Gozo</th>' : '<th>Desligamento</th>') + '<th style="text-align:right;">Valor pago</th><th>Arquivo</th><th></th></tr></thead><tbody>' +
+    el('frup-tab').innerHTML = '<thead><tr><th>Funcionário</th>' + (fer ? '<th>Gozo</th>' : '<th>Data de afastamento</th>') + '<th style="text-align:right;">Valor pago</th><th>Arquivo</th><th></th></tr></thead><tbody>' +
       (L.length ? L.map(function (r) {
         return '<tr><td><strong>' + esc(r.nome) + '</strong></td><td>' + (fer ? br(r.ini) + ' a ' + br(r.fim) : br(r.data)) + '</td>' +
           '<td style="text-align:right;"><input type="text" value="' + brl(r.valor) + '" style="width:110px;text-align:right;" onchange="frupEditar(\'' + r.id + '\',this.value)"></td>' +
