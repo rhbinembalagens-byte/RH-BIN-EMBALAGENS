@@ -23835,6 +23835,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
       var r = benefBonusRecibo(i.dataset.f);
       if (r.v > 0) { q++; tot += r.v; i.title = 'Inclui bônus por resultado de ' + r.mes + ' (recibo): ' + brl(r.v); i.style.borderColor = '#bf360c'; } else { i.title = ''; i.style.borderColor = ''; }
+      var lb = i.parentNode.querySelector('.b3-bonlb'); if (!lb) { lb = document.createElement('div'); lb.className = 'b3-bonlb'; lb.style.cssText = 'font-size:10.5px;color:#bf360c;white-space:nowrap;margin-top:2px;'; i.parentNode.appendChild(lb); }
+      lb.textContent = r.v > 0 ? '🏆 recibo ' + r.mes + ': ' + brl(r.v) : '';
     });
     var tab = el('flash-table'); if (!tab) return;
     if (!box) { tab.closest('.table-wrap') ? tab.closest('.table-wrap').insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>') : tab.insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>'); box = el('b3-bonrec'); }
@@ -23854,6 +23856,81 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (typeof _rf === 'function') window.rdFlash = function () { var r = _rf.apply(this, arguments); setTimeout(function () { try { aviso(); } catch (e) {} }, 80); return r; };
   var _oc = window.onFlashEmpChange;
   if (typeof _oc === 'function') window.onFlashEmpChange = function () { var r = _oc.apply(this, arguments); setTimeout(function () { try { aviso(); } catch (e) {} }, 120); return r; };
+})();
+</script>
+<script>
+/* ═══════ BENEFÍCIOS › GERAR COMPRA: tela de conferência antes de gerar o arquivo ═══════ */
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function n(id) { return parseFloat((el(id) || {}).value) || 0; }
+  function brl(v) { return 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function br(i) { return i ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  var _ger = window.gerarFlashXLSX, OK = false;
+  function linhas() {
+    var s = el('flash-empresa'), empSel = s ? s.value : '', out = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#flash-tbody tr'), function (tr) {
+      var i = tr.querySelector('input.b3'); if (!i) return;
+      var f = i.dataset.f, td = tr.querySelector('td'), nome = td ? (td.querySelector('strong') || td).textContent.trim() : f;
+      if (tr.style.display === 'none') return;
+      var empId = tr.dataset.emp || empSel, e = DB.g('empresas').find(function (x) { return x.id === empId; }) || {};
+      var rb = typeof window.benefBonusRecibo === 'function' ? benefBonusRecibo(f) : { v: 0 };
+      var L = { f: f, nome: nome, ext: f.indexOf('x:') === 0, emp: e.razao || '', cnpj: e.cnpj || '', mob: n('mob-' + f), livre: n('livre-' + f), bonus: n('b3bonus-' + f), alim: n('alim-' + f), dep: n('b3dep-' + f), brec: rb.v };
+      L.tot = Math.round((L.mob + L.livre + L.bonus + L.alim) * 100) / 100;
+      out.push(L);
+    });
+    return out;
+  }
+  function injetar() {
+    if (el('modal-bconf')) return;
+    document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-bconf"><div class="modal" style="max-width:1150px;">' +
+      '<div class="modal-header"><span class="modal-title">🔎 Conferência do pedido de benefícios</span><button class="modal-close" onclick="closeModal(\'modal-bconf\')">×</button></div>' +
+      '<div id="bconf-cab" style="font-size:13px;margin-bottom:8px;"></div><div class="table-wrap" style="max-height:58vh;overflow:auto;"><table id="bconf-tab" style="font-size:12.5px;"></table></div><div id="bconf-obs" style="font-size:12px;color:var(--gray-600);margin-top:8px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-bconf\')">← Voltar e ajustar</button><button class="btn btn-outline" onclick="bconfImprimir()">🖨️ Imprimir conferência</button><button class="btn btn-primary" onclick="bconfConfirmar()">✅ Confirmar e gerar compra</button></div></div></div>');
+  }
+  function tabela(L) {
+    var grupos = {}, ordem = [];
+    L.forEach(function (x) { var k = x.emp + '|' + x.cnpj; if (!grupos[k]) { grupos[k] = []; ordem.push(k); } grupos[k].push(x); });
+    var T = { mob: 0, livre: 0, bonus: 0, alim: 0, tot: 0, dep: 0, brec: 0 }, r = 'text-align:right;white-space:nowrap;';
+    var h = '<thead><tr><th>Colaborador</th><th style="' + r + '">Mobilidade</th><th style="' + r + '">Livre</th><th style="' + r + '">Bônus</th><th style="' + r + '">Livre na planilha<br><small>(Livre + Bônus)</small></th><th style="' + r + '">Alimentação + Refeição</th><th style="' + r + '">Total cartão</th><th style="' + r + '">💵 Depósito<br><small>(fora do arquivo)</small></th></tr></thead><tbody>';
+    ordem.forEach(function (k) {
+      var G = grupos[k], S = { mob: 0, livre: 0, bonus: 0, alim: 0, tot: 0, dep: 0 };
+      h += '<tr><td colspan="8" style="background:var(--green-pale);font-weight:700;color:var(--green-dark);">🏢 ' + esc(G[0].emp || 'Empresa') + (G[0].cnpj ? ' <span style="font-weight:400;color:var(--gray-500);">· CNPJ ' + esc(G[0].cnpj) + '</span>' : '') + ' <span style="font-weight:400;">· ' + G.length + ' colaborador(es)</span></td></tr>';
+      G.forEach(function (x) {
+        ['mob', 'livre', 'bonus', 'alim', 'tot', 'dep'].forEach(function (c) { S[c] += x[c]; T[c] += x[c]; }); T.brec += x.brec;
+        var v = function (c) { return x[c] ? brl(x[c]) : '<span style="color:var(--gray-400);">—</span>'; };
+        h += '<tr style="' + (x.tot || x.dep ? '' : 'opacity:.55;') + '"><td><strong>' + esc(x.nome) + '</strong>' + (x.ext ? ' <span class="badge badge-yellow" style="font-size:9.5px;">Sem registro</span>' : '') + '</td>' +
+          '<td style="' + r + '">' + v('mob') + '</td><td style="' + r + '">' + v('livre') + '</td>' +
+          '<td style="' + r + '">' + v('bonus') + (x.brec ? '<div style="font-size:10.5px;color:#bf360c;">🏆 recibo ' + brl(x.brec) + '</div>' : '') + '</td>' +
+          '<td style="' + r + 'font-weight:600;">' + (x.livre + x.bonus ? brl(x.livre + x.bonus) : '—') + '</td><td style="' + r + '">' + v('alim') + '</td>' +
+          '<td style="' + r + 'font-weight:700;">' + v('tot') + '</td><td style="' + r + '">' + v('dep') + '</td></tr>';
+      });
+      if (ordem.length > 1) h += '<tr style="font-weight:700;background:var(--gray-50);"><td>Subtotal</td><td style="' + r + '">' + brl(S.mob) + '</td><td style="' + r + '">' + brl(S.livre) + '</td><td style="' + r + '">' + brl(S.bonus) + '</td><td style="' + r + '">' + brl(S.livre + S.bonus) + '</td><td style="' + r + '">' + brl(S.alim) + '</td><td style="' + r + '">' + brl(S.tot) + '</td><td style="' + r + '">' + brl(S.dep) + '</td></tr>';
+    });
+    h += '<tr style="font-weight:700;background:#fdf3e6;font-size:13px;"><td>TOTAL GERAL</td><td style="' + r + '">' + brl(T.mob) + '</td><td style="' + r + '">' + brl(T.livre) + '</td><td style="' + r + '">' + brl(T.bonus) + '</td><td style="' + r + '">' + brl(T.livre + T.bonus) + '</td><td style="' + r + '">' + brl(T.alim) + '</td><td style="' + r + '">' + brl(T.tot) + '</td><td style="' + r + '">' + brl(T.dep) + '</td></tr></tbody>';
+    return { html: h, T: T };
+  }
+  var ULT = null;
+  window.gerarFlashXLSX = async function () {
+    if (OK) { OK = false; return _ger.apply(this, arguments); }
+    var L = linhas(); if (!L.length) return _ger.apply(this, arguments);
+    injetar();
+    var R = tabela(L), de = (el('flash-de') || {}).value, ate = (el('flash-ate') || {}).value, A = typeof window.benefBonusRecibo === 'function' && L[0] ? benefBonusRecibo(L[0].f).mes : '';
+    ULT = { L: L, R: R, de: de, ate: ate, A: A };
+    el('bconf-cab').innerHTML = 'Período do pedido: <strong>' + br(de) + ' a ' + br(ate) + '</strong> · ' + L.filter(function (x) { return x.tot > 0; }).length + ' colaborador(es) com valor no cartão · <strong>Total cartão ' + brl(R.T.tot) + '</strong>' +
+      (A ? ' · 🏆 Bônus por resultado (recibos de ' + A + '): <strong>' + brl(R.T.brec) + '</strong>' : '');
+    el('bconf-tab').innerHTML = R.html;
+    el('bconf-obs').innerHTML = 'Confira os valores. Para alterar, clique em <strong>← Voltar e ajustar</strong>, corrija na tabela e clique em Gerar Compra de novo. O Bônus vai somado na coluna <strong>Livre</strong> da planilha; o Depósito não entra no arquivo.';
+    el('modal-bconf').classList.add('open');
+  };
+  window.bconfConfirmar = function () { closeModal('modal-bconf'); OK = true; window.gerarFlashXLSX(); };
+  window.bconfImprimir = function () {
+    if (!ULT) return;
+    var w = window.open('', '_blank'); if (!w) { alert('Permita pop-ups para imprimir.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Conferencia_Pedido_Beneficios_' + ULT.de + '_a_' + ULT.ate + '</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;font-size:11px;color:#222}h2{font-size:15px;margin:0 0 4px}p{margin:0 0 10px;color:#555}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px}th{background:#f1f1f1}.badge{font-size:9px;border:1px solid #c9a227;padding:0 3px;border-radius:3px}</style></head><body>' +
+      '<h2>Conferência do pedido de benefícios</h2><p>' + el('bconf-cab').innerHTML + ' · emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p><table>' + ULT.R.html + '</table><script>setTimeout(function(){window.print()},300)<\/script></body></html>');
+    w.document.close();
+  };
 })();
 </script>
 </body>
