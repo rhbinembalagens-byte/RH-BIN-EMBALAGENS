@@ -20171,6 +20171,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="modal-bg" id="modal-liq"><div class="modal" style="max-width:1100px;">' +
       '<div class="modal-header"><span class="modal-title" id="lq-tit">💸 Relação dos líquidos → planilha de pagamento</span><button class="modal-close" onclick="closeModal(\'modal-liq\')">×</button></div>' +
       '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Anexe os PDFs <strong>"Relação Geral dos Líquidos"</strong> da contabilidade (pode selecionar todos de uma vez, um por empresa). O sistema localiza cada funcionário na <strong>lista de contas do banco</strong> e gera a planilha <strong>"lista funcionários para pagamento"</strong> no mesmo layout (Agência · Conta · Dígito · Nome · CPF) com o <strong>valor</strong> na coluna seguinte.</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;"><strong>Tipo de pagamento:</strong> <select id="lq-tipo" style="padding:5px 8px;" onchange="liqTipo(this.value)"><option value="rec_sal">💵 Pagamento de salário — código 1 na coluna F</option><option value="rec_adi">💸 Adiantamento — código 9 na coluna F</option><option value="rec_13a">🎄 13º salário – 1ª parcela</option><option value="rec_13b">🎁 13º salário – 2ª parcela</option><option value="rec_bon">🏆 Bônus por resultado</option></select><span id="lq-tipo-info" style="font-size:12px;color:var(--gray-600);"></span></div>' +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
       '<div style="flex:1;min-width:300px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">1. Lista de contas do banco</div><div id="lq-lista-info" style="font-size:12.5px;margin-bottom:6px;"></div>' +
       '<label class="btn btn-outline btn-sm" style="cursor:pointer;">📂 Importar / atualizar lista (.xls/.xlsx)<input type="file" accept=".xls,.xlsx,.csv" style="display:none;" onchange="liqImportarLista(this)"></label></div>' +
@@ -20194,9 +20195,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     injetar(); infoLista(); LQ_TIPO = LQ_TIPOS[tipo] ? tipo : 'rec_adi';
     var T = LQ_TIPOS[LQ_TIPO], salvo = (DB.g('pag-cod').find(function (x) { return x.id === LQ_TIPO; }) || {}).cod;
     el('lq-tit').textContent = T.ic + ' ' + T.t + ' · Relação dos líquidos → planilha de pagamento';
-    el('lq-cod').value = salvo !== undefined && salvo !== '' ? salvo : T.cod;
+    el('lq-cod').value = (LQ_TIPO === 'rec_sal' || LQ_TIPO === 'rec_adi') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod); if (el('lq-tipo')) el('lq-tipo').value = LQ_TIPO;
     if (ESTADO && ESTADO.tipo !== LQ_TIPO) { ESTADO = null; el('lq-tab').innerHTML = ''; el('lq-resumo').innerHTML = ''; el('lq-status').innerHTML = ''; el('lq-pdfs').value = ''; el('lq-gerar').disabled = true; el('lq-gerar-xls').disabled = true; }
     el('modal-liq').classList.add('open');
+  };
+  window.liqTipo = function (t, auto) {
+    if (!LQ_TIPOS[t]) return; LQ_TIPO = t; if (ESTADO) ESTADO.tipo = t;
+    var T = LQ_TIPOS[t], salvo = (DB.g('pag-cod').find(function (x) { return x.id === t; }) || {}).cod;
+    el('lq-tit').textContent = T.ic + ' ' + T.t + ' · Relação dos líquidos → planilha de pagamento';
+    el('lq-cod').value = (t === 'rec_sal' || t === 'rec_adi') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod);
+    if (el('lq-tipo')) el('lq-tipo').value = t;
+    if (el('lq-tipo-info')) el('lq-tipo-info').innerHTML = auto ? '🔎 identificado pelo PDF (' + esc(auto) + ')' : '';
   };
   window.liqLerPdfs = async function () {
     var fs = Array.prototype.slice.call(el('lq-pdfs').files || []); if (!fs.length) return;
@@ -20219,6 +20228,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       return '<div>' + (ok ? '✅' : '⚠️') + ' ' + esc(R.empresa || R.arq) + ' — ' + R.itens.length + ' func. · R$ ' + brl(soma) + (R.calculo ? ' · ' + esc(R.calculo) : '') + (R.comp ? ' · ' + R.comp : '') + (ok ? '' : ' <strong>(total do PDF R$ ' + brl(R.total) + ')</strong>') + '</div>';
     }).join('') + (erros && erros.length ? '<div style="color:#c0392b;">❌ ' + erros.map(esc).join('<br>❌ ') + '</div>' : '') + (comps.length > 1 ? '<div style="color:#b26a00;">⚠ PDFs de competências diferentes: ' + comps.join(', ') + '</div>' : '');
     preencherEmpresas(); casarTudo();
+    try {
+      var cs = rel.map(function (R) { return R.calculo || ''; }).filter(Boolean);
+      if (cs.length && (LQ_TIPO === 'rec_sal' || LQ_TIPO === 'rec_adi')) {
+        if (cs.every(function (c) { return /adiant/i.test(c); })) liqTipo('rec_adi', cs[0]);
+        else if (cs.every(function (c) { return !/adiant|13|d[ée]cimo/i.test(c) && /mensal|folha|pagamento|sal[áa]rio/i.test(c); })) liqTipo('rec_sal', cs[0]);
+      }
+    } catch (e) {}
   };
   function casarTudo() { ESTADO.linhas.forEach(function (x) { if (!x.manual) { var c = casar(x.it); x.l = c.l; x.como = c.como; } }); desenhar(); }
   function opcoes(sel) { return '<option value="">— não está na lista —</option>' + lista().slice().sort(function (a, b) { return a.nome.localeCompare(b.nome); }).map(function (l) { return '<option value="' + esc(l.id) + '"' + (sel && sel.id === l.id ? ' selected' : '') + '>' + esc(l.nome) + ' · ' + esc(fmtCpf(l.cpf)) + '</option>'; }).join(''); }
@@ -23489,6 +23505,25 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     abas.forEach(function (a) { var ws = XLSX.utils.aoa_to_sheet(a[1]); ws['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 14 }]; fmt(ws, 3); XLSX.utils.book_append_sheet(wb, ws, a[0]); });
     XLSX.writeFile(wb, nome + '.xlsx');
   };
+})();
+</script>
+<script>
+/* ═══════ GERAR DOCUMENTOS: 🏦 Arquivo de pagamento para o banco (Relação dos Líquidos → planilha por CNPJ) ═══════ */
+(function () {
+  var COR = '#00695c';
+  function el(id) { return document.getElementById(id); }
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="pag_banco"]')) return;
+    var ref = grid.querySelector('[data-docbase="rec_vt_sr"]') || grid.querySelector('[data-docbase="rec_avulso"]') || grid.querySelector('[data-docbase="termo_uni"]');
+    var h = '<div class="trein-card" data-docbase="pag_banco" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">🏦 Arquivo de pagamento para o banco</div><div class="tc-meta">Relação dos Líquidos (PDF) → planilha do banco · uma por CNPJ</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'pag_banco\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Faça upload dos PDFs "Relação Geral dos Líquidos" da contabilidade. Cada valor é vinculado ao funcionário pelo CPF e nome na lista de contas do banco e sai a planilha no modelo do banco (Agência · Conta · Dígito · Nome · CPF · <strong>Código</strong> · Valor), <strong>uma para cada CNPJ</strong>. Coluna F já preenchida: <strong>1 = pagamento de salário</strong>, <strong>9 = adiantamento</strong>.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="liqAbrir(\'rec_sal\')">💵 Pagamento de salário (código 1)</button><button class="btn btn-outline btn-sm" style="color:' + COR + ';border-color:' + COR + ';" onclick="liqAbrir(\'rec_adi\')">💸 Adiantamento (código 9)</button></div></div>';
+    if (ref) ref.insertAdjacentHTML('afterend', h); else grid.insertAdjacentHTML('beforeend', h);
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
 })();
 </script>
 </body>
