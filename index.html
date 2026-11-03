@@ -23572,5 +23572,218 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
 })();
 </script>
+<script>
+/* ═══════ GERAR DOCUMENTOS: 📊 Relatório mensal para a diretoria (funcionários, admitidos com foto, férias, desligados) — Excel e PDF ═══════ */
+(function () {
+  var COR = '#283593', K_HIST = 'rel-diretoria';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K_HIST) === -1) { RT.LIST.push(K_HIST); if (RT.ALL && RT.ALL.indexOf(K_HIST) === -1) RT.ALL.push(K_HIST); }
+  var MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function num(x) { if (typeof x === 'number') return x; var s = String(x == null ? '' : x).replace(/R\$|\s/g, ''); if (!s) return 0; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isFinite(n) ? n : 0; }
+  function brl(n) { return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function iso(s) { s = String(s || '').trim(); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0]; m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; }
+  function br(s) { var i = iso(s); return i ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  function addD(i, n) { var d = new Date(i + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  function depNome(v) { if (!v) return ''; var d = DB.g('departamentos').find(function (x) { return x.id === v || x.nome === v; }); return d ? d.nome : (/^[a-z0-9]{8,}$/i.test(v) ? '' : v); }
+  function emp(v) { var e = v ? DB.g('empresas').find(function (x) { return x.id === v; }) : null; return e || {}; }
+  function foto(id) { try { var v = typeof fotoStoreGet === 'function' ? fotoStoreGet(id) : null; if (!v && typeof fotoStoreLoad === 'function') { fotoStoreLoad(); v = fotoStoreGet(id); } if (!v) { var f = DB.g('funcionarios').find(function (x) { return x.id === id; }) || DB.g('colab-ext').find(function (x) { return x.id === id; }); v = f && /^data:image|^https?:/.test(f.foto || '') ? f.foto : null; } return v; } catch (e) { return null; } }
+  function ini(n) { return String(n || '').trim().split(/\s+/).filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join('').toUpperCase(); }
+  function periodo(m, a) { var d = a + '-' + String(m + 1).padStart(2, '0') + '-01', u = new Date(a, m + 1, 0).getDate(); return { de: d, ate: a + '-' + String(m + 1).padStart(2, '0') + '-' + String(u).padStart(2, '0') }; }
+
+  // pessoas (CLT + opcional Agência / Sem registro) num formato comum
+  function pessoas(incExt) {
+    var L = DB.g('funcionarios').filter(function (f) { return !f._ext; }).map(function (f) {
+      return { id: f.id, fotoId: f.id, n: f.n || '', car: f.car || '', sal: num(f.sal), loja: depNome(f.dep), emp: f.emp, vinc: f.tip && f.tip !== 'CLT' ? 'CLT · ' + f.tip : 'CLT', adm: iso(f.adm), desl: f.st === 'Desligado', dtDesl: iso(f.dtDesl), mot: f.motDesl || '', cpf: f.cpf || '' };
+    });
+    if (incExt) DB.g('colab-ext').forEach(function (c) {
+      var fim = c.st === 'Encerrado' || c.st === 'Efetivado CLT';
+      L.push({ id: 'x:' + c.id, fotoId: c.id, n: c.n || '', car: c.car || '', sal: num(c.valor), loja: depNome(c.dep), emp: c.emp, vinc: c.tipo === 'agencia' ? 'Agência' + (c.agencia ? ' (' + c.agencia + ')' : '') : 'Sem registro', adm: iso(c.ini), desl: fim, dtDesl: iso(c.fimData), mot: c.st === 'Efetivado CLT' ? 'Efetivado CLT' : (c.motivo || c.obs || ''), cpf: c.cpf || '' });
+    });
+    return L;
+  }
+  function dados(m, a, empId, incExt) {
+    var P = periodo(m, a), L = pessoas(incExt).filter(function (p) { return !empId || p.emp === empId; });
+    var ord = function (x, y) { return (x.loja || '~').localeCompare(y.loja || '~', 'pt-BR') || x.n.localeCompare(y.n, 'pt-BR'); };
+    // ativos no fim do mês: admitidos até o fim do mês e não desligados até lá
+    var ativos = L.filter(function (p) { if (p.adm && p.adm > P.ate) return false; if (p.desl) return !!(p.dtDesl && p.dtDesl > P.ate); return true; }).sort(ord);
+    var adm = L.filter(function (p) { return p.adm && p.adm >= P.de && p.adm <= P.ate; }).sort(function (x, y) { return x.adm.localeCompare(y.adm) || x.n.localeCompare(y.n); });
+    var desl = L.filter(function (p) { return p.desl && p.dtDesl && p.dtDesl >= P.de && p.dtDesl <= P.ate; }).sort(function (x, y) { return x.dtDesl.localeCompare(y.dtDesl) || x.n.localeCompare(y.n); });
+    var porId = {}; L.forEach(function (p) { porId[p.id] = p; });
+    var fer = [];
+    DB.g('ferias').forEach(function (r) {
+      var p = porId[r.fid] || porId['x:' + r.fid]; if (!p) return;
+      var i = iso(r.ini); if (!i) return;
+      var f = iso(r.fim) || (iso(r.ret) ? addD(iso(r.ret), -1) : '') || (parseInt(r.dias, 10) ? addD(i, parseInt(r.dias, 10) - 1) : i);
+      if (i > P.ate || f < P.de) return;
+      var dias = Math.round((new Date(f + 'T12:00:00') - new Date(i + 'T12:00:00')) / 86400000) + 1;
+      fer.push({ p: p, ini: i, fim: f, dias: dias, st: r.st || '', per: r.per || ((r.ai ? br(r.ai) : '') + (r.af ? ' a ' + br(r.af) : '')) });
+    });
+    fer.sort(function (x, y) { return x.ini.localeCompare(y.ini) || x.p.n.localeCompare(y.p.n); });
+    var folha = Math.round(ativos.reduce(function (s, p) { return s + p.sal; }, 0) * 100) / 100;
+    var porLoja = {}; ativos.forEach(function (p) { var k = p.loja || '(sem loja)'; porLoja[k] = porLoja[k] || { n: 0, sal: 0 }; porLoja[k].n++; porLoja[k].sal += p.sal; });
+    return { m: m, a: a, P: P, ativos: ativos, adm: adm, fer: fer, desl: desl, folha: folha, porLoja: porLoja, empId: empId, incExt: incExt };
+  }
+
+  // ── janela ──
+  function injetar() {
+    if (el('modal-reldir')) return;
+    var h = new Date();
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-bg" id="modal-reldir"><div class="modal" style="max-width:760px;">' +
+      '<div class="modal-header"><span class="modal-title">📊 Relatório mensal para a diretoria</span><button class="modal-close" onclick="closeModal(\'modal-reldir\')">×</button></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Relação de todos os funcionários (cargo, salário e loja), admitidos no mês com foto, férias no mês e desligados no mês. Sai em <strong>PDF</strong> (com fotos) e em <strong>Excel</strong> (uma aba por item).</div>' +
+      '<div class="form-grid">' +
+      '<div class="form-group"><label>Mês</label><select id="rdr-mes" onchange="rdrPrevia()">' + MES.map(function (m, i) { return '<option value="' + i + '"' + (i === h.getMonth() ? ' selected' : '') + '>' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group"><label>Ano</label><input id="rdr-ano" type="number" min="2000" max="2100" value="' + h.getFullYear() + '" onchange="rdrPrevia()"></div>' +
+      '<div class="form-group"><label>Empresa</label><select id="rdr-emp" onchange="rdrPrevia()"></select></div>' +
+      '<div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:500;"><input id="rdr-ext" type="checkbox" checked style="width:auto;" onchange="rdrPrevia()"> Incluir Agência e Sem registro</label></div>' +
+      '</div><div id="rdr-previa" style="margin-top:10px;"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-reldir\')">Fechar</button><button class="btn btn-outline" onclick="rdrExcel()">📥 Excel</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="rdrPdf()">🖨️ PDF</button></div></div></div>');
+  }
+  function sel() { return dados(+el('rdr-mes').value, +el('rdr-ano').value || new Date().getFullYear(), el('rdr-emp').value, el('rdr-ext').checked); }
+  window.rdrAbrir = function () {
+    injetar();
+    var s = el('rdr-emp'), ant = s.value;
+    s.innerHTML = '<option value="">🏢 Todas as empresas</option>' + DB.g('empresas').slice().sort(function (a, b) { return (a.razao || '').localeCompare(b.razao || ''); }).map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao || '') + (e.cnpj ? ' · ' + esc(e.cnpj) : '') + '</option>'; }).join('');
+    if (ant) s.value = ant;
+    rdrPrevia(); el('modal-reldir').classList.add('open');
+  };
+  window.rdrPrevia = function () {
+    var D = sel(), c = function (ic, t, v, s) { return '<div style="flex:1;min-width:130px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-size:12px;color:var(--gray-600);">' + ic + ' ' + t + '</div><div style="font-size:20px;font-weight:700;">' + v + '</div>' + (s ? '<div style="font-size:11.5px;color:var(--gray-600);">' + s + '</div>' : '') + '</div>'; };
+    el('rdr-previa').innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      c('👥', 'Funcionários', D.ativos.length, 'Salários R$ ' + brl(D.folha)) + c('🟢', 'Admitidos', D.adm.length, '') + c('🏖️', 'Férias no mês', D.fer.length, '') + c('🔴', 'Desligados', D.desl.length, '') + '</div>' +
+      '<div style="font-size:12px;color:var(--gray-600);margin-top:6px;">' + MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a + ' · funcionários ativos no fim do mês.</div>';
+  };
+  function titulo(D) { var e = D.empId ? emp(D.empId) : null; return { mes: MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a, emp: e ? e.razao + (e.cnpj ? ' · CNPJ ' + e.cnpj : '') : 'Todas as empresas', arq: 'Relatorio_Diretoria_' + String(D.m + 1).padStart(2, '0') + '-' + D.a + (e ? '_' + String(e.razao || '').replace(/[^\wÀ-ÿ]+/g, '_') : '') }; }
+  function registrar(D, fmt) { try { var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), mes: D.m, ano: D.a, emp: D.empId || '', fmt: fmt, n: D.ativos.length, adm: D.adm.length, fer: D.fer.length, desl: D.desl.length, folha: D.folha }); DB.s(K_HIST, h.slice(-36)); } catch (e) {} }
+
+  // ── PDF (impressão) ──
+  window.rdrPdf = function () {
+    var D = sel(), T = titulo(D), p = window.rhPerfil ? rhPerfil() : {};
+    var logo = typeof LOGO_EMP_B64 !== 'undefined' && LOGO_EMP_B64 ? '<img src="' + LOGO_EMP_B64 + '" style="height:46px;">' : '<strong>' + esc(p.razao || 'BIN EMBALAGENS') + '</strong>';
+    var vazio = function (t) { return '<p class="vz">' + t + '</p>'; };
+    var lojas = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+    var h = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(T.arq) + '</title><style>' +
+      '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#222;font-size:11px;margin:0}' +
+      '.top{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid ' + COR + ';padding-bottom:8px;margin-bottom:10px}.top h1{font-size:17px;margin:0;color:' + COR + '}.top p{margin:2px 0 0;color:#555}' +
+      '.kp{display:flex;gap:8px;margin:8px 0 14px}.kp div{flex:1;border:1px solid #ccd;border-radius:6px;padding:8px;text-align:center}.kp b{display:block;font-size:18px;color:' + COR + '}' +
+      'h2{font-size:13px;background:' + COR + ';color:#fff;padding:5px 8px;margin:16px 0 6px;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}th{background:#e8eaf6}td.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f3f3f3}' +
+      '.vz{color:#777;font-style:italic;margin:4px 0}.ad{display:flex;flex-wrap:wrap;gap:10px}.ad .c{width:calc(50% - 5px);display:flex;gap:10px;border:1px solid #ccd;border-radius:6px;padding:8px;box-sizing:border-box;page-break-inside:avoid}' +
+      '.ad img,.ad .ph{width:70px;height:88px;object-fit:cover;border-radius:4px;flex-shrink:0}.ad .ph{background:#e8eaf6;color:' + COR + ';display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold}.ad .c div{line-height:1.5}' +
+      'tr{page-break-inside:avoid}</style></head><body>' +
+      '<div class="top"><div><h1>Relatório mensal de pessoal — ' + esc(T.mes) + '</h1><p>' + esc(T.emp) + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT') + '</p><p>Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p></div>' + logo + '</div>' +
+      '<div class="kp"><div>Funcionários<b>' + D.ativos.length + '</b></div><div>Total de salários<b>R$ ' + brl(D.folha) + '</b></div><div>Admitidos<b>' + D.adm.length + '</b></div><div>Férias no mês<b>' + D.fer.length + '</b></div><div>Desligados<b>' + D.desl.length + '</b></div></div>' +
+      // 1. relação
+      '<h2>1. Relação de funcionários — cargo, salário e loja</h2>' + (D.ativos.length ? '<table><thead><tr><th>#</th><th>Nome</th><th>Cargo</th><th>Salário</th><th>Loja</th><th>Empresa</th><th>Vínculo</th><th>Admissão</th></tr></thead><tbody>' +
+        D.ativos.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.loja || '—') + '</td><td>' + esc(emp(x.emp).razao || '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + br(x.adm) + '</td></tr>'; }).join('') +
+        '<tr class="t"><td colspan="3">TOTAL — ' + D.ativos.length + ' funcionário(s)</td><td class="n">R$ ' + brl(D.folha) + '</td><td colspan="4"></td></tr></tbody></table>' +
+        '<table style="margin-top:8px;width:60%"><thead><tr><th>Loja</th><th>Funcionários</th><th>Total de salários</th></tr></thead><tbody>' + lojas.map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="n">' + D.porLoja[k].n + '</td><td class="n">R$ ' + brl(D.porLoja[k].sal) + '</td></tr>'; }).join('') + '</tbody></table>' : vazio('Nenhum funcionário.')) +
+      // 2. admitidos
+      '<h2>2. Admitidos no mês</h2>' + (D.adm.length ? '<div class="ad">' + D.adm.map(function (x) { var f = foto(x.fotoId); return '<div class="c">' + (f ? '<img src="' + f + '">' : '<span class="ph">' + esc(ini(x.n)) + '</span>') + '<div><b>' + esc(x.n) + '</b><br>Cargo: ' + esc(x.car || '—') + '<br>Loja: ' + esc(x.loja || '—') + '<br>Admissão: ' + br(x.adm) + '<br>Salário: ' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '<br>' + esc(x.vinc) + '</div></div>'; }).join('') + '</div>' : vazio('Nenhuma admissão no mês.')) +
+      // 3. férias
+      '<h2>3. Férias no mês</h2>' + (D.fer.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Início</th><th>Fim</th><th>Dias</th><th>Período aquisitivo</th><th>Situação</th></tr></thead><tbody>' +
+        D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td></tr>'; }).join('') + '</tbody></table>' : vazio('Ninguém de férias no mês.')) +
+      // 4. desligados
+      '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th></tr></thead><tbody>' +
+        D.desl.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td></tr>'; }).join('') + '</tbody></table>' : vazio('Nenhum desligamento no mês.')) +
+      '</body></html>';
+    registrar(D, 'pdf');
+    if (typeof _abrirDocSimples === 'function') _abrirDocSimples(h, T.arq); else { var w = window.open('', '_blank'); if (w) { w.document.write(h); w.document.close(); setTimeout(function () { w.print(); }, 700); } }
+  };
+
+  // ── Excel (.xlsx com várias abas, sem bibliotecas) ──
+  function xlsx(abas) {
+    var te = new TextEncoder();
+    function x(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function col(c) { var s = ''; c++; while (c) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; }
+    var arqs = [], ct = '', rels = '', sh = '';
+    abas.forEach(function (A, k) {
+      var n = k + 1, rows = A.linhas, maxC = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([1]));
+      var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:' + col(maxC - 1) + Math.max(rows.length, 1) + '"/><sheetViews><sheetView workbookViewId="0"' + (k === 0 ? ' tabSelected="1"' : '') + '><pane ySplit="' + A.fixa + '" topLeftCell="A' + (A.fixa + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
+        '<cols>' + A.larg.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols><sheetData>' +
+        rows.map(function (r, i) {
+          var st = A.est[i] || 0;
+          return '<row r="' + (i + 1) + '">' + r.map(function (v, c) {
+            if (v === null || v === undefined || v === '') return st ? '<c r="' + col(c) + (i + 1) + '" s="' + st + '"/>' : '';
+            var ref = col(c) + (i + 1), s = st || (typeof v === 'number' && A.moeda.indexOf(c) !== -1 ? 3 : 0);
+            if (typeof v === 'number' && st === 4 && A.moeda.indexOf(c) !== -1) s = 5;
+            return typeof v === 'number' ? '<c r="' + ref + '"' + (s ? ' s="' + s + '"' : '') + '><v>' + v + '</v></c>' : '<c r="' + ref + '" t="inlineStr"' + (s ? ' s="' + s + '"' : '') + '><is><t xml:space="preserve">' + x(v) + '</t></is></c>';
+          }).join('') + '</row>';
+        }).join('') + '</sheetData>' + (A.merge ? '<mergeCells count="1"><mergeCell ref="' + A.merge + '"/></mergeCells>' : '') + '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>';
+      arqs.push(['xl/worksheets/sheet' + n + '.xml', xml]);
+      ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+      rels += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
+      sh += '<sheet name="' + x(A.nome.slice(0, 31)) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+    });
+    var N = abas.length;
+    arqs.unshift(
+      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + '</Types>'],
+      ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' + sh + '</sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '<Relationship Id="rId' + (N + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+      // estilos: 0 normal · 1 título · 2 cabeçalho · 3 moeda · 4 total (negrito) · 5 total moeda
+      ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R$&quot; #,##0.00"/></numFmts><fonts count="4"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="13"/><color rgb="FF283593"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font></fonts>' +
+        '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF283593"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EAF6"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+        '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBBBBBB"/></left><right style="thin"><color rgb="FFBBBBBB"/></right><top style="thin"><color rgb="FFBBBBBB"/></top><bottom style="thin"><color rgb="FFBBBBBB"/></bottom><diagonal/></border></borders>' +
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="3" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']
+    );
+    var T = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
+    function crc(u) { var c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = T[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    var partes = [], central = [], off = 0;
+    arqs.forEach(function (a) {
+      var nm = te.encode(a[0]), d = te.encode(a[1]), cr = crc(d), h = new DataView(new ArrayBuffer(30)), cd = new DataView(new ArrayBuffer(46));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x5521, true); h.setUint32(14, cr, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true);
+      cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true); cd.setUint16(14, 0x5521, true); cd.setUint32(16, cr, true); cd.setUint32(20, d.length, true); cd.setUint32(24, d.length, true); cd.setUint16(28, nm.length, true); cd.setUint32(42, off, true);
+      partes.push(new Uint8Array(h.buffer), nm, d); central.push(new Uint8Array(cd.buffer), nm); off += 30 + nm.length + d.length;
+    });
+    var cdT = central.reduce(function (s, p) { return s + p.length; }, 0), e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, arqs.length, true); e.setUint16(10, arqs.length, true); e.setUint32(12, cdT, true); e.setUint32(16, off, true);
+    return new Blob(partes.concat(central, [new Uint8Array(e.buffer)]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  window.rdrExcel = function () {
+    try {
+      var D = sel(), T = titulo(D), sub = T.mes + ' · ' + T.emp + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT');
+      function aba(nome, tit, cab, linhas, larg, moeda, total) {
+        var rows = [[tit], [sub], [], cab].concat(linhas), est = { 0: 1, 3: 2 };
+        if (total) { rows.push(total); est[rows.length - 1] = 4; }
+        if (!linhas.length) rows.push(['Nenhum registro no mês.']);
+        return { nome: nome, linhas: rows, est: est, larg: larg, moeda: moeda, fixa: 4 };
+      }
+      var lojas = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+      var abas = [
+        { nome: 'Resumo', linhas: [['Relatório mensal de pessoal — ' + T.mes], [sub], [], ['Item', 'Quantidade', 'Valor'], ['Funcionários (ativos no fim do mês)', D.ativos.length, D.folha], ['Admitidos no mês', D.adm.length, ''], ['Férias no mês', D.fer.length, ''], ['Desligados no mês', D.desl.length, ''], [], ['Loja', 'Funcionários', 'Total de salários']].concat(lojas.map(function (k) { return [k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]; })),
+          est: { 0: 1, 3: 2, 9: 2 }, larg: [40, 14, 20], moeda: [2], fixa: 0 },
+        aba('Funcionários', 'Relação de funcionários — cargo, salário e loja', ['Nome', 'Cargo', 'Salário', 'Loja', 'Empresa', 'CNPJ', 'Vínculo', 'Admissão'],
+          D.ativos.map(function (x) { var e = emp(x.emp); return [x.n, x.car, x.sal || '', x.loja, e.razao || '', e.cnpj || '', x.vinc, br(x.adm)]; }), [38, 26, 15, 24, 34, 20, 18, 12], [2],
+          ['TOTAL — ' + D.ativos.length + ' funcionário(s)', '', D.folha, '', '', '', '', '']),
+        aba('Admitidos', 'Admitidos no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Salário', 'CPF'],
+          D.adm.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), x.sal || '', x.cpf]; }), [38, 26, 24, 34, 18, 12, 15, 16], [6], D.adm.length ? ['TOTAL — ' + D.adm.length + ' admitido(s)', '', '', '', '', '', '', ''] : null),
+        aba('Férias', 'Férias no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação'],
+          D.fer.map(function (r) { return [r.p.n, r.p.car, r.p.loja, emp(r.p.emp).razao || '', br(r.ini), br(r.fim), r.dias, r.per, r.st]; }), [38, 26, 24, 34, 12, 12, 8, 26, 16], [], D.fer.length ? ['TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', ''] : null),
+        aba('Desligados', 'Desligados no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Desligamento', 'Salário', 'Motivo'],
+          D.desl.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), br(x.dtDesl), x.sal || '', x.mot]; }), [38, 26, 24, 34, 18, 12, 13, 15, 40], [7], D.desl.length ? ['TOTAL — ' + D.desl.length + ' desligado(s)', '', '', '', '', '', '', '', ''] : null)
+      ];
+      var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx(abas)); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      registrar(D, 'xlsx'); if (typeof toast === 'function') toast('📥 Relatório da diretoria exportado');
+    } catch (e) { console.error(e); alert('Não foi possível gerar o Excel: ' + (e.message || e)); }
+  };
+
+  // ── cartão em Gerar Documentos ──
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="rel_dir"]')) return;
+    var ref = grid.querySelector('[data-docbase="pag_banco"]') || grid.querySelector('[data-docbase="rec_vt_sr"]') || grid.querySelector('[data-docbase="termo_uni"]');
+    var h = '<div class="trein-card" data-docbase="rel_dir" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">📊 Relatório mensal para a diretoria</div><div class="tc-meta">Excel e PDF · por mês</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'rel_dir\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Relação com todos os funcionários (cargo, salário e loja), admitidos no mês com foto, férias no mês e desligados no mês. Filtro por empresa; opção de incluir Agência e Sem registro.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="rdrAbrir()">📊 Gerar relatório</button></div></div>';
+    if (ref) ref.insertAdjacentHTML('afterend', h); else grid.insertAdjacentHTML('beforeend', h);
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
 </body>
 </html>
