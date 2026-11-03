@@ -23984,9 +23984,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     var pdf = await pdfjsLib.getDocument({ data: buf }).promise, out = [];
     for (var i = 1; i <= pdf.numPages; i++) {
-      var tc = await (await pdf.getPage(i)).getTextContent(), lin = {};
-      tc.items.forEach(function (it) { if (!it.str || !it.str.trim()) return; var y = Math.round(it.transform[5] / 3); (lin[y] = lin[y] || []).push(it); });
-      Object.keys(lin).sort(function (a, b) { return b - a; }).forEach(function (y) { out.push(lin[y].sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (it) { return it.str.trim(); }).join(' ')); });
+      var tc = await (await pdf.getPage(i)).getTextContent(), its = tc.items.filter(function (it) { return it.str && it.str.trim(); }).sort(function (a, b) { return b.transform[5] - a.transform[5]; }), grupos = [];
+      // mesma linha quando a altura difere até 3 pontos (rótulo e valor podem ter base levemente diferente)
+      its.forEach(function (it) { var y = it.transform[5], g = grupos[grupos.length - 1]; if (g && Math.abs(g.y - y) <= 3) g.it.push(it); else grupos.push({ y: y, it: [it] }); });
+      grupos.forEach(function (g) { out.push(g.it.sort(function (a, b) { return a.transform[4] - b.transform[4]; }).map(function (it) { return it.str.trim(); }).join(' ')); });
     }
     return out.join('\n');
   }
@@ -23994,11 +23995,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function valorLiquido(txt) {
     var L = txt.split('\n'), i, m;
     var pref = [/l[íi]quido\s+(a\s+receber|da\s+rescis|rescis)/i, /total\s+l[íi]quido/i, /valor\s+l[íi]quido/i, /l[íi]quido/i];
-    for (var k = 0; k < pref.length; k++) for (i = 0; i < L.length; i++) if (pref[k].test(L[i])) {
-      m = L[i].match(MOEDA); if (m) return num(m[m.length - 1]);
+    for (var k = 0; k < pref.length; k++) { if (k === pref.length - 1) { var bd = brutoDed(L); if (bd > 0) return bd; } for (i = 0; i < L.length; i++) if (pref[k].test(L[i])) {
+      var dep = L[i].slice(L[i].search(pref[k])); m = dep.match(MOEDA); if (m) return num(m[0]);
+      if (i > 0 && !/l[íi]quido|total|bruto|dedu/i.test(L[i - 1])) { m = L[i - 1].match(MOEDA); if (m && L[i - 1].replace(MOEDA, '').replace(/R\$|\s/g, '') === '') return num(m[m.length - 1]); }
       for (var j = 1; j <= 2 && i + j < L.length; j++) { m = L[i + j].match(MOEDA); if (m) return num(m[m.length - 1]); }
-    }
+    } }
     return 0;
+  }
+  // TRCT: total bruto − total de deduções
+  function brutoDed(L) {
+    var tb = 0, td = 0; L.forEach(function (l) { var a = l.match(/total\s+bruto[^0-9]*(\d{1,3}(?:\.\d{3})*,\d{2})/i), b = l.match(/total\s+(?:de\s+)?dedu\S*[^0-9]*(\d{1,3}(?:\.\d{3})*,\d{2})/i); if (a) tb = num(a[1]); if (b) td = num(b[1]); });
+    return tb > 0 ? Math.round((tb - td) * 100) / 100 : 0;
   }
   function acharPessoa(txt) {
     var P = pessoas(), d = dig(txt), T = ' ' + sem(txt) + ' ';
