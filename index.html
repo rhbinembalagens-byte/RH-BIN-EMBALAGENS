@@ -22189,6 +22189,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     Object.keys(v).forEach(function (k) { if (k === 'bonus') return; if (m[k] && t[m[k]] != null) t[m[k]] += v[k]; });
     t.bonus = v.bonus;
     }
+    try { if (typeof window.benefBonusRecibo === 'function') t.bonus += benefBonusRecibo(fid).v; } catch (e) {}
     Object.keys(t).forEach(function (k) { t[k] = Math.round(t[k] * 100) / 100; });
     return t;
   }
@@ -22247,12 +22248,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var dd = (typeof window.escDiasPeriodo === 'function' && de && ate) ? window.escDiasPeriodo(c.escala, de, ate) : ((typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22));
         var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 };
         if (nv) ['mob', 'livre', 'alim', 'bonus', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
+        var bBase = s.bonus; try { if (typeof window.benefBonusRecibo === 'function') s.bonus = Math.round((s.bonus + benefBonusRecibo(x.fid).v) * 100) / 100; } catch (e) {}
         var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
         tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
         CAT.forEach(function (k) {
           var td = document.createElement('td'); td.style.cssText = 'padding:5px 7px;vertical-align:middle;';
           var i = document.createElement('input'); i.type = 'number'; i.step = '0.01'; i.min = '0'; i.id = idDe(k[0], x.fid); i.dataset.c = k[0]; i.dataset.f = x.fid;
           i.value = s[k[0]] > 0 ? s[k[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : '');
+          if (k[0] === 'bonus') i.dataset.bbase = String(bBase || 0);
           i.oninput = function () { this.dataset.man = '1'; this.className = 'b3' + (this.value ? ' has-val' : ''); total(x.fid); };
           td.appendChild(i); tr.appendChild(td);
         });
@@ -23787,6 +23790,70 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   card();
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
+<script>
+/* ═══════ BENEFÍCIOS › GERAR ARQUIVO: bônus por resultado dos recibos (Gerar Documentos) do mês anterior ao período do pedido ═══════ */
+(function () {
+  var MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function el(id) { return document.getElementById(id); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function brl(v) { return 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  // mês/ano a que o recibo de bônus se refere (texto do "Período de referência")
+  function mesDoRecibo(r) {
+    var t = sem(r.ref || r.refTxt || ''), m, a, i;
+    var ds = t.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/g);
+    if (ds && ds.length) { m = ds[ds.length - 1].split('/'); a = +m[2]; if (a < 100) a += 2000; return { m: +m[1] - 1, a: a }; }
+    for (i = 0; i < 12; i++) { var nm = sem(MES[i]); if (t.indexOf(nm) !== -1 || new RegExp('\\b' + nm.slice(0, 3) + '\\b').test(t)) { a = (t.match(/(20\d{2})/) || [])[1]; return a ? { m: i, a: +a } : null; } }
+    if ((m = t.match(/\b(\d{1,2})\s*[\/-]\s*(20\d{2})\b/))) return { m: +m[1] - 1, a: +m[2] };
+    if ((m = t.match(/^(\d{1,2})\|(20\d{2})/))) return { m: +m[1], a: +m[2] };
+    return null;
+  }
+  // mês anterior ao início do período do pedido (ex.: pedido 06/11 a 05/12 → bônus de outubro)
+  function mesAlvo() {
+    var de = (el('flash-de') || {}).value; if (!de) return null;
+    var m = +de.slice(5, 7) - 2, a = +de.slice(0, 4); if (m < 0) { m = 11; a--; }
+    return { m: m, a: a };
+  }
+  window.benefBonusRecibo = function (fid) {
+    var A = mesAlvo(); if (!A) return { v: 0, mes: '' };
+    fid = String(fid || ''); var pk = fid.indexOf('x:') === 0 ? fid : 'f:' + fid, p;
+    if (fid.indexOf('x:') === 0) p = DB.g('colab-ext').find(function (c) { return 'x:' + c.id === fid; }); else p = DB.g('funcionarios').find(function (f) { return f.id === fid; });
+    var nome = sem(p && p.n).trim(), v = 0;
+    DB.g('recibos-hist').forEach(function (r) {
+      if (r.tipo !== 'rec_bon' || !(r.vN > 0)) return;
+      if (!(r.pk ? r.pk === pk : (nome && sem(r.nome).trim() === nome))) return;
+      var M = mesDoRecibo(r); if (!M || M.m !== A.m || M.a !== A.a) return;
+      v += +r.vN || 0;
+    });
+    return { v: Math.round(v * 100) / 100, mes: MES[A.m] + '/' + A.a };
+  };
+  // aviso + recálculo do Bônus quando muda a data do período
+  function aviso() {
+    var tb = el('flash-tbody'); if (!tb) return;
+    var A = mesAlvo(), box = el('b3-bonrec'), q = 0, tot = 0;
+    tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
+      var r = benefBonusRecibo(i.dataset.f);
+      if (r.v > 0) { q++; tot += r.v; i.title = 'Inclui bônus por resultado de ' + r.mes + ' (recibo): ' + brl(r.v); i.style.borderColor = '#bf360c'; } else { i.title = ''; i.style.borderColor = ''; }
+    });
+    var tab = el('flash-table'); if (!tab) return;
+    if (!box) { tab.closest('.table-wrap') ? tab.closest('.table-wrap').insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>') : tab.insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>'); box = el('b3-bonrec'); }
+    box.innerHTML = A ? '🏆 <strong>Bônus por resultado</strong> dos recibos de <strong>' + MES[A.m] + '/' + A.a + '</strong> (mês anterior ao período do pedido) ' + (q ? 'incluído na coluna Bônus: <strong>' + q + '</strong> colaborador(es) · <strong>' + brl(tot) + '</strong>' : '— nenhum recibo de bônus gerado com essa referência.') : '';
+  }
+  function recalc() {
+    var tb = el('flash-tbody'); if (!tb) return;
+    tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
+      if (i.dataset.man) return; var f = i.dataset.f;
+      if (f.indexOf('x:') === 0) { var v = (parseFloat(i.dataset.bbase) || 0) + benefBonusRecibo(f).v; i.value = v > 0 ? v.toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); if (typeof b3TotGeral === 'function') b3TotGeral(); var c = el('b3tot-' + f); if (c) { var t = ['mob', 'livre', 'b3bonus', 'alim'].reduce(function (s, k) { return s + (parseFloat((el(k + '-' + f) || {}).value) || 0); }, 0); c.textContent = t > 0 ? brl(t) : '—'; } }
+      else if (typeof b3Sugerir === 'function') b3Sugerir(f);
+    });
+    aviso();
+  }
+  document.addEventListener('change', function (e) { if (e.target && (e.target.id === 'flash-de' || e.target.id === 'flash-ate')) setTimeout(recalc, 60); }, true);
+  var _rf = window.rdFlash;
+  if (typeof _rf === 'function') window.rdFlash = function () { var r = _rf.apply(this, arguments); setTimeout(function () { try { aviso(); } catch (e) {} }, 80); return r; };
+  var _oc = window.onFlashEmpChange;
+  if (typeof _oc === 'function') window.onFlashEmpChange = function () { var r = _oc.apply(this, arguments); setTimeout(function () { try { aviso(); } catch (e) {} }, 120); return r; };
 })();
 </script>
 </body>
