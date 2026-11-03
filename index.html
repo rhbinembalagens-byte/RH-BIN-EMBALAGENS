@@ -23152,6 +23152,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return { dep: d, fat: fat, T: T, F: F, teto: teto, pool: pool, cota: cota, nEq: P.filter(function (p) { return p.papel === 'eq'; }).length, nOk: eqOk.length, P: P, total: r2(P.reduce(function (s, p) { return s + p.valor; }, 0)) };
   }
   function deps() { return DB.g('departamentos').slice().sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || '', 'pt-BR'); }); }
+  // Agência separada no fim do departamento (só exibição; o cálculo não muda)
+  var GCOR = { 'Sem registro': { bg: '#fff3e0', fg: '#e65100', bd: '#ef6c00', ic: '📝', t: 'Colaboradores sem registro' }, 'Agência': { bg: '#e3f2fd', fg: '#0d47a1', bd: '#1565c0', ic: '🏢', t: 'Colaboradores de Agência' } };
+  function ordAg(P) {
+    var out = P.filter(function (p) { return !GCOR[p.g]; });
+    ['Sem registro', 'Agência'].forEach(function (g) { var a = P.filter(function (p) { return p.g === g; }); if (a.length) out = out.concat([{ _sep: true, g: g, n: a.length, v: r2(a.reduce(function (s, p) { return s + (p.valor || 0); }, 0)) }], a); });
+    return out;
+  }
+  function totG(R, g) { return r2(R.reduce(function (s, r) { return s + r.P.filter(function (p) { return p.g === g; }).reduce(function (t, p) { return t + (p.valor || 0); }, 0); }, 0)); }
   function injetar() {
     if (el('modal-bonus-calc')) return;
     document.body.insertAdjacentHTML('beforeend',
@@ -23186,8 +23194,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         (r.T ? '<span>Faixa a partir de <strong>R$ ' + brl(r.T.fat) + '</strong>' + (r.F ? ' · porte ' + esc(r.F.porte) : '') + '</span><span>Gerente <strong>R$ ' + brl(r.T.ger) + '</strong></span><span>Subgerente <strong>R$ ' + brl(r.T.sub) + '</strong></span><span>Equipe <strong>R$ ' + brl(r.T.eq) + '</strong> × teto <strong>' + r.teto + '</strong> = <strong>R$ ' + brl(r.pool) + '</strong></span><span>' + r.nOk + ' de ' + r.nEq + ' da equipe com direito → <strong>R$ ' + brl(r.cota) + '</strong> cada</span>'
           : '<span style="color:#b26a00;">' + (r.fat ? 'Faturamento abaixo da primeira faixa — sem bônus.' : 'Informe o faturamento do mês.') + '</span>') +
         '<span style="margin-left:auto;font-weight:700;">Total R$ ' + brl(r.total) + '</span></div>';
-      var linhas = r.P.map(function (p) {
-        return '<tr class="' + (p.perde ? 'perde' : '') + '"><td><strong>' + esc(p.n) + '</strong> <span style="font-size:10.5px;color:var(--gray-400);">' + esc(p.car || '') + (p.g !== 'CLT' ? ' · ' + p.g : '') + '</span></td>' +
+      var linhas = ordAg(r.P).map(function (p) {
+        if (p._sep) { var K = GCOR[p.g]; return '<tr><td colspan="6" style="background:' + K.bg + ';color:' + K.fg + ';font-weight:700;border-top:2px solid ' + K.bd + ';">' + K.ic + ' ' + K.t + ' · ' + p.n + ' pessoa(s) · bônus R$ ' + brl(p.v) + '</td></tr>'; }
+        var ag = GCOR[p.g];
+        return '<tr class="' + (p.perde ? 'perde' : '') + '"' + (ag ? ' style="background:' + ag.bg + ';"' : '') + '><td><strong' + (ag && !p.perde ? ' style="color:' + ag.fg + ';"' : '') + '>' + esc(p.n) + '</strong> <span style="font-size:10.5px;color:var(--gray-400);">' + esc(p.car || '') + (p.g !== 'CLT' ? ' · ' + p.g : '') + '</span></td>' +
           '<td><select onchange="bcOc(\'' + esc(p.pk) + '\',\'papel\',this.value)">' + Object.keys(PAP).map(function (k) { return '<option value="' + k + '"' + (p.papel === k ? ' selected' : '') + '>' + PAP[k] + '</option>'; }).join('') + '</select></td>' +
           '<td><input type="number" min="0" step="1" value="' + (p.faltas || 0) + '" onchange="bcOc(\'' + esc(p.pk) + '\',\'faltas\',this.value)"></td>' +
           '<td><input type="number" min="0" step="1" value="' + (p.atest || 0) + '" onchange="bcOc(\'' + esc(p.pk) + '\',\'atest\',this.value)"></td>' +
@@ -23195,7 +23205,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }).join('');
       return '<div class="bc-dep">' + cab + '<table style="width:100%;"><thead><tr><th>Colaborador</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Situação</th><th style="text-align:right;">Bônus</th></tr></thead><tbody>' + (linhas || '<tr><td colspan="6" style="color:var(--gray-400);">Ninguém neste departamento.</td></tr>') + '</tbody></table></div>';
     }).join('') : '<div style="padding:20px;text-align:center;color:var(--gray-400);">Nenhum departamento com faturamento lançado em ' + MES[C.m] + '/' + C.a + '. Escolha um departamento acima para lançar o faturamento aqui, ou lance em Departamentos e Cargos.</div>';
-    el('bc-tot').innerHTML = 'Total do bônus em ' + MES[C.m] + '/' + C.a + ': <strong>R$ ' + brl(G) + '</strong>';
+    var GA = totG(R, 'Agência'), GS = totG(R, 'Sem registro'), pil = function (g, v) { var K = GCOR[g]; return ' <span style="margin-left:8px;background:' + K.bg + ';color:' + K.fg + ';padding:2px 8px;border-radius:10px;">' + K.ic + ' ' + g + ': <strong>R$ ' + brl(v) + '</strong></span>'; };
+    el('bc-tot').innerHTML = 'Total do bônus em ' + MES[C.m] + '/' + C.a + ': <strong>R$ ' + brl(G) + '</strong>' + (GA || GS ? ' <span style="margin-left:8px;color:var(--gray-600);">CLT: <strong>R$ ' + brl(r2(G - GA - GS)) + '</strong></span>' + (GS ? pil('Sem registro', GS) : '') + (GA ? pil('Agência', GA) : '') : '');
   };
   window.bcFat = function (dep, v) { var n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === C.m && x.ano === C.a); }); if (n > 0) L.push({ id: uid(), dep: dep, mes: C.m, ano: C.a, valor: r2(n), em: new Date().toISOString() }); DB.s(K_FAT, L); setTimeout(bcRender, 0); };
   window.bcOc = function (pk, campo, v) {
@@ -23230,9 +23241,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bônus por resultado ' + MES[C.m] + '-' + C.a + '</title><style>' + css + '</style></head><body>' + (window.rhLogo ? '<img src="' + window.rhLogo + '" style="height:46px;float:right;">' : '') +
       '<h1>Bônus por resultado — ' + MES[C.m] + '/' + C.a + '</h1><div class="sub">Tabela Bonificação e dimensionamento de equipe · quem tem falta ou atestado no mês perde o bônus; o valor da equipe é redividido entre os demais.</div>' +
       R.map(function (r) { G += r.total; return '<h3>' + esc(r.dep.nome) + '</h3><div class="i">Faturamento R$ ' + brl(r.fat) + (r.T ? ' · faixa a partir de R$ ' + brl(r.T.fat) + ' · Gerente R$ ' + brl(r.T.ger) + ' · Subgerente R$ ' + brl(r.T.sub) + ' · Equipe R$ ' + brl(r.T.eq) + ' × teto ' + r.teto + ' = R$ ' + brl(r.pool) + ' ÷ ' + r.nOk + ' com direito = R$ ' + brl(r.cota) : ' · sem faixa') + '</div>' +
-        '<table><tr><th>Colaborador</th><th>Cargo</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Situação</th><th>Bônus</th></tr>' + r.P.map(function (p) { return '<tr' + (p.perde ? ' class="p"' : '') + '><td>' + esc(p.n) + '</td><td>' + esc(p.car) + '</td><td>' + PAP[p.papel] + '</td><td class="n">' + (p.faltas || 0) + '</td><td class="n">' + (p.atest || 0) + '</td><td>' + (p.papel === 'nao' ? 'não participa' : p.perde ? 'perdeu' : 'com direito') + '</td><td class="n">R$ ' + brl(p.valor) + '</td></tr>'; }).join('') +
+        '<table><tr><th>Colaborador</th><th>Cargo</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Situação</th><th>Bônus</th></tr>' + ordAg(r.P).map(function (p) { if (p._sep) { var K = GCOR[p.g]; return '<tr><td colspan="7" style="background:' + K.bg + ';color:' + K.fg + ';font-weight:bold;border-top:1.5pt solid ' + K.bd + ';">' + K.t.toUpperCase() + ' · ' + p.n + ' pessoa(s) · bônus R$ ' + brl(p.v) + '</td></tr>'; } var ag = GCOR[p.g]; return '<tr' + (p.perde ? ' class="p"' : '') + (ag ? ' style="background:' + ag.bg + ';' + (p.perde ? '' : 'color:' + ag.fg + ';') + '"' : '') + '><td>' + esc(p.n) + (ag ? ' <small>(' + p.g + ')</small>' : '') + '</td><td>' + esc(p.car) + '</td><td>' + PAP[p.papel] + '</td><td class="n">' + (p.faltas || 0) + '</td><td class="n">' + (p.atest || 0) + '</td><td>' + (p.papel === 'nao' ? 'não participa' : p.perde ? 'perdeu' : 'com direito') + '</td><td class="n">R$ ' + brl(p.valor) + '</td></tr>'; }).join('') +
         '<tr><th colspan="6">TOTAL DO DEPARTAMENTO</th><th class="n">R$ ' + brl(r.total) + '</th></tr></table>'; }).join('') +
-      '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3></body></html>';
+      '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' + (function () { var GA = totG(R, 'Agência'), GS = totG(R, 'Sem registro'); if (!GA && !GS) return ''; var pil = function (g, v) { var K = GCOR[g]; return ' · <span style="background:' + K.bg + ';color:' + K.fg + ';padding:2pt 6pt;"><b>' + g + ': R$ ' + brl(v) + '</b></span>'; }; return '<div style="font-size:10.5pt;">CLT: <b>R$ ' + brl(r2(G - GA - GS)) + '</b>' + (GS ? pil('Sem registro', GS) : '') + (GA ? pil('Agência', GA) : '') + '</div>'; })() + '</body></html>';
     _abrirDocSimples(h, 'Bonus_resultado_' + MES[C.m] + '_' + C.a);
   };
   // editor dos valores da tabela (gerente, subgerente, equipe por faixa)
