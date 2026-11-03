@@ -23711,54 +23711,76 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<h2>3. Férias no mês</h2>' + (D.fer.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Início</th><th>Fim</th><th>Dias</th><th>Período aquisitivo</th><th>Situação</th><th>Valor pago</th></tr></thead><tbody>' +
         D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td><td class="n">' + (r.pago ? 'R$ ' + brl(r.pago) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL PAGO DE FÉRIAS</td><td class="n">R$ ' + brl(D.ferPago) + '</td></tr></tbody></table>' : vazio('Ninguém de férias no mês.')) +
       // 4. desligados
-      '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th><th>Valor da rescisão</th></tr></thead><tbody>' +
-        D.desl.map(function (x) { return '<tr><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td><td class="n">' + (x.resc ? 'R$ ' + brl(x.resc) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL DE RESCISÕES</td><td class="n">R$ ' + brl(D.rescPago) + '</td></tr></tbody></table>' : vazio('Nenhum desligamento no mês.')) +
+      '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Foto</th><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th><th>Valor da rescisão</th></tr></thead><tbody>' +
+        D.desl.map(function (x) { var fd = foto(x.fotoId); return '<tr><td style="width:46px;padding:2px;">' + (fd ? '<img src="' + fd + '" style="width:42px;height:52px;object-fit:cover;border-radius:3px;display:block;">' : '<span style="display:flex;width:42px;height:52px;align-items:center;justify-content:center;background:#e8eaf6;color:' + COR + ';font-weight:bold;border-radius:3px;">' + esc(ini(x.n)) + '</span>') + '</td><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td><td class="n">' + (x.resc ? 'R$ ' + brl(x.resc) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="9">TOTAL DE RESCISÕES</td><td class="n">R$ ' + brl(D.rescPago) + '</td></tr></tbody></table>' : vazio('Nenhum desligamento no mês.')) +
       '</body></html>';
     registrar(D, 'pdf');
     if (typeof _abrirDocSimples === 'function') _abrirDocSimples(h, T.arq); else { var w = window.open('', '_blank'); if (w) { w.document.write(h); w.document.close(); setTimeout(function () { w.print(); }, 700); } }
   };
 
-  // ── Excel (.xlsx com várias abas, sem bibliotecas) ──
+  // ── Excel: aba "Relatório" (resumo, admitidos e desligados com foto, férias) + aba "Funcionários" ──
+  function fotoJpeg(src) {
+    return new Promise(function (ok) {
+      if (!src) return ok(null);
+      var im = new Image(); im.onload = function () { try { var W = 120, H = 150, c = document.createElement('canvas'); c.width = W; c.height = H; var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); var r = Math.max(W / im.width, H / im.height), w = im.width * r, h = im.height * r; g.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); var b = atob(c.toDataURL('image/jpeg', 0.85).split(',')[1]), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); ok(u); } catch (e) { ok(null); } };
+      im.onerror = function () { ok(null); }; im.src = src;
+    });
+  }
   function xlsx(abas) {
     var te = new TextEncoder();
     function x(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function col(c) { var s = ''; c++; while (c) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; }
-    var arqs = [], ct = '', rels = '', sh = '';
+    var arqs = [], ct = '', rels = '', sh = '', nImg = 0, nDr = 0;
     abas.forEach(function (A, k) {
-      var n = k + 1, rows = A.linhas, maxC = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([1]));
-      var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:' + col(maxC - 1) + Math.max(rows.length, 1) + '"/><sheetViews><sheetView workbookViewId="0"' + (k === 0 ? ' tabSelected="1"' : '') + '><pane ySplit="' + A.fixa + '" topLeftCell="A' + (A.fixa + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
+      var n = k + 1, rows = A.linhas, maxC = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([1])), fotos = (A.fotos || []).filter(function (f) { return f.bytes; });
+      var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:' + col(maxC - 1) + Math.max(rows.length, 1) + '"/><sheetViews><sheetView workbookViewId="0"' + (k === 0 ? ' tabSelected="1"' : '') + (A.fixa ? '><pane ySplit="' + A.fixa + '" topLeftCell="A' + (A.fixa + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView>' : '/>') + '</sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
         '<cols>' + A.larg.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols><sheetData>' +
         rows.map(function (r, i) {
-          var st = A.est[i] || 0;
-          return '<row r="' + (i + 1) + '">' + r.map(function (v, c) {
+          var st = (A.est || {})[i] || 0, ht = (A.alt || {})[i], mo = (A.moedaLin || {})[i] || A.moeda || [];
+          return '<row r="' + (i + 1) + '"' + (ht ? ' ht="' + ht + '" customHeight="1"' : '') + '>' + r.map(function (v, c) {
             if (v === null || v === undefined || v === '') return st ? '<c r="' + col(c) + (i + 1) + '" s="' + st + '"/>' : '';
-            var ref = col(c) + (i + 1), s = st || (typeof v === 'number' && A.moeda.indexOf(c) !== -1 ? 3 : 0);
-            if (typeof v === 'number' && st === 4 && A.moeda.indexOf(c) !== -1) s = 5;
+            var ref = col(c) + (i + 1), s = st || (typeof v === 'number' && mo.indexOf(c) !== -1 ? 3 : (ht ? 6 : 0));
+            if (typeof v === 'number' && st === 4 && mo.indexOf(c) !== -1) s = 5;
+            if (typeof v === 'number' && ht && !st) s = mo.indexOf(c) !== -1 ? 7 : 6;
             return typeof v === 'number' ? '<c r="' + ref + '"' + (s ? ' s="' + s + '"' : '') + '><v>' + v + '</v></c>' : '<c r="' + ref + '" t="inlineStr"' + (s ? ' s="' + s + '"' : '') + '><is><t xml:space="preserve">' + x(v) + '</t></is></c>';
           }).join('') + '</row>';
-        }).join('') + '</sheetData>' + (A.merge ? '<mergeCells count="1"><mergeCell ref="' + A.merge + '"/></mergeCells>' : '') + '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>';
+        }).join('') + '</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>' + (fotos.length ? '<drawing r:id="rId1"/>' : '') + '</worksheet>';
       arqs.push(['xl/worksheets/sheet' + n + '.xml', xml]);
+      if (fotos.length) {
+        nDr++; var dr = '', drRels = '';
+        fotos.forEach(function (f, j) {
+          nImg++; var rid = 'rId' + (j + 1);
+          arqs.push(['xl/media/image' + nImg + '.jpeg', f.bytes]);
+          drRels += '<Relationship Id="' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image' + nImg + '.jpeg"/>';
+          dr += '<xdr:oneCellAnchor><xdr:from><xdr:col>' + f.c + '</xdr:col><xdr:colOff>57150</xdr:colOff><xdr:row>' + f.r + '</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from><xdr:ext cx="457200" cy="571500"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="' + (j + 2) + '" name="Foto ' + (j + 1) + '"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="457200" cy="571500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+        });
+        arqs.push(['xl/drawings/drawing' + nDr + '.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' + dr + '</xdr:wsDr>']);
+        arqs.push(['xl/drawings/_rels/drawing' + nDr + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + drRels + '</Relationships>']);
+        arqs.push(['xl/worksheets/_rels/sheet' + n + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing' + nDr + '.xml"/></Relationships>']);
+        ct += '<Override PartName="/xl/drawings/drawing' + nDr + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
+      }
       ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
       rels += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
       sh += '<sheet name="' + x(A.nome.slice(0, 31)) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
     });
     var N = abas.length;
     arqs.unshift(
-      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + '</Types>'],
+      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + '</Types>'],
       ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
       ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' + sh + '</sheets></workbook>'],
       ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '<Relationship Id="rId' + (N + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
-      // estilos: 0 normal · 1 título · 2 cabeçalho · 3 moeda · 4 total (negrito) · 5 total moeda
-      ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R$&quot; #,##0.00"/></numFmts><fonts count="4"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="13"/><color rgb="FF283593"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font></fonts>' +
-        '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF283593"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EAF6"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      // estilos: 0 normal · 1 título · 2 cabeçalho · 3 moeda · 4 total · 5 total moeda · 6 texto centralizado na vertical (linhas com foto) · 7 moeda idem · 8 título de seção
+      ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R$&quot; #,##0.00"/></numFmts><fonts count="5"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="13"/><color rgb="FF283593"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts>' +
+        '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF5C6BC0"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EAF6"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF283593"/><bgColor indexed="64"/></patternFill></fill></fills>' +
         '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBBBBBB"/></left><right style="thin"><color rgb="FFBBBBBB"/></right><top style="thin"><color rgb="FFBBBBBB"/></top><bottom style="thin"><color rgb="FFBBBBBB"/></bottom><diagonal/></border></borders>' +
-        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="3" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="9"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="164" fontId="3" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="4" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']
     );
     var T = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
     function crc(u) { var c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = T[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
     var partes = [], central = [], off = 0;
     arqs.forEach(function (a) {
-      var nm = te.encode(a[0]), d = te.encode(a[1]), cr = crc(d), h = new DataView(new ArrayBuffer(30)), cd = new DataView(new ArrayBuffer(46));
+      var nm = te.encode(a[0]), d = typeof a[1] === 'string' ? te.encode(a[1]) : a[1], cr = crc(d), h = new DataView(new ArrayBuffer(30)), cd = new DataView(new ArrayBuffer(46));
       h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x5521, true); h.setUint32(14, cr, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true);
       cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true); cd.setUint16(14, 0x5521, true); cd.setUint32(16, cr, true); cd.setUint32(20, d.length, true); cd.setUint32(24, d.length, true); cd.setUint16(28, nm.length, true); cd.setUint32(42, off, true);
       partes.push(new Uint8Array(h.buffer), nm, d); central.push(new Uint8Array(cd.buffer), nm); off += 30 + nm.length + d.length;
@@ -23767,30 +23789,46 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     e.setUint32(0, 0x06054b50, true); e.setUint16(8, arqs.length, true); e.setUint16(10, arqs.length, true); e.setUint32(12, cdT, true); e.setUint32(16, off, true);
     return new Blob(partes.concat(central, [new Uint8Array(e.buffer)]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
-  window.rdrExcel = function () {
+  window.rdrExcel = async function () {
     try {
       var D = sel(), T = titulo(D), sub = T.mes + ' · ' + T.emp + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT');
-      function aba(nome, tit, cab, linhas, larg, moeda, total) {
-        var rows = [[tit], [sub], [], cab].concat(linhas), est = { 0: 1, 3: 2 };
-        if (total) { rows.push(total); est[rows.length - 1] = 4; }
-        if (!linhas.length) rows.push(['Nenhum registro no mês.']);
-        return { nome: nome, linhas: rows, est: est, larg: larg, moeda: moeda, fixa: 4 };
-      }
+      // aba 1: tudo em uma aba — coluna A = foto
+      var R = [], est = {}, alt = {}, ml = {}, fotos = [];
+      function lin(v, s, mo) { R.push(v); if (s) est[R.length - 1] = s; if (mo) ml[R.length - 1] = mo; return R.length - 1; }
+      function secao(t) { lin([]); lin(['', t, '', '', '', '', '', '', '', '', '', ''], 8); }
+      lin(['', 'Relatório mensal de pessoal — ' + T.mes], 1); lin(['', sub]);
+      secao('RESUMO');
+      lin(['', 'Item', 'Quantidade', 'Valor'], 2);
+      lin(['', 'Funcionários (ativos no fim do mês) · total de salários', D.ativos.length, D.folha], 0, [3]);
+      lin(['', 'Admitidos no mês', D.adm.length, ''], 0, [3]);
+      lin(['', 'Férias no mês · valor pago', D.fer.length, D.ferPago || 0], 0, [3]);
+      lin(['', 'Desligados no mês · valor das rescisões', D.desl.length, D.rescPago || 0], 0, [3]);
+      lin(['', 'TOTAL PAGO (férias + rescisões)', '', Math.round(((D.ferPago || 0) + (D.rescPago || 0)) * 100) / 100], 4, [3]);
+      secao('ADMITIDOS NO MÊS');
+      lin(['Foto', 'Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Salário', 'CPF'], 2);
+      if (!D.adm.length) lin(['', 'Nenhuma admissão no mês.']);
+      for (var i = 0; i < D.adm.length; i++) { var x = D.adm[i], r = lin(['', x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), x.sal || '', x.cpf], 0, [7]); alt[r] = 50; fotos.push({ r: r, c: 0, bytes: await fotoJpeg(foto(x.fotoId)) }); }
+      if (D.adm.length) lin(['', 'TOTAL — ' + D.adm.length + ' admitido(s)', '', '', '', '', '', '', ''], 4);
+      secao('DESLIGADOS NO MÊS');
+      lin(['Foto', 'Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Desligamento', 'Salário', 'Motivo', 'Valor da rescisão'], 2);
+      if (!D.desl.length) lin(['', 'Nenhum desligamento no mês.']);
+      for (var j = 0; j < D.desl.length; j++) { var y = D.desl[j], r2 = lin(['', y.n, y.car, y.loja, emp(y.emp).razao || '', y.vinc, br(y.adm), br(y.dtDesl), y.sal || '', y.mot, y.resc || ''], 0, [8, 10]); alt[r2] = 50; fotos.push({ r: r2, c: 0, bytes: await fotoJpeg(foto(y.fotoId)) }); }
+      if (D.desl.length) lin(['', 'TOTAL — ' + D.desl.length + ' desligado(s)', '', '', '', '', '', '', '', '', D.rescPago], 4, [10]);
+      secao('FÉRIAS NO MÊS');
+      lin(['', 'Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação', 'Valor pago'], 2);
+      if (!D.fer.length) lin(['', 'Ninguém de férias no mês.']);
+      D.fer.forEach(function (f) { lin(['', f.p.n, f.p.car, f.p.loja, emp(f.p.emp).razao || '', br(f.ini), br(f.fim), f.dias, f.per, f.st, f.pago || ''], 0, [10]); });
+      if (D.fer.length) lin(['', 'TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', '', D.ferPago], 4, [10]);
+      var aba1 = { nome: 'Relatório', linhas: R, est: est, alt: alt, moedaLin: ml, fotos: fotos, larg: [9, 36, 24, 20, 30, 16, 13, 13, 22, 26, 17], fixa: 0 };
+      // aba 2: funcionários
+      var F = [['Relação de funcionários — cargo, salário e loja'], [sub], [], ['Nome', 'Cargo', 'Salário', 'Loja', 'Empresa', 'CNPJ', 'Vínculo', 'Admissão']], fe = { 0: 1, 3: 2 };
+      D.ativos.forEach(function (p) { var e = emp(p.emp); F.push([p.n, p.car, p.sal || '', p.loja, e.razao || '', e.cnpj || '', p.vinc, br(p.adm)]); });
+      F.push(['TOTAL — ' + D.ativos.length + ' funcionário(s)', '', D.folha, '', '', '', '', '']); fe[F.length - 1] = 4;
       var lojas = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-      var abas = [
-        { nome: 'Resumo', linhas: [['Relatório mensal de pessoal — ' + T.mes], [sub], [], ['Item', 'Quantidade', 'Valor'], ['Funcionários (ativos no fim do mês)', D.ativos.length, D.folha], ['Admitidos no mês', D.adm.length, ''], ['Férias no mês (valor pago)', D.fer.length, D.ferPago || ''], ['Desligados no mês (rescisões)', D.desl.length, D.rescPago || ''], [], ['Loja', 'Funcionários', 'Total de salários']].concat(lojas.map(function (k) { return [k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]; })),
-          est: { 0: 1, 3: 2, 9: 2 }, larg: [40, 14, 20], moeda: [2], fixa: 0 },
-        aba('Funcionários', 'Relação de funcionários — cargo, salário e loja', ['Nome', 'Cargo', 'Salário', 'Loja', 'Empresa', 'CNPJ', 'Vínculo', 'Admissão'],
-          D.ativos.map(function (x) { var e = emp(x.emp); return [x.n, x.car, x.sal || '', x.loja, e.razao || '', e.cnpj || '', x.vinc, br(x.adm)]; }), [38, 26, 15, 24, 34, 20, 18, 12], [2],
-          ['TOTAL — ' + D.ativos.length + ' funcionário(s)', '', D.folha, '', '', '', '', '']),
-        aba('Admitidos', 'Admitidos no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Salário', 'CPF'],
-          D.adm.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), x.sal || '', x.cpf]; }), [38, 26, 24, 34, 18, 12, 15, 16], [6], D.adm.length ? ['TOTAL — ' + D.adm.length + ' admitido(s)', '', '', '', '', '', '', ''] : null),
-        aba('Férias', 'Férias no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação', 'Valor pago'],
-          D.fer.map(function (r) { return [r.p.n, r.p.car, r.p.loja, emp(r.p.emp).razao || '', br(r.ini), br(r.fim), r.dias, r.per, r.st, r.pago || '']; }), [38, 26, 24, 34, 12, 12, 8, 26, 16, 15], [9], D.fer.length ? ['TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', '', D.ferPago] : null),
-        aba('Desligados', 'Desligados no mês', ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Desligamento', 'Salário', 'Motivo', 'Valor da rescisão'],
-          D.desl.map(function (x) { return [x.n, x.car, x.loja, emp(x.emp).razao || '', x.vinc, br(x.adm), br(x.dtDesl), x.sal || '', x.mot, x.resc || '']; }), [38, 26, 24, 34, 18, 12, 13, 15, 40, 16], [7, 9], D.desl.length ? ['TOTAL — ' + D.desl.length + ' desligado(s)', '', '', '', '', '', '', '', '', D.rescPago] : null)
-      ];
-      var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx(abas)); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
+      F.push([]); F.push(['Loja', 'Funcionários', 'Total de salários']); fe[F.length - 1] = 2;
+      var fml = {}; lojas.forEach(function (k) { F.push([k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]); fml[F.length - 1] = [2]; });
+      var aba2 = { nome: 'Funcionários', linhas: F, est: fe, moeda: [2], moedaLin: fml, larg: [38, 26, 15, 24, 34, 20, 18, 12], fixa: 4 };
+      var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx([aba1, aba2])); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
       registrar(D, 'xlsx'); if (typeof toast === 'function') toast('📥 Relatório da diretoria exportado');
     } catch (e) { console.error(e); alert('Não foi possível gerar o Excel: ' + (e.message || e)); }
@@ -24015,10 +24053,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return best ? { p: best, como: 'nome' } : { p: null, como: '' };
   }
   function datasFerias(txt) {
-    var t = txt.replace(/\s+/g, ' '), m = t.match(/gozo[^0-9]{0,60}(\d{2}\/\d{2}\/\d{4})\s*(?:a|at[ée]|-|à)\s*(\d{2}\/\d{2}\/\d{4})/i) || t.match(/(\d{2}\/\d{2}\/\d{4})\s*(?:a|at[ée]|à)\s*(\d{2}\/\d{2}\/\d{4})/g);
-    if (m && m.length === 3 && /\//.test(m[1])) return { ini: isoBr(m[1]), fim: isoBr(m[2]) };
-    if (m && m.length) { var last = String(m[m.length - 1]).match(/(\d{2}\/\d{2}\/\d{4}).*?(\d{2}\/\d{2}\/\d{4})/); if (last) return { ini: isoBr(last[1]), fim: isoBr(last[2]) }; }
-    return { ini: '', fim: '' };
+    // pares "dd/mm/aaaa a dd/mm/aaaa": o aquisitivo tem ~1 ano; o gozo é o primeiro par curto (até 60 dias)
+    var t = String(txt || '').replace(/\s+/g, ' '), re = /(\d{2}\/\d{2}\/\d{4})\s*(?:a|at[ée]|à|-)\s*(\d{2}\/\d{2}\/\d{4})/gi, m, P = [];
+    while ((m = re.exec(t))) { var i = isoBr(m[1]), f = isoBr(m[2]); if (i && f && f >= i) P.push({ ini: i, fim: f, d: (new Date(f + 'T12:00:00') - new Date(i + 'T12:00:00')) / 86400000, pos: m.index }); }
+    var g = t.search(/gozo/i), cand = P.filter(function (p) { return p.d <= 60; });
+    var esc = cand.filter(function (p) { return g < 0 || p.pos > g; })[0] || cand[0];
+    return esc ? { ini: esc.ini, fim: esc.fim } : { ini: '', fim: '' };
   }
   function dataAfast(txt) {
     // TRCT: cabeçalho "24 Data de Admissão 25 Data do Aviso Prévio 26 Data de Afastamento" e as datas na linha de baixo (a de afastamento é a última)
