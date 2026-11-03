@@ -23622,6 +23622,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   function dados(m, a, empId, incExt) {
     var P = periodo(m, a), L = pessoas(incExt).filter(function (p) { return !empId || p.emp === empId; });
+    // rescisão enviada (📎 Rescisões): a data de afastamento vale como data de desligamento quando o cadastro está sem data
+    if (typeof window.rescisoesDe === 'function') L.forEach(function (p) {
+      var d = rescisoesDe(p.id).map(function (r) { return iso(r.data); }).filter(Boolean).sort().pop(); if (!d) return;
+      if (!p.dtDesl) p.dtDesl = d; if (!p.desl) p.desl = true;
+    });
     var ord = function (x, y) { return (x.loja || '~').localeCompare(y.loja || '~', 'pt-BR') || x.n.localeCompare(y.n, 'pt-BR'); };
     // ativos no fim do mês: admitidos até o fim do mês e não desligados até lá
     var ativos = L.filter(function (p) { if (p.adm && p.adm > P.ate) return false; if (p.desl) return !!(p.dtDesl && p.dtDesl > P.ate); return true; }).sort(ord);
