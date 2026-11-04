@@ -24464,5 +24464,59 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (typeof window.rdFer === 'function') { var _r = window.rdFer; window.rdFer = function () { var x = _r.apply(this, arguments); try { botoes(); } catch (e) {} return x; }; }
 })();
 </script>
+<script>
+/* ═══════ RECIBO DE BÔNUS POR RESULTADO: valores vêm do cálculo do bônus (editáveis) ═══════ */
+(function () {
+  var MES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function el(id) { return document.getElementById(id); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function brl(v) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function ehBonus() { var t = el('rc-tit'); return !!(t && /b[ôo]nus por resultado/i.test(t.textContent) && el('modal-recibo') && el('modal-recibo').classList.contains('open')); }
+  function grupo() { var g = document.querySelector('input[name="rc-modo"][value="grp"]'); return !!(g && g.checked); }
+  // mês do "Período de referência" (Outubro/2026, 10/2026, 01/10/2026 a 31/10/2026); vazio = mês anterior
+  function mesRef() {
+    var p = el('rc-periodo'); if (!p) return null;
+    if (!p.value.trim()) { var h = new Date(), m = h.getMonth() - 1, a = h.getFullYear(); if (m < 0) { m = 11; a--; } p.value = MES[m].charAt(0).toUpperCase() + MES[m].slice(1) + '/' + a; }
+    var t = sem(p.value), d = t.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/g), m2;
+    if (d) { var x = d[d.length - 1].split('/'), aa = +x[2]; return { m: +x[1] - 1, a: aa < 100 ? aa + 2000 : aa }; }
+    for (var i = 0; i < 12; i++) { var nm = sem(MES[i]); if (t.indexOf(nm) !== -1 || new RegExp('\\b' + nm.slice(0, 3) + '\\b').test(t)) { var y = (t.match(/(20\d{2})/) || [])[1]; return y ? { m: i, a: +y } : null; } }
+    if ((m2 = t.match(/\b(\d{1,2})\s*[\/-]\s*(20\d{2})\b/))) return { m: +m2[1] - 1, a: +m2[2] };
+    return null;
+  }
+  function valores() { var R = mesRef(); if (!R || typeof window.bcValores !== 'function') return null; var V = bcValores(R.m, R.a); return V ? { V: V, R: R } : { V: null, R: R }; }
+  function info(txt) {
+    var box = el('rc-bon-calc'); if (!box) { var t = el('rc-gtab'); var alvo = t ? t.parentNode : null; if (!alvo) return; alvo.insertAdjacentHTML('beforebegin', '<div id="rc-bon-calc" style="font-size:12.5px;margin:4px 0 6px;"></div>'); box = el('rc-bon-calc'); }
+    box.innerHTML = txt;
+  }
+  function preencherGrupo() {
+    if (!ehBonus() || !grupo()) { var b = el('rc-bon-calc'); if (b) b.innerHTML = ''; return; }
+    var X = valores(); if (!X) return;
+    if (!X.V) { info('🏆 Nenhum faturamento lançado no cálculo do bônus para <strong>' + MES[X.R.m] + '/' + X.R.a + '</strong> — preencha os valores à mão ou lance o faturamento em 🧮 Calcular bônus.'); return; }
+    var q = 0, t = 0, man = 0;
+    document.querySelectorAll('#rc-gtab tbody tr[data-pk]').forEach(function (tr) {
+      var i = tr.querySelector('.g-val'), ck = tr.querySelector('input.ck'), pk = tr.getAttribute('data-pk'), v = Math.round((X.V[pk] || 0) * 100) / 100; if (!i) return;
+      var nm = tr.querySelector('.nm'), lb = nm && nm.querySelector('.rc-bcalc'); if (lb) lb.remove();
+      if (tr.classList.contains('rc-rasc') || i.dataset.manual) { man++; if (nm) nm.insertAdjacentHTML('beforeend', '<div class="rc-bcalc" style="font-size:10.5px;color:#b26a00;">✏️ editado · calculado R$ ' + brl(v) + '</div>'); return; }
+      i.value = v > 0 ? brl(v) : ''; if (ck) ck.checked = v > 0;
+      if (v > 0) { q++; t += v; if (nm) nm.insertAdjacentHTML('beforeend', '<div class="rc-bcalc" style="font-size:10.5px;color:#6a1b9a;">🏆 calculado R$ ' + brl(v) + '</div>'); }
+    });
+    if (window.recGrupoTotal) recGrupoTotal();
+    info('🏆 Valores do <strong>cálculo do bônus de ' + MES[X.R.m] + '/' + X.R.a + '</strong> (Período de referência): <strong>' + q + '</strong> colaborador(es) com bônus · R$ <strong>' + brl(t) + '</strong>' + (man ? ' · ' + man + ' linha(s) editada(s) à mão mantida(s)' : '') + '. Quem não tem bônus fica desmarcado. Pode editar qualquer valor; o que você digitar fica valendo.');
+  }
+  function preencherInd() {
+    if (!ehBonus() || grupo()) return;
+    var pk = (el('rc-func') || {}).value, v = el('rc-valor'); if (!pk || !v || v.value.trim()) return;
+    var X = valores(); if (!X || !X.V) return;
+    var val = Math.round((X.V[pk] || 0) * 100) / 100; if (!(val > 0)) return;
+    v.value = brl(val); if (typeof window.recValorMudou === 'function') recValorMudou();
+    if (typeof toast === 'function') toast('🏆 Valor do cálculo do bônus de ' + MES[X.R.m] + '/' + X.R.a + ' (editável)');
+  }
+  var _l = window.recGrupoLista; if (_l) window.recGrupoLista = function () { var r = _l.apply(this, arguments); try { preencherGrupo(); } catch (e) { console.error(e); } return r; };
+  var _f = window.recFuncMudou; if (_f) window.recFuncMudou = function () { var r = _f.apply(this, arguments); setTimeout(function () { try { preencherInd(); } catch (e) { console.error(e); } }, 0); return r; };
+  var _m = window.recModo; if (_m) window.recModo = function () { var r = _m.apply(this, arguments); setTimeout(function () { try { if (grupo()) preencherGrupo(); else { var b = el('rc-bon-calc'); if (b) b.innerHTML = ''; } } catch (e) {} }, 0); return r; };
+  var _a = window.recAbrir; if (_a) window.recAbrir = function () { var r = _a.apply(this, arguments); setTimeout(function () { try { var b = el('rc-bon-calc'); if (b) b.innerHTML = ''; if (ehBonus()) { mesRef(); if (grupo()) preencherGrupo(); } } catch (e) {} }, 0); return r; };
+  document.addEventListener('change', function (e) { if (e.target && e.target.id === 'rc-periodo' && ehBonus()) { if (grupo()) preencherGrupo(); else { var v = el('rc-valor'); if (v && !v.dataset.manual) { v.value = ''; preencherInd(); } } } }, true);
+})();
+</script>
 </body>
 </html>
