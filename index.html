@@ -20259,7 +20259,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="modal-bg" id="modal-liq"><div class="modal" style="max-width:1100px;">' +
       '<div class="modal-header"><span class="modal-title" id="lq-tit">💸 Relação dos líquidos → planilha de pagamento</span><button class="modal-close" onclick="closeModal(\'modal-liq\')">×</button></div>' +
       '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Anexe os PDFs <strong>"Relação Geral dos Líquidos"</strong> da contabilidade (pode selecionar todos de uma vez, um por empresa). O sistema localiza cada funcionário na <strong>lista de contas do banco</strong> e gera a planilha <strong>"lista funcionários para pagamento"</strong> no mesmo layout (Agência · Conta · Dígito · Nome · CPF) com o <strong>valor</strong> na coluna seguinte.</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;"><strong>Tipo de pagamento:</strong> <select id="lq-tipo" style="padding:5px 8px;" onchange="liqTipo(this.value)"><option value="rec_sal">💵 Pagamento de salário — código 1 na coluna F</option><option value="rec_adi">💸 Adiantamento — código 9 na coluna F</option><option value="rec_13a">🎄 13º salário – 1ª parcela</option><option value="rec_13b">🎁 13º salário – 2ª parcela</option><option value="rec_bon">🏆 Bônus por resultado</option><option value="dep_ben">💵 Depósito de benefícios</option></select><span id="lq-tipo-info" style="font-size:12px;color:var(--gray-600);"></span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;"><strong>Tipo de pagamento:</strong> <select id="lq-tipo" style="padding:5px 8px;" onchange="liqTipo(this.value)"><option value="rec_sal">💵 Pagamento de salário — código 1 na coluna F</option><option value="rec_adi">💸 Adiantamento — código 9 na coluna F</option><option value="rec_13a">🎄 13º salário – 1ª parcela</option><option value="rec_13b">🎁 13º salário – 2ª parcela</option><option value="rec_bon">🏆 Bônus por resultado</option><option value="dep_ben">💵 Depósito de benefícios — código 3 na coluna F</option></select><span id="lq-tipo-info" style="font-size:12px;color:var(--gray-600);"></span></div>' +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
       '<div style="flex:1;min-width:300px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">1. Lista de contas do banco</div><div id="lq-lista-info" style="font-size:12.5px;margin-bottom:6px;"></div>' +
       '<label class="btn btn-outline btn-sm" style="cursor:pointer;">📂 Importar / atualizar lista (.xls/.xlsx)<input type="file" accept=".xls,.xlsx,.csv" style="display:none;" onchange="liqImportarLista(this)"></label></div>' +
@@ -20278,14 +20278,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     rec_13a: { t: '13º salário – 1ª parcela', ic: '🎄', cod: 6, arq: '13 SALARIO 1a PARCELA', re: /13|d[ée]cimo/i },
     rec_13b: { t: '13º salário – 2ª parcela', ic: '🎁', cod: 6, arq: '13 SALARIO 2a PARCELA', re: /13|d[ée]cimo/i },
     rec_bon: { t: 'Bônus por resultado', ic: '🏆', cod: '', arq: 'BONUS', re: /b[ôo]nus|pr[êe]mio|plr/i },
-    dep_ben: { t: 'Depósito de benefícios', ic: '💵', cod: '', arq: 'DEPOSITO BENEFICIOS', re: /dep[óo]sito/i }
+    dep_ben: { t: 'Depósito de benefícios', ic: '💵', cod: 3, arq: 'DEPOSITO BENEFICIOS', re: /dep[óo]sito/i }
   };
   var LQ_TIPO = 'rec_adi';
   window.liqAbrir = function (tipo) {
     injetar(); infoLista(); LQ_TIPO = LQ_TIPOS[tipo] ? tipo : 'rec_adi';
     var T = LQ_TIPOS[LQ_TIPO], salvo = (DB.g('pag-cod').find(function (x) { return x.id === LQ_TIPO; }) || {}).cod;
     el('lq-tit').textContent = T.ic + ' ' + T.t + ' · Relação dos líquidos → planilha de pagamento';
-    el('lq-cod').value = (LQ_TIPO === 'rec_sal' || LQ_TIPO === 'rec_adi') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod); if (el('lq-tipo')) el('lq-tipo').value = LQ_TIPO;
+    el('lq-cod').value = (LQ_TIPO === 'rec_sal' || LQ_TIPO === 'rec_adi' || LQ_TIPO === 'dep_ben') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod); if (el('lq-tipo')) el('lq-tipo').value = LQ_TIPO;
     if (ESTADO && ESTADO.tipo !== LQ_TIPO) { ESTADO = null; el('lq-tab').innerHTML = ''; el('lq-resumo').innerHTML = ''; el('lq-status').innerHTML = ''; el('lq-pdfs').value = ''; el('lq-gerar').disabled = true; el('lq-gerar-xls').disabled = true; }
     el('modal-liq').classList.add('open');
   };
@@ -20293,7 +20293,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!LQ_TIPOS[t]) return; LQ_TIPO = t; if (ESTADO) ESTADO.tipo = t;
     var T = LQ_TIPOS[t], salvo = (DB.g('pag-cod').find(function (x) { return x.id === t; }) || {}).cod;
     el('lq-tit').textContent = T.ic + ' ' + T.t + ' · Relação dos líquidos → planilha de pagamento';
-    el('lq-cod').value = (t === 'rec_sal' || t === 'rec_adi') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod);
+    el('lq-cod').value = (t === 'rec_sal' || t === 'rec_adi' || t === 'dep_ben') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod);
     if (el('lq-tipo')) el('lq-tipo').value = t;
     if (el('lq-tipo-info')) el('lq-tipo-info').innerHTML = auto ? '🔎 identificado pelo PDF (' + esc(auto) + ')' : '';
   };
