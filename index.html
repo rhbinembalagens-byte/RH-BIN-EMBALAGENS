@@ -23315,6 +23315,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('bc-tot').innerHTML = 'Total do bônus em ' + MES[C.m] + '/' + C.a + ': <strong>R$ ' + brl(G) + '</strong>' + (GA || GS ? ' <span style="margin-left:8px;color:var(--gray-600);">CLT: <strong>R$ ' + brl(r2(G - GA - GS)) + '</strong></span>' + (GS ? pil('Sem registro', GS) : '') + (GA ? pil('Agência', GA) : '') : '');
   };
   window.bcFat = function (dep, v) { var n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === C.m && x.ano === C.a); }); if (n > 0) L.push({ id: uid(), dep: dep, mes: C.m, ano: C.a, valor: r2(n), em: new Date().toISOString() }); DB.s(K_FAT, L); setTimeout(bcRender, 0); };
+  // valores do bônus de um mês (para Benefícios): { pk: valor } somando todas as lojas com faturamento; null se o mês não tem faturamento lançado
+  window.bcValores = function (m, a) {
+    try { semear(); semear2(); } catch (e) {}
+    var sv = C; C = { m: m, a: a };
+    try {
+      var V = {}, n = 0;
+      deps().filter(function (d) { return fatDe(d.id) > 0; }).forEach(function (d) { n++; calcDep(d).P.forEach(function (p) { V[p.pk] = (V[p.pk] || 0) + (p.valor || 0); }); });
+      return n ? V : null;
+    } finally { C = sv; }
+  };
   window.bcExtra = function (pk, dep, add) {
     var L = DB.g(K_PES), r = L.find(function (x) { return x.pk === pk; }); if (!r) { r = { pk: pk }; L.push(r); }
     r.extra = (r.extra || []).filter(function (x) { return x !== dep; }); if (add) r.extra.push(dep);
@@ -23999,27 +24009,33 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     fid = String(fid || ''); var pk = fid.indexOf('x:') === 0 ? fid : 'f:' + fid, p;
     if (fid.indexOf('x:') === 0) p = DB.g('colab-ext').find(function (c) { return 'x:' + c.id === fid; }); else p = DB.g('funcionarios').find(function (f) { return f.id === fid; });
     var nome = sem(p && p.n).trim(), v = 0;
+    // 1º: cálculo do bônus (Gerar Documentos › Bônus por resultado) do mês anterior ao período
+    var ck = A.m + '-' + A.a;
+    if (!CACHE || CACHE.k !== ck || Date.now() - CACHE.t > 3000) CACHE = { k: ck, t: Date.now(), V: typeof window.bcValores === 'function' ? bcValores(A.m, A.a) : null };
+    if (CACHE.V) return { v: Math.round((CACHE.V[pk] || 0) * 100) / 100, mes: MES[A.m] + '/' + A.a, fonte: 'cálculo' };
     DB.g('recibos-hist').forEach(function (r) {
       if (r.tipo !== 'rec_bon' || !(r.vN > 0)) return;
       if (!(r.pk ? r.pk === pk : (nome && sem(r.nome).trim() === nome))) return;
       var M = mesDoRecibo(r); if (!M || M.m !== A.m || M.a !== A.a) return;
       v += +r.vN || 0;
     });
-    return { v: Math.round(v * 100) / 100, mes: MES[A.m] + '/' + A.a };
+    return { v: Math.round(v * 100) / 100, mes: MES[A.m] + '/' + A.a, fonte: 'recibo' };
   };
+  var CACHE = null;
   // aviso + recálculo do Bônus quando muda a data do período
   function aviso() {
     var tb = el('flash-tbody'); if (!tb) return;
     var A = mesAlvo(), box = el('b3-bonrec'), q = 0, tot = 0;
     tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
       var r = benefBonusRecibo(i.dataset.f);
-      if (r.v > 0) { q++; tot += r.v; i.title = 'Inclui bônus por resultado de ' + r.mes + ' (recibo): ' + brl(r.v); i.style.borderColor = '#bf360c'; } else { i.title = ''; i.style.borderColor = ''; }
+      if (r.v > 0) { q++; tot += r.v; i.title = 'Inclui bônus por resultado de ' + r.mes + ' (' + r.fonte + '): ' + brl(r.v); i.style.borderColor = '#bf360c'; } else { i.title = ''; i.style.borderColor = ''; }
       var lb = i.parentNode.querySelector('.b3-bonlb'); if (!lb) { lb = document.createElement('div'); lb.className = 'b3-bonlb'; lb.style.cssText = 'font-size:10.5px;color:#bf360c;white-space:nowrap;margin-top:2px;'; i.parentNode.appendChild(lb); }
-      lb.textContent = r.v > 0 ? '🏆 recibo ' + r.mes + ': ' + brl(r.v) : '';
+      lb.textContent = r.v > 0 ? '🏆 bônus ' + r.mes + ': ' + brl(r.v) : '';
     });
     var tab = el('flash-table'); if (!tab) return;
     if (!box) { tab.closest('.table-wrap') ? tab.closest('.table-wrap').insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>') : tab.insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>'); box = el('b3-bonrec'); }
-    box.innerHTML = A ? '🏆 <strong>Bônus por resultado</strong> dos recibos de <strong>' + MES[A.m] + '/' + A.a + '</strong> (mês anterior ao período do pedido) ' + (q ? 'incluído na coluna Bônus: <strong>' + q + '</strong> colaborador(es) · <strong>' + brl(tot) + '</strong>' : '— nenhum recibo de bônus gerado com essa referência.') : '';
+    var fonte = CACHE && CACHE.V ? 'do cálculo do bônus (Gerar Documentos › Bônus por resultado)' : 'dos recibos de bônus';
+    box.innerHTML = A ? '🏆 <strong>Bônus por resultado</strong> de <strong>' + MES[A.m] + '/' + A.a + '</strong> (mês anterior ao período do pedido), ' + fonte + ', ' + (q ? 'incluído na coluna Bônus: <strong>' + q + '</strong> colaborador(es) · <strong>' + brl(tot) + '</strong>' : '— nenhum valor de bônus para esse mês (lance o faturamento das lojas no cálculo do bônus).') : '';
   }
   function recalc() {
     var tb = el('flash-tbody'); if (!tb) return;
@@ -24080,7 +24096,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var v = function (c) { return x[c] ? brl(x[c]) : '<span style="color:var(--gray-400);">—</span>'; };
         h += '<tr style="' + (x.tot || x.dep ? '' : 'opacity:.55;') + '"><td><strong>' + esc(x.nome) + '</strong>' + (x.ext ? ' <span class="badge badge-yellow" style="font-size:9.5px;">Sem registro</span>' : '') + '</td>' +
           '<td style="' + r + '">' + v('mob') + '</td><td style="' + r + '">' + v('livre') + '</td>' +
-          '<td style="' + r + '">' + v('bonus') + (x.brec ? '<div style="font-size:10.5px;color:#bf360c;">🏆 recibo ' + brl(x.brec) + '</div>' : '') + '</td>' +
+          '<td style="' + r + '">' + v('bonus') + (x.brec ? '<div style="font-size:10.5px;color:#bf360c;">🏆 bônus por resultado ' + brl(x.brec) + (x.bonus - x.brec > 0.004 ? ' + atribuído ' + brl(x.bonus - x.brec) : '') + '</div>' : '') + '</td>' +
           '<td style="' + r + 'font-weight:600;">' + (x.livre + x.bonus ? brl(x.livre + x.bonus) : '—') + '</td><td style="' + r + '">' + v('alim') + '</td>' +
           '<td style="' + r + 'font-weight:700;">' + v('tot') + '</td><td style="' + r + '">' + v('dep') + '</td></tr>';
       });
@@ -24097,7 +24113,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var R = tabela(L), de = (el('flash-de') || {}).value, ate = (el('flash-ate') || {}).value, A = typeof window.benefBonusRecibo === 'function' && L[0] ? benefBonusRecibo(L[0].f).mes : '';
     ULT = { L: L, R: R, de: de, ate: ate, A: A };
     el('bconf-cab').innerHTML = 'Período do pedido: <strong>' + br(de) + ' a ' + br(ate) + '</strong> · ' + L.filter(function (x) { return x.tot > 0; }).length + ' colaborador(es) com valor no cartão · <strong>Total cartão ' + brl(R.T.tot) + '</strong>' +
-      (A ? ' · 🏆 Bônus por resultado (recibos de ' + A + '): <strong>' + brl(R.T.brec) + '</strong>' : '');
+      (A ? ' · 🏆 Bônus por resultado de ' + A + ': <strong>' + brl(R.T.brec) + '</strong>' : '');
     el('bconf-tab').innerHTML = R.html;
     el('bconf-obs').innerHTML = 'Confira os valores. Para alterar, clique em <strong>← Voltar e ajustar</strong>, corrija na tabela e clique em Gerar Compra de novo. O Bônus vai somado na coluna <strong>Livre</strong> da planilha; o Depósito não entra no arquivo.';
     el('modal-bconf').classList.add('open');
