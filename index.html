@@ -23166,7 +23166,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       L.push({ pk: '__seed2', em: new Date().toISOString() }); DB.s(K_PES, L);
     } catch (e) { console.error(e); }
   }
-  semear(); semear2();
+  // 04/11/2026 (3): Emelly = cota da loja + complemento de função R$ 124 (sem o saldo da faixa de subgerente)
+  function semear3() {
+    try {
+      var L = DB.g(K_PES); if (L.some(function (x) { return x.pk === '__seed3'; })) return;
+      var A = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado' && nrm(f.n).indexOf('EMELLY') === 0; }); if (A.length !== 1) return;
+      var pk = 'f:' + A[0].id, r = L.find(function (x) { return x.pk === pk; }); if (!r) { r = { pk: pk, auto: true }; L.push(r); }
+      r.papel = 'eq'; r.comp = 124; r.motivoComp = 'complemento de função';
+      L.push({ pk: '__seed3', em: new Date().toISOString() }); DB.s(K_PES, L);
+    } catch (e) { console.error(e); }
+  }
+  semear(); semear2(); semear3();
   function iso(s) { s = String(s || '').trim(); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0]; m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; }
   function addD(i, n) { var d = new Date(i + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
   function addM(i, n) { var d = new Date(i + 'T12:00:00'); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
@@ -23198,7 +23208,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     });
     return L.map(function (p) {
       var o = oc(p.pk), r = reg(p.pk) || {};
-      p.papel = p.outra ? 'ger' : (r.papel || (o && o.papel) || papelAuto(p.car)); p.motivo = r.motivo || ''; p.extra = p.outra ? [] : (r.extra || []);
+      p.papel = p.outra ? 'ger' : (r.papel || (o && o.papel) || papelAuto(p.car)); p.motivo = r.motivo || ''; p.motivoComp = r.motivoComp || ''; p.extra = p.outra ? [] : (r.extra || []);
       p.fixo = r.fixo != null ? +r.fixo : 0; p.comp = r.comp != null ? +r.comp : 0;
       p.faltas = o && o.faltas != null ? o.faltas : faltasFolha(p.pk); p.atest = o && o.atest != null ? o.atest : 0;
       p.ferAuto = p.g === 'CLT' ? feriasDias(p.id) : 0; p.fer = o && o.fer != null ? +o.fer : p.ferAuto;
@@ -23242,7 +23252,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (p.papel === 'fixo') p.obs.unshift('valor fixo (sai do pool)');
       if (p.perde) { p.valor = 0; return; }
       var v = p.papel === 'fixo' ? base : base * p.fator;
-      if (p.comp && p.fator > 0) { v += +p.comp; p.obs.push('complemento R$ ' + brl(p.comp)); }
+      if (p.comp && p.fator > 0) { v += +p.comp; p.obs.push((p.motivoComp || 'complemento') + ' R$ ' + brl(p.comp)); }
       p.valor = Math.round(v);
     });
     return { dep: d, fat: fat, T: T, F: F, teto: teto, poolBruto: poolBruto, totFixo: totFixo, pool: pool, unid: unid, cota: cota, nEq: P.filter(function (p) { return p.peso > 0; }).length, P: P, total: P.reduce(function (s, p) { return s + p.valor; }, 0) };
@@ -23274,7 +23284,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.head.appendChild(st);
   }
   window.bcAbrir = function () {
-    injetar(); semear(); semear2(); var h = new Date(); if (!C) C = { m: h.getMonth(), a: h.getFullYear() };
+    injetar(); semear(); semear2(); semear3(); var h = new Date(); if (!C) C = { m: h.getMonth(), a: h.getFullYear() };
     el('bc-mes').value = String(C.m); el('bc-ano').value = C.a;
     el('bc-dep').innerHTML = '<option value="">Todos os departamentos com faturamento</option>' + deps().map(function (d) { return '<option value="' + esc(d.id) + '">' + esc(d.nome) + '</option>'; }).join('');
     bcRender(); el('modal-bonus-calc').classList.add('open');
@@ -23318,7 +23328,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.bcFat = function (dep, v) { var n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === C.m && x.ano === C.a); }); if (n > 0) L.push({ id: uid(), dep: dep, mes: C.m, ano: C.a, valor: r2(n), em: new Date().toISOString() }); DB.s(K_FAT, L); setTimeout(bcRender, 0); };
   // valores do bônus de um mês (para Benefícios): { pk: valor } somando todas as lojas com faturamento; null se o mês não tem faturamento lançado
   window.bcValores = function (m, a) {
-    try { semear(); semear2(); } catch (e) {}
+    try { semear(); semear2(); semear3(); } catch (e) {}
     var sv = C; C = { m: m, a: a };
     try {
       var V = {}, n = 0;
