@@ -24047,7 +24047,30 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (!box) { tab.closest('.table-wrap') ? tab.closest('.table-wrap').insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>') : tab.insertAdjacentHTML('beforebegin', '<div id="b3-bonrec" style="font-size:12.5px;margin:6px 0;"></div>'); box = el('b3-bonrec'); }
     var fonte = CACHE && CACHE.V ? 'do cálculo do bônus (Gerar Documentos › Bônus por resultado)' : 'dos recibos de bônus';
     box.innerHTML = A ? '🏆 <strong>Bônus por resultado</strong> de <strong>' + MES[A.m] + '/' + A.a + '</strong> (mês anterior ao período do pedido), ' + fonte + ', ' + (q ? 'incluído na coluna Bônus: <strong>' + q + '</strong> colaborador(es) · <strong>' + brl(tot) + '</strong>' : '— nenhum valor de bônus para esse mês (lance o faturamento das lojas no cálculo do bônus).') : '';
+    try { if (A && CACHE && CACHE.V) box.insertAdjacentHTML('beforeend', conciliar(tb)); } catch (e) { console.error(e); }
   }
+  // conferência: bônus calculado × coluna Bônus do pedido
+  function nomePk(pk) { var f = pk.indexOf('f:') === 0 ? DB.g('funcionarios').find(function (x) { return 'f:' + x.id === pk; }) : DB.g('colab-ext').find(function (x) { return 'x:' + x.id === pk; }); return f ? { n: f.n, emp: f.emp, ext: pk.indexOf('x:') === 0, tipo: f.tipo, st: f.st } : { n: pk }; }
+  function conciliar(tb) {
+    var V = CACHE.V, calc = 0, naTab = {}, extra = [], man = [], tabTot = 0;
+    Object.keys(V).forEach(function (pk) { calc += V[pk] || 0; });
+    tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
+      var f = i.dataset.f, pk = f.indexOf('x:') === 0 ? f : 'f:' + f, c = V[pk] || 0, v = parseFloat(i.value) || 0, tr = i.closest('tr'), nm = tr ? (tr.querySelector('td strong') || tr.querySelector('td') || {}).textContent : f;
+      naTab[pk] = 1; tabTot += v;
+      if (Math.abs(v - c) < 0.005) return;
+      (i.dataset.man ? man : extra).push({ n: String(nm || '').trim(), c: c, v: v });
+    });
+    var fora = Object.keys(V).filter(function (pk) { return V[pk] > 0 && !naTab[pk]; }).map(function (pk) { var p = nomePk(pk); return { n: p.n, v: V[pk], por: p.ext ? (p.tipo === 'agencia' ? 'Agência' : 'Sem registro') + (p.emp ? '' : ', sem empresa no cadastro') : (p.emp ? 'não está na empresa/filtro escolhido' : 'sem empresa no cadastro') }; });
+    var tf = fora.reduce(function (s, x) { return s + x.v; }, 0), te = extra.reduce(function (s, x) { return s + x.v - x.c; }, 0), tm = man.reduce(function (s, x) { return s + x.v - x.c; }, 0);
+    var ok = !fora.length && !extra.length && !man.length;
+    var li = function (L, f) { return L.length ? '<ul style="margin:3px 0 6px 18px;padding:0;">' + L.map(f).join('') + '</ul>' : ''; };
+    return '<details style="margin-top:4px;background:' + (ok ? '#f1f8e9' : '#fff8e1') + ';border-radius:6px;padding:5px 9px;"' + (ok ? '' : ' open') + '><summary style="cursor:pointer;font-weight:600;">' + (ok ? '✅' : '⚠️') + ' Conferência: bônus calculado (todas as lojas) <strong>' + brl(calc) + '</strong> · coluna Bônus nesta tela <strong>' + brl(tabTot) + '</strong>' + (ok ? ' — bate' : ' — diferença ' + brl(tabTot - calc)) + '</summary>' +
+      (fora.length ? '<div style="margin-top:5px;">➖ <strong>Têm bônus no cálculo mas não estão nesta tabela</strong> (' + brl(tf) + '):' + li(fora, function (x) { return '<li>' + esc(x.n) + ' — ' + brl(x.v) + ' <span style="color:#777;">(' + esc(x.por) + ')</span></li>'; }) + '</div>' : '') +
+      (extra.length ? '<div>➕ <strong>Bônus atribuído em Benefícios › Atribuir somado ao calculado</strong> (' + brl(te) + '):' + li(extra, function (x) { return '<li>' + esc(x.n) + ' — calculado ' + brl(x.c) + ', na tabela ' + brl(x.v) + '</li>'; }) + '</div>' : '') +
+      (man.length ? '<div>✏️ <strong>Digitado à mão na tabela</strong> (' + brl(tm) + '):' + li(man, function (x) { return '<li>' + esc(x.n) + ' — calculado ' + brl(x.c) + ', na tabela ' + brl(x.v) + '</li>'; }) + '<button class="btn btn-outline btn-sm" onclick="b3BonusCalc()">↺ Voltar o Bônus ao valor calculado</button></div>' : '') + '</details>';
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  window.b3BonusCalc = function () { var tb = el('flash-tbody'); if (!tb) return; tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) { delete i.dataset.man; }); CACHE = null; recalc(); };
   function recalc() {
     var tb = el('flash-tbody'); if (!tb) return;
     tb.querySelectorAll('input.b3[data-c="bonus"]').forEach(function (i) {
