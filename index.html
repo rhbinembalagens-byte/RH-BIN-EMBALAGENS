@@ -24518,5 +24518,147 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   document.addEventListener('change', function (e) { if (e.target && e.target.id === 'rc-periodo' && ehBonus()) { if (grupo()) preencherGrupo(); else { var v = el('rc-valor'); if (v && !v.dataset.manual) { v.value = ''; preencherInd(); } } } }, true);
 })();
 </script>
+<script>
+/* ═══════ MENU OBRIGAÇÕES DA EMPRESA: Seguro de vida · PCMSO e PGR · Convenção Coletiva (upload, vigência, alerta 30 dias) ═══════ */
+(function () {
+  var K = 'obrigacoes';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K) === -1) { RT.LIST.push(K); if (RT.ALL && RT.ALL.indexOf(K) === -1) RT.ALL.push(K); }
+  var CATS = [['seguro', '🛡️ Seguro de vida'], ['pcmso', '🩺 PCMSO e PGR'], ['convencao', '📜 Convenção Coletiva']];
+  var CAT = 'seguro', EDIT = null, ARQ = null;
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function dias(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000); }
+  function br(i) { return i ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : '—'; }
+  function nomeCat(c) { var x = CATS.find(function (k) { return k[0] === c; }); return x ? x[1] : c; }
+  function empNome(id) { var e = id ? DB.g('empresas').find(function (x) { return x.id === id; }) : null; return e ? e.razao : 'Todas as empresas'; }
+  function situacao(r) {
+    var h = hoje(); if (!r.fim) return { k: 'sem', t: 'Sem data de fim', c: '#757575', bg: '#f5f5f5' };
+    var d = dias(h, r.fim);
+    if (d < 0) return { k: 'venc', t: 'Vencido há ' + (-d) + ' dia(s)', c: '#c62828', bg: '#ffebee', d: d };
+    if (d <= 30) return { k: 'alerta', t: 'Vence em ' + d + ' dia(s)', c: '#b26a00', bg: '#fff3e0', d: d };
+    if (r.ini && r.ini > h) return { k: 'futuro', t: 'Começa em ' + br(r.ini), c: '#1565c0', bg: '#e3f2fd', d: d };
+    return { k: 'ok', t: 'Vigente · ' + d + ' dia(s) para vencer', c: '#2e7d32', bg: '#e8f5e9', d: d };
+  }
+  function alertas() { return DB.g(K).filter(function (r) { var s = situacao(r); return !r.arquivado && (s.k === 'venc' || s.k === 'alerta'); }); }
+  function badge() {
+    var n = alertas().length, it = document.querySelector('.nav-item[data-obrig]'); if (!it) return;
+    var b = it.querySelector('.obrig-badge'); if (!b) { it.insertAdjacentHTML('beforeend', '<span class="obrig-badge" style="margin-left:auto;background:#e53935;color:#fff;border-radius:10px;font-size:10.5px;font-weight:700;padding:1px 7px;"></span>'); b = it.querySelector('.obrig-badge'); }
+    b.textContent = n; b.style.display = n ? '' : 'none'; b.title = n + ' obrigação(ões) vencida(s) ou vencendo em até 30 dias';
+  }
+  function injetar() {
+    if (el('sec-obrigacoes')) return;
+    var antes = Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\('empresas'/.test(n.getAttribute('onclick') || ''); });
+    var nav = '<div class="nav-item" data-obrig="1" onclick="nav(\'obrigacoes\',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg><span>Obrigações da Empresa</span></div>';
+    if (antes) antes.insertAdjacentHTML('afterend', nav);
+    var ref = el('sec-empresas') || el('sec-dashboard');
+    ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-obrigacoes"><div class="card">' +
+      '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">📋 Obrigações da Empresa</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Guarde os documentos com a <strong>vigência (início e fim)</strong>. O sistema avisa quando faltar <strong>30 dias ou menos</strong> para vencer (aqui, no menu e no painel inicial).</div></div>' +
+      '<button class="btn btn-primary" onclick="obNovo()">+ Novo documento</button></div>' +
+      '<div id="ob-alerta"></div>' +
+      '<div class="tabs" id="ob-tabs" style="margin-bottom:12px;">' + CATS.map(function (c, i) { return '<div class="tab' + (i ? '' : ' active') + '" data-c="' + c[0] + '" onclick="obTab(\'' + c[0] + '\')">' + c[1] + ' <span class="ob-n" style="font-size:11px;"></span></div>'; }).join('') + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"><select id="ob-femp" onchange="obRender()" style="padding:6px 8px;"></select><select id="ob-fsit" onchange="obRender()" style="padding:6px 8px;"><option value="">Todas as situações</option><option value="alerta">⚠️ Vencendo em até 30 dias</option><option value="venc">❌ Vencidos</option><option value="ok">✅ Vigentes</option><option value="arq">🗄️ Arquivados (substituídos)</option></select></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>Documento</th><th>Empresa</th><th>Início da vigência</th><th>Fim da vigência</th><th>Situação</th><th>Arquivo</th><th>Ações</th></tr></thead><tbody id="ob-tb"></tbody></table></div></div></div>');
+    document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-obrig"><div class="modal" style="max-width:640px;">' +
+      '<div class="modal-header"><span class="modal-title" id="ob-mtit">Novo documento</span><button class="modal-close" onclick="closeModal(\'modal-obrig\')">×</button></div>' +
+      '<div class="form-grid">' +
+      '<div class="form-group"><label>Tipo</label><select id="ob-cat">' + CATS.map(function (c) { return '<option value="' + c[0] + '">' + c[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group"><label>Empresa</label><select id="ob-emp"></select></div>' +
+      '<div class="form-group form-full"><label>Descrição</label><input id="ob-desc" type="text" placeholder="ex.: Apólice 12345 – Seguradora X · PCMSO 2026 · CCT Comércio SP 2026/2027"></div>' +
+      '<div class="form-group"><label>Início da vigência</label><input id="ob-ini" type="date"></div>' +
+      '<div class="form-group"><label>Fim da vigência</label><input id="ob-fim" type="date"></div>' +
+      '<div class="form-group form-full"><label>Arquivo (PDF, imagem, Word…)</label><input id="ob-file" type="file" onchange="obArq(this)"><div id="ob-file-info" style="font-size:12px;color:var(--gray-600);margin-top:4px;"></div></div>' +
+      '<div class="form-group form-full"><label>Observações</label><input id="ob-obs" type="text" placeholder="ex.: responsável, nº de vidas, sindicato…"></div>' +
+      '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-obrig\')">Cancelar</button><button class="btn btn-primary" id="ob-salvar" onclick="obSalvar()">💾 Salvar</button></div></div></div>');
+  }
+  function empOpts(sel, todas) { return (todas ? '<option value="">' + todas + '</option>' : '<option value="">Todas as empresas (grupo)</option>') + DB.g('empresas').slice().sort(function (a, b) { return (a.razao || '').localeCompare(b.razao || ''); }).map(function (e) { return '<option value="' + esc(e.id) + '"' + (sel === e.id ? ' selected' : '') + '>' + esc(e.razao) + (e.cnpj ? ' · ' + esc(e.cnpj) : '') + '</option>'; }).join(''); }
+  window.obTab = function (c) { CAT = c; document.querySelectorAll('#ob-tabs .tab').forEach(function (t) { t.classList.toggle('active', t.dataset.c === c); }); obRender(); };
+  window.obRender = function () {
+    injetar(); var fe = el('ob-femp'), fs = el('ob-fsit'), cur = fe.value; fe.innerHTML = empOpts(cur, 'Todas as empresas'); fe.value = cur;
+    var L = DB.g(K), A = alertas();
+    document.querySelectorAll('#ob-tabs .tab').forEach(function (t) { var n = A.filter(function (r) { return r.cat === t.dataset.c; }).length; t.querySelector('.ob-n').innerHTML = n ? '<span style="background:#e53935;color:#fff;border-radius:9px;padding:0 6px;">' + n + '</span>' : ''; });
+    el('ob-alerta').innerHTML = A.length ? '<div class="alert alert-warning" style="margin-bottom:10px;display:block;"><div>⚠️ <strong>' + A.length + ' documento(s) vencido(s) ou vencendo em até 30 dias:</strong></div><ul style="margin:4px 0 0 18px;padding:0;">' + A.map(function (r) { var s = situacao(r); return '<li><strong>' + esc(nomeCat(r.cat).replace(/^\S+\s/, '')) + '</strong>' + (r.desc ? ' (' + esc(r.desc) + ')' : '') + ' — ' + esc(empNome(r.emp)) + ': ' + s.t.toLowerCase() + ' · fim ' + br(r.fim) + '</li>'; }).join('') + '</ul></div>' : '';
+    var lst = L.filter(function (r) { if (r.cat !== CAT) return false; if (fe.value && r.emp !== fe.value) return false; var s = situacao(r); if (fs.value === 'arq') return !!r.arquivado; if (r.arquivado) return false; return !fs.value || s.k === fs.value; })
+      .sort(function (a, b) { return String(a.fim || '9').localeCompare(String(b.fim || '9')); });
+    el('ob-tb').innerHTML = lst.length ? lst.map(function (r) {
+      var s = situacao(r), a = r.arq;
+      return '<tr style="' + (r.arquivado ? 'opacity:.6;' : '') + '"><td><strong>' + esc(r.desc || nomeCat(r.cat).replace(/^\S+\s/, '')) + '</strong>' + (r.obs ? '<div style="font-size:11.5px;color:var(--gray-400);">' + esc(r.obs) + '</div>' : '') + '</td>' +
+        '<td style="font-size:12.5px;">' + esc(empNome(r.emp)) + '</td><td>' + br(r.ini) + '</td><td><strong>' + br(r.fim) + '</strong></td>' +
+        '<td><span style="display:inline-block;background:' + s.bg + ';color:' + s.c + ';border-radius:10px;padding:2px 9px;font-size:12px;font-weight:600;">' + (s.k === 'venc' ? '❌ ' : s.k === 'alerta' ? '⚠️ ' : s.k === 'ok' ? '✅ ' : '') + esc(r.arquivado ? 'Arquivado' : s.t) + '</span></td>' +
+        '<td style="font-size:12px;">' + (a ? (a.url ? '<a href="' + esc(a.url) + '" target="_blank">📎 ' + esc(a.name) + '</a>' : (a.data ? '<a href="#" onclick="obAbrirArq(\'' + r.id + '\');return false;">📎 ' + esc(a.name) + '</a>' : '📎 ' + esc(a.name))) : '<span style="color:var(--gray-400);">—</span>') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn-icon" title="Editar / renovar" onclick="obEditar(\'' + r.id + '\')">✏️</button> ' + (r.arquivado ? '' : '<button class="btn-icon" title="Renovar: cria a nova vigência e arquiva esta" onclick="obRenovar(\'' + r.id + '\')">🔄</button> ') + '<button class="btn-icon danger" title="Excluir" onclick="obExcluir(\'' + r.id + '\')">🗑</button></td></tr>';
+    }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px;">Nenhum documento de ' + esc(nomeCat(CAT)) + '. Clique em <strong>+ Novo documento</strong>.</td></tr>';
+    badge();
+  };
+  function abrirForm(r, renov) {
+    injetar(); EDIT = r && !renov ? r.id : null; ARQ = r && !renov ? r.arq || null : null;
+    el('ob-mtit').textContent = renov ? '🔄 Renovar — nova vigência' : r ? '✏️ Editar documento' : '+ Novo documento';
+    el('ob-cat').value = r ? r.cat : CAT; el('ob-emp').innerHTML = empOpts(r ? r.emp : ''); el('ob-emp').value = r ? (r.emp || '') : '';
+    el('ob-desc').value = r ? r.desc || '' : ''; el('ob-obs').value = r ? r.obs || '' : '';
+    el('ob-ini').value = renov ? (r.fim ? new Date(new Date(r.fim + 'T12:00:00').getTime() + 86400000).toISOString().slice(0, 10) : '') : (r ? r.ini || '' : '');
+    el('ob-fim').value = renov ? '' : (r ? r.fim || '' : '');
+    el('ob-file').value = ''; el('ob-file-info').innerHTML = ARQ ? 'Arquivo atual: 📎 ' + esc(ARQ.name) + ' (escolha outro para trocar)' : '';
+    el('modal-obrig').dataset.renova = renov ? r.id : '';
+    el('modal-obrig').classList.add('open');
+  }
+  window.obNovo = function () { abrirForm(null); };
+  window.obEditar = function (id) { abrirForm(DB.g(K).find(function (x) { return x.id === id; })); };
+  window.obRenovar = function (id) { abrirForm(DB.g(K).find(function (x) { return x.id === id; }), true); };
+  window.obArq = function (inp) { var f = inp.files[0]; el('ob-file-info').innerHTML = f ? '📎 ' + esc(f.name) + ' (' + Math.round(f.size / 1024) + ' KB)' : ''; };
+  window.obSalvar = async function () {
+    var cat = el('ob-cat').value, ini = el('ob-ini').value, fim = el('ob-fim').value;
+    if (!fim) { alert('Informe o fim da vigência (é por ela que o sistema avisa o vencimento).'); el('ob-fim').focus(); return; }
+    if (ini && fim < ini) { alert('O fim da vigência está antes do início.'); return; }
+    var bt = el('ob-salvar'); bt.disabled = true; bt.textContent = '⏳ Salvando…';
+    try {
+      var f = el('ob-file').files[0], arq = ARQ;
+      if (f) {
+        arq = { name: f.name };
+        var pode = typeof rhPodeEnviar === 'function' && rhPodeEnviar() && typeof uploadFileToDrive === 'function';
+        if (pode) { try { var up = await uploadFileToDrive(f, 'Obrigações da Empresa'); arq = { name: f.name, id: up.id, url: up.webViewLink }; } catch (e) { console.warn(e); } }
+        if (!arq.url && f.size <= 1500000) { arq.data = await new Promise(function (ok) { var fr = new FileReader(); fr.onload = function () { ok(fr.result); }; fr.readAsDataURL(f); }); }
+      }
+      var L = DB.g(K), rid = el('modal-obrig').dataset.renova;
+      if (rid) L.forEach(function (x) { if (x.id === rid) { x.arquivado = true; x.substituidoEm = new Date().toISOString(); } });
+      var o = EDIT ? L.find(function (x) { return x.id === EDIT; }) : null;
+      if (!o) { o = { id: typeof uid === 'function' ? uid() : Date.now().toString(36), criado: new Date().toISOString() }; L.push(o); }
+      o.cat = cat; o.emp = el('ob-emp').value; o.desc = el('ob-desc').value.trim(); o.obs = el('ob-obs').value.trim(); o.ini = ini; o.fim = fim; o.arq = arq || null; o.em = new Date().toISOString();
+      DB.s(K, L); closeModal('modal-obrig'); CAT = cat; obTab(cat);
+      if (typeof toast === 'function') toast('💾 Documento salvo' + (f && arq && !arq.url ? (arq.data ? ' (arquivo guardado no sistema)' : ' — arquivo grande e Drive desconectado: só o nome foi salvo') : ''));
+    } finally { bt.disabled = false; bt.textContent = '💾 Salvar'; }
+  };
+  window.obAbrirArq = function (id) { var r = DB.g(K).find(function (x) { return x.id === id; }); if (!r || !r.arq || !r.arq.data) return; var a = document.createElement('a'); a.href = r.arq.data; a.download = r.arq.name; document.body.appendChild(a); a.click(); a.remove(); };
+  window.obExcluir = function (id) { if (!confirm('Excluir este documento da lista? (o arquivo no Drive não é apagado)')) return; DB.s(K, DB.g(K).filter(function (x) { return x.id !== id; })); obRender(); };
+  // menu
+  var _nav = window.nav;
+  window.nav = function (id, elx) {
+    if (id === 'obrigacoes') {
+      injetar();
+      document.querySelectorAll('.section-page').forEach(function (s) { s.classList.remove('active'); });
+      el('sec-obrigacoes').classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+      if (elx) elx.classList.add('active');
+      if (el('topbar-title')) el('topbar-title').textContent = 'Obrigações da Empresa';
+      obRender(); return;
+    }
+    return _nav.apply(this, arguments);
+  };
+  // alertas no painel inicial
+  var _ud = window.updDash;
+  if (typeof _ud === 'function') window.updDash = function () {
+    var r = _ud.apply(this, arguments);
+    try {
+      var al = el('alertas'), A = alertas(); badge();
+      if (al && A.length) {
+        var vazio = al.textContent.indexOf('Nenhum alerta') !== -1, h = A.map(function (x) { var s = situacao(x); return '<div class="alert ' + (s.k === 'venc' ? 'alert-danger' : 'alert-warning') + '" style="cursor:pointer;" onclick="nav(\'obrigacoes\',document.querySelector(\'.nav-item[data-obrig]\'));obTab(\'' + x.cat + '\')">📋 ' + esc(nomeCat(x.cat).replace(/^\S+\s/, '')) + (x.desc ? ' — ' + esc(x.desc) : '') + ' (' + esc(empNome(x.emp)) + '): <strong>' + esc(s.t.toLowerCase()) + '</strong> · fim da vigência ' + br(x.fim) + '</div>'; }).join('');
+        al.innerHTML = h + (vazio ? '' : al.innerHTML);
+      }
+    } catch (e) { console.error(e); }
+    return r;
+  };
+  injetar(); badge();
+  document.addEventListener('DOMContentLoaded', function () { injetar(); badge(); });
+})();
+</script>
 </body>
 </html>
