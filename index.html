@@ -19088,6 +19088,90 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (typeof v === 'number') { c.removeAttribute('t'); var e = doc.createElementNS(NSM, 'v'); e.textContent = String(v); c.appendChild(e); }
     else { c.setAttribute('t', 'inlineStr'); var is = doc.createElementNS(NSM, 'is'), t = doc.createElementNS(NSM, 't'); t.textContent = String(v); is.appendChild(t); c.appendChild(is); }
   }
+  // ── Planilha de DEPÓSITO no mesmo modelo da planilha da folha (uma aba por empresa) ──
+  // G: [{ razao, cnpj, cod, L: [{ n, cod, v }] }] · o: { mes, ano, periodo, nome }
+  window.folhaPlanilhaDeposito = async function (G, o) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('navegador antigo — use o Chrome ou o Edge atualizados');
+    var dig = function (s) { return String(s || '').replace(/\D/g, ''); }, td = new TextDecoder(), te = new TextEncoder();
+    var arqs = await zipLer(b64bytes(FOLHA_TPL)), porNome = {}; arqs.forEach(function (a) { porNome[a.nome] = a; });
+    var limpar = function (doc, ref) { var c = celula(doc, ref); while (c.firstChild) c.removeChild(c.firstChild); c.removeAttribute('t'); };
+    var formula = function (doc, ref, f) { var c = celula(doc, ref); while (c.firstChild) c.removeChild(c.firstChild); c.removeAttribute('t'); var e = doc.createElementNS(NSM, 'f'); e.textContent = f; c.appendChild(e); };
+    var letra = function (n) { var s = ''; while (n) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26; } return s; };
+    var porAba = {}, extras = [];
+    G.forEach(function (g) { var S = dig(g.cnpj) ? FOLHA_MAPA.find(function (S) { return dig(g.cnpj) === S.cnpj; }) : null; if (S) (porAba[S.xml] = porAba[S.xml] || []).push(g); else extras.push(g); });
+    var wb = new DOMParser().parseFromString(td.decode(porNome['xl/workbook.xml'].dados), 'application/xml');
+    var rels = new DOMParser().parseFromString(td.decode(porNome['xl/_rels/workbook.xml.rels'].dados), 'application/xml');
+    var ct = td.decode(porNome['[Content_Types].xml'].dados);
+    var NSR = 'http://schemas.openxmlformats.org/package/2006/relationships', NSOR = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    var sheetsEl = wb.getElementsByTagNameNS(NSM, 'sheets')[0];
+    function relDe(xml) { var alvo = xml.replace(/^xl\//, ''); return Array.prototype.find.call(rels.getElementsByTagNameNS(NSR, 'Relationship'), function (r) { return r.getAttribute('Target') === alvo || r.getAttribute('Target') === '/' + xml; }); }
+    function sheetDe(rid) { return Array.prototype.find.call(sheetsEl.getElementsByTagNameNS(NSM, 'sheet'), function (s) { return s.getAttributeNS(NSOR, 'id') === rid || s.getAttribute('r:id') === rid; }); }
+    function preencher(doc, S, gs, info) {
+      gravar(doc, 'A1', 'RELAÇÃO DE VALORES — DEPÓSITO DE BENEFÍCIOS');
+      if (info) { limpar(doc, 'C3'); gravar(doc, 'C3', info.cod || '—'); limpar(doc, 'C4'); gravar(doc, 'C4', info.razao || ''); limpar(doc, 'C5'); gravar(doc, 'C5', info.cnpj || ''); }
+      if (S.compDate) gravar(doc, S.comp, (Date.UTC(o.ano, o.mes, 1) - Date.UTC(1899, 11, 30)) / 86400000); else gravar(doc, S.comp, String(o.mes + 1).padStart(2, '0') + '/' + o.ano);
+      var cr = +S.comp.replace(/[A-Z]+/, ''); gravar(doc, 'E' + cr, 'Período do benefício: ' + o.periodo);
+      // cabeçalho: só a coluna D (Depósito); demais colunas de eventos ficam em branco
+      for (var k = 4; k <= 19; k++) { limpar(doc, letra(k) + S.hdr); limpar(doc, letra(k) + (S.hdr + 1)); }
+      gravar(doc, 'D' + S.hdr, 'Depósito (R$)'); gravar(doc, 'E' + S.hdr, 'CPF'); gravar(doc, 'F' + S.hdr, 'Vínculo');
+      var L = []; gs.forEach(function (g) { L = L.concat(g.L); }); L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
+      var cap = S.end - S.start + 1; if (L.length > cap) { o.cheias.push(S.aba); L = L.slice(0, cap); }
+      L.forEach(function (x, i) {
+        var rn = S.start + i, cod = x.cod && /^\d+$/.test(String(x.cod)) ? +x.cod : (x.cod || '');
+        gravar(doc, 'A' + rn, 11); gravar(doc, 'B' + rn, cod); gravar(doc, 'C' + rn, (x.n || '').toLocaleUpperCase('pt-BR'));
+        var sMoeda = celula(doc, 'F' + rn).getAttribute('s'); // coluna F do modelo = formato #,##0.00
+        gravar(doc, 'D' + rn, Math.round(x.v * 100) / 100); if (sMoeda) celula(doc, 'D' + rn).setAttribute('s', sMoeda);
+        gravar(doc, 'E' + rn, x.cpf || ''); gravar(doc, 'F' + rn, x.g || '');
+      });
+      // total da coluna D cobrindo todas as linhas de colaboradores
+      formula(doc, 'D' + S.total, 'SUM(D' + S.start + ':D' + (S.total - 1) + ')');
+      for (var k2 = 5; k2 <= 19; k2++) limpar(doc, letra(k2) + S.total);
+      formula(doc, 'B' + S.total, 'COUNTA(B' + S.start + ':B' + (S.total - 1) + ')');
+      return L.length;
+    }
+    var total = 0, abas = 0, remover = [];
+    var baseXml = td.decode(porNome[FOLHA_MAPA[0].xml].dados).replace(/<legacyDrawing[^>]*\/>/g, '').replace(/tabSelected="true"/, 'tabSelected="false"'); // modelo limpo (antes de preencher)
+    FOLHA_MAPA.forEach(function (S) {
+      var gs = porAba[S.xml], a = porNome[S.xml]; if (!a) return;
+      if (!gs) { remover.push(S); return; }
+      var doc = new DOMParser().parseFromString(td.decode(a.dados), 'application/xml');
+      total += preencher(doc, S, gs, null); abas++;
+      a.dados = te.encode(new XMLSerializer().serializeToString(doc));
+    });
+    // empresas sem aba no modelo (ex.: Sem registro sem empresa): nova aba copiada do modelo
+    var base = FOLHA_MAPA[0];
+    var nSheet = arqs.filter(function (a) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(a.nome); }).length, maxId = 0;
+    Array.prototype.forEach.call(sheetsEl.getElementsByTagNameNS(NSM, 'sheet'), function (s) { maxId = Math.max(maxId, +s.getAttribute('sheetId')); });
+    var nomesUsados = {}; Array.prototype.forEach.call(sheetsEl.getElementsByTagNameNS(NSM, 'sheet'), function (s) { nomesUsados[s.getAttribute('name')] = 1; });
+    extras.forEach(function (g, i) {
+      var n = nSheet + i + 1, xml = 'xl/worksheets/sheet' + n + '.xml', rid = 'rIdDep' + n;
+      var nome = String(g.razao || 'SEM EMPRESA').replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31).trim(); while (nomesUsados[nome]) nome = nome.slice(0, 28) + ' ' + (i + 2); nomesUsados[nome] = 1;
+      var doc = new DOMParser().parseFromString(baseXml, 'application/xml'), S = Object.assign({}, base, { xml: xml, aba: nome });
+      total += preencher(doc, S, [g], g); abas++;
+      arqs.push({ nome: xml, dados: te.encode(new XMLSerializer().serializeToString(doc)) });
+      var r = rels.createElementNS(NSR, 'Relationship'); r.setAttribute('Id', rid); r.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'); r.setAttribute('Target', 'worksheets/sheet' + n + '.xml'); rels.documentElement.appendChild(r);
+      var s = wb.createElementNS(NSM, 'sheet'); s.setAttribute('name', nome); s.setAttribute('sheetId', String(++maxId)); s.setAttribute('state', 'visible'); s.setAttributeNS(NSOR, 'r:id', rid); sheetsEl.appendChild(s);
+      ct = ct.replace('</Types>', '<Override PartName="/' + xml + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    });
+    // abas de empresas sem depósito saem do arquivo
+    remover.forEach(function (S) {
+      var r = relDe(S.xml); if (!r) return; var sh = sheetDe(r.getAttribute('Id'));
+      if (sh) sh.parentNode.removeChild(sh); r.parentNode.removeChild(r);
+      arqs = arqs.filter(function (a) { return a.nome !== S.xml && a.nome !== S.xml.replace('worksheets/', 'worksheets/_rels/') + '.rels'; });
+      ct = ct.replace('<Override PartName="/' + S.xml + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>', '');
+    });
+    // primeira aba ativa
+    var bv = wb.getElementsByTagNameNS(NSM, 'workbookView')[0]; if (bv) { bv.setAttribute('activeTab', '0'); bv.setAttribute('firstSheet', '0'); }
+    arqs.forEach(function (a) {
+      if (a.nome === 'xl/workbook.xml') a.dados = te.encode(new XMLSerializer().serializeToString(wb));
+      else if (a.nome === 'xl/_rels/workbook.xml.rels') a.dados = te.encode(new XMLSerializer().serializeToString(rels));
+      else if (a.nome === '[Content_Types].xml') a.dados = te.encode(ct);
+    });
+    // a primeira aba restante fica selecionada
+    var primeiro = true;
+    arqs.forEach(function (a) { if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(a.nome)) return; var t = td.decode(a.dados); t = t.replace(/tabSelected="(true|false|1|0)"/, 'tabSelected="false"'); a.dados = te.encode(t); });
+    return { blob: zipGravar(arqs), total: total, abas: abas };
+  };
   window.flExportar = async function () {
     if (typeof DecompressionStream === 'undefined') { alert('Este navegador é antigo para gerar a planilha. Use o Chrome ou o Edge atualizados.'); return; }
     var mes = +el('fl-mes').value, ano = +el('fl-ano').value;
@@ -20175,7 +20259,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="modal-bg" id="modal-liq"><div class="modal" style="max-width:1100px;">' +
       '<div class="modal-header"><span class="modal-title" id="lq-tit">💸 Relação dos líquidos → planilha de pagamento</span><button class="modal-close" onclick="closeModal(\'modal-liq\')">×</button></div>' +
       '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">Anexe os PDFs <strong>"Relação Geral dos Líquidos"</strong> da contabilidade (pode selecionar todos de uma vez, um por empresa). O sistema localiza cada funcionário na <strong>lista de contas do banco</strong> e gera a planilha <strong>"lista funcionários para pagamento"</strong> no mesmo layout (Agência · Conta · Dígito · Nome · CPF) com o <strong>valor</strong> na coluna seguinte.</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;"><strong>Tipo de pagamento:</strong> <select id="lq-tipo" style="padding:5px 8px;" onchange="liqTipo(this.value)"><option value="rec_sal">💵 Pagamento de salário — código 1 na coluna F</option><option value="rec_adi">💸 Adiantamento — código 9 na coluna F</option><option value="rec_13a">🎄 13º salário – 1ª parcela</option><option value="rec_13b">🎁 13º salário – 2ª parcela</option><option value="rec_bon">🏆 Bônus por resultado</option></select><span id="lq-tipo-info" style="font-size:12px;color:var(--gray-600);"></span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;"><strong>Tipo de pagamento:</strong> <select id="lq-tipo" style="padding:5px 8px;" onchange="liqTipo(this.value)"><option value="rec_sal">💵 Pagamento de salário — código 1 na coluna F</option><option value="rec_adi">💸 Adiantamento — código 9 na coluna F</option><option value="rec_13a">🎄 13º salário – 1ª parcela</option><option value="rec_13b">🎁 13º salário – 2ª parcela</option><option value="rec_bon">🏆 Bônus por resultado</option><option value="dep_ben">💵 Depósito de benefícios</option></select><span id="lq-tipo-info" style="font-size:12px;color:var(--gray-600);"></span></div>' +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
       '<div style="flex:1;min-width:300px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-weight:700;font-size:13px;margin-bottom:4px;">1. Lista de contas do banco</div><div id="lq-lista-info" style="font-size:12.5px;margin-bottom:6px;"></div>' +
       '<label class="btn btn-outline btn-sm" style="cursor:pointer;">📂 Importar / atualizar lista (.xls/.xlsx)<input type="file" accept=".xls,.xlsx,.csv" style="display:none;" onchange="liqImportarLista(this)"></label></div>' +
@@ -20193,7 +20277,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     rec_sal: { t: 'Pagamento de salário', ic: '💵', cod: 1, arq: 'PAGAMENTO', re: /mensal|folha|pagamento|sal[áa]rio/i },
     rec_13a: { t: '13º salário – 1ª parcela', ic: '🎄', cod: 6, arq: '13 SALARIO 1a PARCELA', re: /13|d[ée]cimo/i },
     rec_13b: { t: '13º salário – 2ª parcela', ic: '🎁', cod: 6, arq: '13 SALARIO 2a PARCELA', re: /13|d[ée]cimo/i },
-    rec_bon: { t: 'Bônus por resultado', ic: '🏆', cod: '', arq: 'BONUS', re: /b[ôo]nus|pr[êe]mio|plr/i }
+    rec_bon: { t: 'Bônus por resultado', ic: '🏆', cod: '', arq: 'BONUS', re: /b[ôo]nus|pr[êe]mio|plr/i },
+    dep_ben: { t: 'Depósito de benefícios', ic: '💵', cod: '', arq: 'DEPOSITO BENEFICIOS', re: /dep[óo]sito/i }
   };
   var LQ_TIPO = 'rec_adi';
   window.liqAbrir = function (tipo) {
@@ -20211,6 +20296,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('lq-cod').value = (t === 'rec_sal' || t === 'rec_adi') ? T.cod : (salvo !== undefined && salvo !== '' ? salvo : T.cod);
     if (el('lq-tipo')) el('lq-tipo').value = t;
     if (el('lq-tipo-info')) el('lq-tipo-info').innerHTML = auto ? '🔎 identificado pelo PDF (' + esc(auto) + ')' : '';
+  };
+  // Benefícios › Depósito: mesma planilha do banco (uma por CNPJ), com os valores de depósito da tabela de benefícios
+  window.liqDeposito = function (rel) {
+    liqAbrir('dep_ben');
+    el('lq-pdfs').value = '';
+    liqMontar(rel, []);
+    if (!String(el('lq-cod').value || '').trim()) setTimeout(function () { el('lq-cod').focus(); }, 200);
   };
   window.liqLerPdfs = async function () {
     var fs = Array.prototype.slice.call(el('lq-pdfs').files || []); if (!fs.length) return;
@@ -20285,7 +20377,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var td = 'padding:5px 8px;border-bottom:1px solid var(--gray-200);', tr = td + 'text-align:right;white-space:nowrap;';
     box.style.display = '';
     box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;"><strong style="font-size:13px;">📊 Resumo por empresa</strong><span style="font-size:12px;color:var(--gray-600);">(separado das planilhas do banco)</span><span style="margin-left:auto;display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="liqResumoImprimir()">🖨️ Imprimir / PDF</button><button class="btn btn-outline btn-sm" onclick="liqResumoExcel()">📥 Resumo (Excel)</button></span></div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;"><thead><tr><th style="' + td + 'text-align:left;">Empresa</th><th style="' + td + 'text-align:left;">CNPJ</th><th style="' + tr + '">Funcionários</th><th style="' + tr + '">Valor na planilha</th><th style="' + tr + '">Sem conta (fora)</th><th style="' + tr + '">Total do PDF</th></tr></thead><tbody>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;"><thead><tr><th style="' + td + 'text-align:left;">Empresa</th><th style="' + td + 'text-align:left;">CNPJ</th><th style="' + tr + '">Funcionários</th><th style="' + tr + '">Valor na planilha</th><th style="' + tr + '">Sem conta (fora)</th><th style="' + tr + '">' + (LQ_TIPO === 'dep_ben' ? 'Total do depósito' : 'Total do PDF') + '</th></tr></thead><tbody>' +
       D.map(function (d) { return '<tr><td style="' + td + '"><strong>' + esc(d.nome) + '</strong></td><td style="' + td + '">' + esc(d.cnpj) + '</td><td style="' + tr + '">' + d.n + '</td><td style="' + tr + '"><strong>R$ ' + brl(d.total) + '</strong></td><td style="' + tr + (d.nsc ? 'color:#c0392b;' : '') + '">' + (d.nsc ? d.nsc + ' · R$ ' + brl(d.sc) : '—') + '</td><td style="' + tr + '">R$ ' + brl(d.pdf) + '</td></tr>'; }).join('') +
       '<tr style="background:var(--gray-50);font-weight:700;"><td style="' + td + '" colspan="2">TOTAL GERAL</td><td style="' + tr + '">' + T.n + '</td><td style="' + tr + '">R$ ' + brl(T.total) + '</td><td style="' + tr + '">' + (T.nsc ? T.nsc + ' · R$ ' + brl(T.sc) : '—') + '</td><td style="' + tr + '">R$ ' + brl(T.pdf) + '</td></tr></tbody></table>';
   }
@@ -20294,7 +20386,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     try {
       var D = resumoDados(), R = resumoTitulo(), lin = [], r = 0;
       lin.push({ r: r++, cells: [{ c: 0, t: 's', v: 'Resumo por empresa — ' + R.t + (R.comp ? ' — competência ' + R.comp : '') }] }); r++;
-      lin.push({ r: r++, cells: ['Empresa', 'CNPJ', 'Funcionários', 'Valor na planilha', 'Sem conta (qtd)', 'Sem conta (valor)', 'Total do PDF'].map(function (v, i) { return { c: i, t: 's', v: v }; }) });
+      lin.push({ r: r++, cells: ['Empresa', 'CNPJ', 'Funcionários', 'Valor na planilha', 'Sem conta (qtd)', 'Sem conta (valor)', LQ_TIPO === 'dep_ben' ? 'Total do depósito' : 'Total do PDF'].map(function (v, i) { return { c: i, t: 's', v: v }; }) });
       var T = [0, 0, 0, 0, 0];
       D.forEach(function (d) { T[0] += d.n; T[1] += d.total; T[2] += d.nsc; T[3] += d.sc; T[4] += d.pdf; lin.push({ r: r++, cells: [{ c: 0, t: 's', v: d.nome }, { c: 1, t: 's', v: d.cnpj }, { c: 2, t: 'n', v: d.n }, { c: 3, t: 'n', v: d.total, moeda: true }, { c: 4, t: 'n', v: d.nsc }, { c: 5, t: 'n', v: d.sc, moeda: true }, { c: 6, t: 'n', v: d.pdf, moeda: true }] }); });
       lin.push({ r: r++, cells: [{ c: 0, t: 's', v: 'TOTAL GERAL' }, { c: 2, t: 'n', v: T[0] }, { c: 3, t: 'n', v: Math.round(T[1] * 100) / 100, moeda: true }, { c: 4, t: 'n', v: T[2] }, { c: 5, t: 'n', v: Math.round(T[3] * 100) / 100, moeda: true }, { c: 6, t: 'n', v: Math.round(T[4] * 100) / 100, moeda: true }] });
@@ -20306,7 +20398,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var w = window.open('', '_blank'); if (!w) { alert('Permita pop-ups para imprimir.'); return; }
     w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + esc(R.arq) + '</title><style>body{font-family:Arial,sans-serif;margin:28px;color:#222}h2{margin:0 0 4px;font-size:18px}p{margin:0 0 14px;color:#555;font-size:13px}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #bbb;padding:6px 8px}th{background:#f1f1f1;text-align:left}td.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f7f7f7}</style></head><body>' +
       '<h2>Resumo por empresa — ' + esc(R.t) + '</h2><p>' + (R.comp ? 'Competência ' + esc(R.comp) + ' · ' : '') + 'Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p>' +
-      '<table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Funcionários</th><th>Valor na planilha</th><th>Sem conta (fora)</th><th>Total do PDF</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Funcionários</th><th>Valor na planilha</th><th>Sem conta (fora)</th><th>' + (LQ_TIPO === 'dep_ben' ? 'Total do depósito' : 'Total do PDF') + '</th></tr></thead><tbody>' +
       D.map(function (d) { return '<tr><td>' + esc(d.nome) + '</td><td>' + esc(d.cnpj) + '</td><td class="n">' + d.n + '</td><td class="n">R$ ' + brl(d.total) + '</td><td class="n">' + (d.nsc ? d.nsc + ' · R$ ' + brl(d.sc) : '—') + '</td><td class="n">R$ ' + brl(d.pdf) + '</td></tr>'; }).join('') +
       '<tr class="t"><td colspan="2">TOTAL GERAL</td><td class="n">' + T.n + '</td><td class="n">R$ ' + brl(T.total) + '</td><td class="n">' + (T.nsc ? T.nsc + ' · R$ ' + brl(T.sc) : '—') + '</td><td class="n">R$ ' + brl(T.pdf) + '</td></tr></tbody></table>' +
       '<script>setTimeout(function(){window.print()},300)<\/script></body></html>');
@@ -23550,7 +23642,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       var v = Math.round((parseFloat(i.value) || 0) * 100) / 100; if (!(v > 0)) return;
       var x = window.benefPessoaDe ? benefPessoaDe(i.dataset.f) : null; if (!x) return;
       var p = x.p, ek = p.emp || '_', E = G[ek] = G[ek] || { e: emps[p.emp] || { razao: 'SEM EMPRESA NO CADASTRO', cnpj: '' }, L: [], t: 0 };
-      E.L.push({ n: p.n, cpf: p.cpf || '', g: x.g, dep: deps[p.dep] ? deps[p.dep].nome : '', car: p.car || '', conta: p.conta || p.pix || '', v: v }); E.t += v;
+      E.id = p.emp || ''; E.L.push({ n: p.n, cpf: p.cpf || '', g: x.g, dep: deps[p.dep] ? deps[p.dep].nome : '', car: p.car || '', conta: p.conta || p.pix || '', cod: p.codEpr || '', v: v }); E.t += v;
     });
     return Object.keys(G).map(function (k) { G[k].L.sort(function (a, b) { return (a.n || '').localeCompare(b.n || '', 'pt-BR'); }); return G[k]; }).sort(function (a, b) { return (a.e.razao || '').localeCompare(b.e.razao || ''); });
   }
@@ -23567,8 +23659,27 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       (D.length > 1 ? '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' : '') + '<div class="ass"><div>Responsável RH</div><div>Financeiro</div></div></body></html>';
     _abrirDocSimples(h, 'Relatorio_Deposito_' + periodo().replace(/\//g, '-').replace(/\s+/g, '_'));
   };
-  window.depExcel = function () {
+  // Depósito (Excel) no mesmo modelo da Planilha da folha — uma aba por empresa
+  window.depExcel = async function () {
     var D = dados(); if (!D.length) { alert('Nenhum valor de Depósito na tabela.'); return; }
+    // planilha do banco ("lista funcionários para pagamento"), uma por CNPJ — mesma tela da Relação dos líquidos
+    if (typeof window.liqDeposito === 'function') {
+      var de0 = (el('flash-de') || {}).value || '', comp = de0 ? de0.slice(5, 7) + '/' + de0.slice(0, 4) : '';
+      liqDeposito(D.map(function (x) { return { empresa: x.e.razao || 'SEM EMPRESA NO CADASTRO', cnpj: x.e.cnpj || '', calculo: 'Depósito de benefícios ' + periodo(), comp: comp, total: Math.round(x.t * 100) / 100, arq: x.e.razao, itens: x.L.map(function (l) { return { cod: l.cod || '', nome: l.n, ident: l.cpf || '', valor: l.v }; }) }; }));
+      return;
+    }
+    if (typeof window.folhaPlanilhaDeposito === 'function') {
+      try {
+        var de = (el('flash-de') || {}).value || '', mes = de ? +de.slice(5, 7) - 1 : new Date().getMonth(), ano = de ? +de.slice(0, 4) : new Date().getFullYear(), o = { mes: mes, ano: ano, periodo: periodo(), cheias: [] };
+        var G = D.map(function (x) { var cod = (DB.g('empresas').find(function (e) { return e.id === x.id; }) || {}).cod || ''; return { razao: x.e.razao, cnpj: x.e.cnpj, cod: cod, L: x.L.map(function (l) { return { n: l.n, cod: l.cod, cpf: l.cpf, g: l.g, v: l.v }; }) }; });
+        var R = await folhaPlanilhaDeposito(G, o);
+        var a = document.createElement('a'); a.href = URL.createObjectURL(R.blob); a.download = String(mes + 1).padStart(2, '0') + '_' + ano + '_DEPÓSITO BENEFÍCIOS - GRUPO BIN EMBALAGENS.xlsx'; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+        toast('💵 Planilha de depósito gerada: ' + R.total + ' colaborador(es) em ' + R.abas + ' aba(s), uma por empresa');
+        if (o.cheias.length) alert('Abas sem linhas suficientes: ' + o.cheias.join(', '));
+        return;
+      } catch (e) { console.error(e); alert('Não foi possível gerar no modelo da folha (' + (e.message || e) + '). Vou gerar a lista simples.'); }
+    }
     var aoa = [['EMPRESA', 'CNPJ', 'COLABORADOR', 'CPF', 'VÍNCULO', 'DEPARTAMENTO', 'CARGO', 'CONTA / PIX', 'VALOR (R$)']], G = 0;
     D.forEach(function (x) { x.L.forEach(function (l) { aoa.push([x.e.razao, x.e.cnpj, l.n, l.cpf, l.g, l.dep, l.car, l.conta, l.v]); }); aoa.push(['TOTAL ' + x.e.razao, '', '', '', '', '', '', '', Math.round(x.t * 100) / 100]); G += x.t; });
     aoa.push(['TOTAL GERAL', '', '', '', '', '', '', '', Math.round(G * 100) / 100]);
