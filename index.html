@@ -19994,7 +19994,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     rdEstDeps();
   };
   // J.A (jovem aprendiz) conta como meia pessoa no limite de colaboradores
-  function ehJA(p) { var c = String(p.car || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim(); return c === 'JA' || c === 'J A' || /JOVEM APRENDIZ/.test(c); }
+  function ehJA(p) { var n = function (s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }, c = n(p.car).replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); return c === 'JA' || c === 'J A' || /^J ?A\b/.test(c) || /APRENDIZ/.test(c) || /APRENDIZ/.test(n(p.escala)) || p.tip === 'Aprendiz'; }
   function contar(dep) {
     var cl = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado' && f.dep === dep; });
     var ag = 0, sr = 0, ja = 0, peso = 0;
@@ -23172,7 +23172,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function addM(i, n) { var d = new Date(i + 'T12:00:00'); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
   function brd(i) { return i ? i.slice(8, 10) + '/' + i.slice(5, 7) : ''; }
   function per() { var u = new Date(C.a, C.m + 1, 0).getDate(), mm = String(C.m + 1).padStart(2, '0'); return { de: C.a + '-' + mm + '-01', ate: C.a + '-' + mm + '-' + String(u).padStart(2, '0') }; }
-  function ehJA(car) { var c = nrm(car).replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim(); return c === 'JA' || c === 'J A' || /JOVEM APRENDIZ/.test(c); }
+  // J.A (jovem aprendiz): cargo "J.A", "JA", "Jovem aprendiz", "Aprendiz…" ou escala "APRENDIZ" — vale para CLT, Sem registro e Agência
+  function ehJA(car, escala) { var c = nrm(car).replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); return c === 'JA' || c === 'J A' || /^J ?A\b/.test(c) || /APRENDIZ/.test(c) || /APRENDIZ/.test(nrm(escala)); }
   // dias de férias dentro do mês (Controle de Férias)
   function feriasDias(id) {
     var P = per(), d = 0;
@@ -23185,8 +23186,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   function pessoasDep(dep) {
     var L = [];
-    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado' && f.dep === dep) L.push({ pk: 'f:' + f.id, id: f.id, n: f.n, car: f.car || '', g: 'CLT', ini: iso(f.adm) }); });
-    DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') === 'Ativo' && c.dep === dep) L.push({ pk: 'x:' + c.id, id: 'x:' + c.id, n: c.n, car: c.car || '', g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', ini: iso(c.ini) }); });
+    DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado' && f.dep === dep) L.push({ pk: 'f:' + f.id, id: f.id, n: f.n, car: f.car || '', g: 'CLT', ini: iso(f.adm), esc: (f.tip === 'Aprendiz' ? 'APRENDIZ ' : '') + (typeof estEscalaNome === 'function' ? estEscalaNome(f.escala) || '' : f.escala || '') }); });
+    DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') === 'Ativo' && c.dep === dep) L.push({ pk: 'x:' + c.id, id: 'x:' + c.id, n: c.n, car: c.car || '', g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', ini: iso(c.ini), esc: c.escala || '' }); });
     // gerente também de outra loja (regra da pessoa): entra nesta loja como Gerente; o recibo soma as lojas
     DB.g(K_PES).forEach(function (r) {
       if (!r.extra || r.extra.indexOf(dep) === -1 || L.some(function (q) { return q.pk === r.pk; })) return;
@@ -23201,7 +23202,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       p.fixo = r.fixo != null ? +r.fixo : 0; p.comp = r.comp != null ? +r.comp : 0;
       p.faltas = o && o.faltas != null ? o.faltas : faltasFolha(p.pk); p.atest = o && o.atest != null ? o.atest : 0;
       p.ferAuto = p.g === 'CLT' ? feriasDias(p.id) : 0; p.fer = o && o.fer != null ? +o.fer : p.ferAuto;
-      p.ja = ehJA(p.car);
+      p.ja = ehJA(p.car, p.esc);
       return p;
     }).sort(function (a, b) { var o = { ger: 0, ger13: 1, sub: 2, eq: 3, fixo: 4, nao: 5 }; return o[a.papel] - o[b.papel] || (a.n || '').localeCompare(b.n || '', 'pt-BR'); });
   }
@@ -23219,14 +23220,14 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (p.g === 'Agência') {
         p.fator = 0;
         if (p.ini && addM(p.ini, 1) > addD(Pm.ate, 1)) { p.peso = 0; p.obs.push('agência com menos de 1 mês — fora da divisão'); }
-        else if (time) p.obs.push('agência — conta na divisão, sem receber');
+        else if (time) p.obs.push('agência — conta na divisão' + (p.ja ? ' como meia cota (J.A)' : '') + ', sem receber');
       } else if (p.ini && p.papel !== 'fixo' && p.papel !== 'nao') {
         // Experiência (3 meses): sem bônus, mas conta na divisão; quem termina no mês recebe 50%
         var fimExp = addD(addM(p.ini, 3), -1);
         if (fimExp > Pm.ate) { p.fator = 0; p.obs.push('experiência até ' + brd(fimExp) + ' — conta, sem bônus'); }
         else if (fimExp >= Pm.de) { p.fator *= 0.5; p.obs.push('fim da experiência em ' + brd(fimExp) + ' — 50%'); }
       }
-      if (p.ja && time) p.obs.push('J.A — meia cota');
+      if (p.ja && time && p.g !== 'Agência') p.obs.push('J.A — meia cota');
       if (p.fer > 0 && p.papel !== 'nao' && p.papel !== 'fixo') { var ff = Math.max(0, 30 - p.fer) / 30; p.fator *= ff; p.obs.push('férias ' + p.fer + ' dia(s) — ' + Math.round(ff * 100) + '%'); }
     });
     var totFixo = r2(P.filter(function (p) { return p.papel === 'fixo'; }).reduce(function (s, p) { return s + (+p.fixo || 0); }, 0));
