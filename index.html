@@ -23153,7 +23153,20 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       L.push({ pk: '__seed1', em: new Date().toISOString() }); DB.s(K_PES, L);
     } catch (e) { console.error(e); }
   }
-  semear();
+  // 04/11/2026 (2): Evelyn fora da divisão (decisão da gestão); Hellen também gerente de L9 (recibo único com L2)
+  function semear2() {
+    try {
+      var L = DB.g(K_PES); if (L.some(function (x) { return x.pk === '__seed2'; })) return;
+      var A = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado'; }); if (!A.length) return;
+      function acha(ini) { var M = A.filter(function (f) { return nrm(f.n).indexOf(ini) === 0; }); return M.length === 1 ? 'f:' + M[0].id : ''; }
+      function regDe(pk) { var r = L.find(function (x) { return x.pk === pk; }); if (!r) { r = { pk: pk, auto: true }; L.push(r); } return r; }
+      var ev = acha('EVELYN DA SILVA CAMARGO'); if (ev) { var r1 = regDe(ev); if (!r1.papel) { r1.papel = 'nao'; r1.motivo = 'Fora da divisão do time (decisão da gestão)'; } }
+      var he = acha('HELLEN FARIA'), l9 = DB.g('departamentos').find(function (d) { return String(d.nome || '').trim().toUpperCase() === 'L9'; });
+      if (he && l9) { var r2 = regDe(he); r2.extra = (r2.extra || []).filter(function (x) { return x !== l9.id; }).concat([l9.id]); }
+      L.push({ pk: '__seed2', em: new Date().toISOString() }); DB.s(K_PES, L);
+    } catch (e) { console.error(e); }
+  }
+  semear(); semear2();
   function iso(s) { s = String(s || '').trim(); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0]; m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; }
   function addD(i, n) { var d = new Date(i + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
   function addM(i, n) { var d = new Date(i + 'T12:00:00'); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); }
@@ -23174,9 +23187,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var L = [];
     DB.g('funcionarios').forEach(function (f) { if (!f._ext && f.st !== 'Desligado' && f.dep === dep) L.push({ pk: 'f:' + f.id, id: f.id, n: f.n, car: f.car || '', g: 'CLT', ini: iso(f.adm) }); });
     DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') === 'Ativo' && c.dep === dep) L.push({ pk: 'x:' + c.id, id: 'x:' + c.id, n: c.n, car: c.car || '', g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro', ini: iso(c.ini) }); });
+    // gerente também de outra loja (regra da pessoa): entra nesta loja como Gerente; o recibo soma as lojas
+    DB.g(K_PES).forEach(function (r) {
+      if (!r.extra || r.extra.indexOf(dep) === -1 || L.some(function (q) { return q.pk === r.pk; })) return;
+      var f = r.pk.indexOf('f:') === 0 ? DB.g('funcionarios').find(function (x) { return 'f:' + x.id === r.pk && x.st !== 'Desligado'; }) : null;
+      var c = r.pk.indexOf('x:') === 0 ? DB.g('colab-ext').find(function (x) { return 'x:' + x.id === r.pk && (x.st || 'Ativo') === 'Ativo'; }) : null;
+      var pe = f || c; if (!pe) return; var dh = DB.g('departamentos').find(function (d) { return d.id === pe.dep; });
+      L.push({ pk: r.pk, id: f ? f.id : 'x:' + c.id, n: pe.n, car: pe.car || '', g: f ? 'CLT' : (c.tipo === 'agencia' ? 'Agência' : 'Sem registro'), ini: iso(f ? f.adm : c.ini), outra: true, casa: dh ? dh.nome : '' });
+    });
     return L.map(function (p) {
       var o = oc(p.pk), r = reg(p.pk) || {};
-      p.papel = r.papel || (o && o.papel) || papelAuto(p.car);
+      p.papel = p.outra ? 'ger' : (r.papel || (o && o.papel) || papelAuto(p.car)); p.motivo = r.motivo || ''; p.extra = p.outra ? [] : (r.extra || []);
       p.fixo = r.fixo != null ? +r.fixo : 0; p.comp = r.comp != null ? +r.comp : 0;
       p.faltas = o && o.faltas != null ? o.faltas : faltasFolha(p.pk); p.atest = o && o.atest != null ? o.atest : 0;
       p.ferAuto = p.g === 'CLT' ? feriasDias(p.id) : 0; p.fer = o && o.fer != null ? +o.fer : p.ferAuto;
@@ -23216,6 +23237,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       p.base = base;
       if (p.papel === 'sub') p.obs.unshift('cota + saldo da faixa R$ ' + brl(T.sub - T.eq));
       if (p.papel === 'ger13') p.obs.unshift('1/3 do valor de gerente');
+      if (p.outra) p.obs.unshift('gerente também desta loja (cadastro em ' + (p.casa || 'outra loja') + ') — recibo único somando as lojas');
       if (p.papel === 'fixo') p.obs.unshift('valor fixo (sai do pool)');
       if (p.perde) { p.valor = 0; return; }
       var v = p.papel === 'fixo' ? base : base * p.fator;
@@ -23251,7 +23273,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.head.appendChild(st);
   }
   window.bcAbrir = function () {
-    injetar(); semear(); var h = new Date(); if (!C) C = { m: h.getMonth(), a: h.getFullYear() };
+    injetar(); semear(); semear2(); var h = new Date(); if (!C) C = { m: h.getMonth(), a: h.getFullYear() };
     el('bc-mes').value = String(C.m); el('bc-ano').value = C.a;
     el('bc-dep').innerHTML = '<option value="">Todos os departamentos com faturamento</option>' + deps().map(function (d) { return '<option value="' + esc(d.id) + '">' + esc(d.nome) + '</option>'; }).join('');
     bcRender(); el('modal-bonus-calc').classList.add('open');
@@ -23273,14 +23295,19 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         var ag = GCOR[p.g], pk = esc(p.pk);
         var campoV = p.papel === 'fixo' ? '<span style="font-size:11px;">fixo R$</span> <input type="number" min="0" step="1" value="' + (p.fixo || 0) + '" style="width:70px;" onchange="bcOc(\'' + pk + '\',\'fixo\',this.value)">'
           : '<span style="font-size:11px;">+ R$</span> <input type="number" min="0" step="1" value="' + (p.comp || '') + '" placeholder="0" style="width:70px;" title="Complemento (soma ao bônus)" onchange="bcOc(\'' + pk + '\',\'comp\',this.value)">';
-        var sit = p.papel === 'nao' ? '—' : p.perde ? '❌ perdeu (falta/atestado) — continua contando' : (p.fator === 0 && p.papel !== 'fixo' ? '⏳ ' : '✅ ') + (p.obs.length ? p.obs.join(' · ') : 'com direito');
+        var extraHtml = '';
+        if (!p.outra && (p.papel === 'ger' || p.papel === 'ger13' || p.papel === 'sub')) {
+          extraHtml = (p.extra || []).map(function (id) { var dx = DB.g('departamentos').find(function (z) { return z.id === id; }); return dx ? '<span style="display:inline-block;background:#ede7f6;color:#4a148c;border-radius:10px;padding:1px 7px;margin:2px 3px 0 0;font-size:10.5px;">gerente também de ' + esc(dx.nome) + ' <a href="javascript:void(0)" title="Remover" onclick="bcExtra(\'' + pk + '\',\'' + esc(id) + '\',0)" style="color:#b71c1c;text-decoration:none;">×</a></span>' : ''; }).join('') +
+            '<select style="font-size:10.5px;padding:1px 3px;margin-top:2px;" onchange="if(this.value)bcExtra(\'' + pk + '\',this.value,1)"><option value="">+ gerente também de…</option>' + deps().filter(function (z) { return z.id !== d.id && (p.extra || []).indexOf(z.id) === -1; }).map(function (z) { return '<option value="' + esc(z.id) + '">' + esc(z.nome) + '</option>'; }).join('') + '</select>';
+        }
+        var sit = p.papel === 'nao' ? (p.motivo ? '🚫 ' + esc(p.motivo) : '—') : p.perde ? '❌ perdeu (falta/atestado) — continua contando' : (p.fator === 0 && p.papel !== 'fixo' ? '⏳ ' : '✅ ') + (p.obs.length ? p.obs.join(' · ') : 'com direito');
         return '<tr class="' + (p.perde ? 'perde' : '') + '"' + (ag ? ' style="background:' + ag.bg + ';"' : '') + '><td><strong' + (ag && !p.perde ? ' style="color:' + ag.fg + ';"' : '') + '>' + esc(p.n) + '</strong> <span style="font-size:10.5px;color:var(--gray-400);">' + esc(p.car || '') + (p.g !== 'CLT' ? ' · ' + p.g : '') + '</span></td>' +
-          '<td><select onchange="bcOc(\'' + pk + '\',\'papel\',this.value)">' + Object.keys(PAP).map(function (k) { return '<option value="' + k + '"' + (p.papel === k ? ' selected' : '') + '>' + PAP[k] + '</option>'; }).join('') + '</select></td>' +
+          '<td>' + (p.outra ? '<select disabled title="Gerente desta loja também (regra salva na loja de cadastro)"><option>Gerente (outra loja)</option></select>' : '<select onchange="bcOc(\'' + pk + '\',\'papel\',this.value)">' + Object.keys(PAP).map(function (k) { return '<option value="' + k + '"' + (p.papel === k ? ' selected' : '') + '>' + PAP[k] + '</option>'; }).join('') + '</select>') + '</td>' +
           '<td><input type="number" min="0" step="1" value="' + (p.faltas || 0) + '" onchange="bcOc(\'' + pk + '\',\'faltas\',this.value)"></td>' +
           '<td><input type="number" min="0" step="1" value="' + (p.atest || 0) + '" onchange="bcOc(\'' + pk + '\',\'atest\',this.value)"></td>' +
           '<td><input type="number" min="0" max="30" step="1" value="' + (p.fer || 0) + '" title="Dias de férias no mês' + (p.ferAuto ? ' (Controle de Férias: ' + p.ferAuto + ')' : '') + '" onchange="bcOc(\'' + pk + '\',\'fer\',this.value)"></td>' +
           '<td style="white-space:nowrap;">' + campoV + '</td>' +
-          '<td style="white-space:normal;font-size:11.5px;min-width:200px;">' + sit + '</td><td style="text-align:right;font-weight:700;">' + (p.valor ? 'R$ ' + brl(p.valor) : '—') + '</td></tr>';
+          '<td style="white-space:normal;font-size:11.5px;min-width:200px;">' + sit + (extraHtml ? '<div>' + extraHtml + '</div>' : '') + '</td><td style="text-align:right;font-weight:700;">' + (p.valor ? 'R$ ' + brl(p.valor) : '—') + '</td></tr>';
       }).join('');
       return '<div class="bc-dep">' + cab + '<table style="width:100%;"><thead><tr><th>Colaborador</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Férias (dias)</th><th>Fixo / Complemento</th><th>Situação</th><th style="text-align:right;">Bônus</th></tr></thead><tbody>' + (linhas || '<tr><td colspan="8" style="color:var(--gray-400);">Ninguém neste departamento.</td></tr>') + '</tbody></table></div>';
     }).join('') : '<div style="padding:20px;text-align:center;color:var(--gray-400);">Nenhum departamento com faturamento lançado em ' + MES[C.m] + '/' + C.a + '. Escolha um departamento acima para lançar o faturamento aqui, ou lance em Departamentos e Cargos.</div>';
@@ -23288,6 +23315,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('bc-tot').innerHTML = 'Total do bônus em ' + MES[C.m] + '/' + C.a + ': <strong>R$ ' + brl(G) + '</strong>' + (GA || GS ? ' <span style="margin-left:8px;color:var(--gray-600);">CLT: <strong>R$ ' + brl(r2(G - GA - GS)) + '</strong></span>' + (GS ? pil('Sem registro', GS) : '') + (GA ? pil('Agência', GA) : '') : '');
   };
   window.bcFat = function (dep, v) { var n = num(v), L = DB.g(K_FAT).filter(function (x) { return !(x.dep === dep && x.mes === C.m && x.ano === C.a); }); if (n > 0) L.push({ id: uid(), dep: dep, mes: C.m, ano: C.a, valor: r2(n), em: new Date().toISOString() }); DB.s(K_FAT, L); setTimeout(bcRender, 0); };
+  window.bcExtra = function (pk, dep, add) {
+    var L = DB.g(K_PES), r = L.find(function (x) { return x.pk === pk; }); if (!r) { r = { pk: pk }; L.push(r); }
+    r.extra = (r.extra || []).filter(function (x) { return x !== dep; }); if (add) r.extra.push(dep);
+    DB.s(K_PES, L); setTimeout(bcRender, 0);
+  };
   window.bcOc = function (pk, campo, v) {
     // papel, valor fixo e complemento: regra permanente da pessoa (vale para os próximos meses)
     if (campo === 'papel' || campo === 'fixo' || campo === 'comp') {
@@ -23326,7 +23358,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bônus por resultado ' + MES[C.m] + '-' + C.a + '</title><style>' + css + '</style></head><body>' + (window.rhLogo ? '<img src="' + window.rhLogo + '" style="height:46px;float:right;">' : '') +
       '<h1>Bônus por resultado — ' + MES[C.m] + '/' + C.a + '</h1><div class="sub">Tabela Bonificação e dimensionamento de equipe · pool (Equipe × teto − valores fixos) dividido por todo o time (J.A = meia cota); quem perde o bônus continua contando e a parte não é redividida · subgerente: cota + saldo da faixa · experiência: conta sem bônus (50% no mês em que termina) · agência ≥ 1 mês: conta sem receber · férias: (30 − dias) ÷ 30 · valores em reais inteiros.</div>' +
       R.map(function (r) { G += r.total; return '<h3>' + esc(r.dep.nome) + '</h3><div class="i">Faturamento R$ ' + brl(r.fat) + (r.T ? ' · faixa a partir de R$ ' + brl(r.T.fat) + ' · Gerente R$ ' + brl(r.T.ger) + ' · Subgerente R$ ' + brl(r.T.sub) + ' · Equipe R$ ' + brl(r.T.eq) + ' × teto ' + r.teto + ' = R$ ' + brl(r.poolBruto) + (r.totFixo ? ' − fixos R$ ' + brl(r.totFixo) : '') + ' = R$ ' + brl(r.pool) + ' ÷ ' + String(r.unid).replace('.', ',') + ' cota(s) = R$ ' + brl(r.cota) + ' por cota' : ' · sem faixa') + '</div>' +
-        '<table><tr><th>Colaborador</th><th>Cargo</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Férias</th><th>Situação</th><th>Bônus</th></tr>' + ordAg(r.P).map(function (p) { if (p._sep) { var K = GCOR[p.g]; return '<tr><td colspan="8" style="background:' + K.bg + ';color:' + K.fg + ';font-weight:bold;border-top:1.5pt solid ' + K.bd + ';">' + K.t.toUpperCase() + ' · ' + p.n + ' pessoa(s) · bônus R$ ' + brl(p.v) + '</td></tr>'; } var ag = GCOR[p.g]; return '<tr' + (p.perde ? ' class="p"' : '') + (ag ? ' style="background:' + ag.bg + ';' + (p.perde ? '' : 'color:' + ag.fg + ';') + '"' : '') + '><td>' + esc(p.n) + (ag ? ' <small>(' + p.g + ')</small>' : '') + '</td><td>' + esc(p.car) + '</td><td>' + PAP[p.papel] + '</td><td class="n">' + (p.faltas || 0) + '</td><td class="n">' + (p.atest || 0) + '</td><td class="n">' + (p.fer || 0) + '</td><td style="font-size:8.5pt;">' + (p.papel === 'nao' ? 'não participa' : p.perde ? 'perdeu (falta/atestado) — continua contando' : (p.obs.length ? esc(p.obs.join(' · ')) : 'com direito')) + '</td><td class="n">R$ ' + brl(p.valor) + '</td></tr>'; }).join('') +
+        '<table><tr><th>Colaborador</th><th>Cargo</th><th>Papel</th><th>Faltas</th><th>Atestados</th><th>Férias</th><th>Situação</th><th>Bônus</th></tr>' + ordAg(r.P).map(function (p) { if (p._sep) { var K = GCOR[p.g]; return '<tr><td colspan="8" style="background:' + K.bg + ';color:' + K.fg + ';font-weight:bold;border-top:1.5pt solid ' + K.bd + ';">' + K.t.toUpperCase() + ' · ' + p.n + ' pessoa(s) · bônus R$ ' + brl(p.v) + '</td></tr>'; } var ag = GCOR[p.g]; return '<tr' + (p.perde ? ' class="p"' : '') + (ag ? ' style="background:' + ag.bg + ';' + (p.perde ? '' : 'color:' + ag.fg + ';') + '"' : '') + '><td>' + esc(p.n) + (ag ? ' <small>(' + p.g + ')</small>' : '') + '</td><td>' + esc(p.car) + '</td><td>' + (p.outra ? 'Gerente (também desta loja)' : PAP[p.papel]) + '</td><td class="n">' + (p.faltas || 0) + '</td><td class="n">' + (p.atest || 0) + '</td><td class="n">' + (p.fer || 0) + '</td><td style="font-size:8.5pt;">' + (p.papel === 'nao' ? (p.motivo ? esc(p.motivo) : 'não participa') : p.perde ? 'perdeu (falta/atestado) — continua contando' : (p.obs.length ? esc(p.obs.join(' · ')) : 'com direito')) + '</td><td class="n">R$ ' + brl(p.valor) + '</td></tr>'; }).join('') +
         '<tr><th colspan="7">TOTAL DO DEPARTAMENTO</th><th class="n">R$ ' + brl(r.total) + '</th></tr></table>'; }).join('') +
       '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' + (function () { var GA = totG(R, 'Agência'), GS = totG(R, 'Sem registro'); if (!GA && !GS) return ''; var pil = function (g, v) { var K = GCOR[g]; return ' · <span style="background:' + K.bg + ';color:' + K.fg + ';padding:2pt 6pt;"><b>' + g + ': R$ ' + brl(v) + '</b></span>'; }; return '<div style="font-size:10.5pt;">CLT: <b>R$ ' + brl(r2(G - GA - GS)) + '</b>' + (GS ? pil('Sem registro', GS) : '') + (GA ? pil('Agência', GA) : '') + '</div>'; })() + '</body></html>';
     _abrirDocSimples(h, 'Bonus_resultado_' + MES[C.m] + '_' + C.a);
