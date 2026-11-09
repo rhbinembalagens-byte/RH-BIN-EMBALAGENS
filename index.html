@@ -22851,6 +22851,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     if (typeof escBase === 'function' && escBase(escala) === '56') { var fer = new Set(); if (typeof getFeriadosSPGlobal === 'function') getFeriadosSPGlobal(a).forEach(function (f) { fer.add(f); }); for (var i = 1; i <= ult; i++) { var dt = new Date(a, m, i), ds = a + '-' + String(m + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0'); if (dt.getDay() === 6 && !fer.has(ds)) d++; } }
     return d;
   }
+  // dias úteis de um período livre (ex.: 06/11 a 05/12)
+  function diasPer(de, ate, escala) {
+    if (!de || !ate || ate < de) return 0;
+    if (typeof window.escDiasPeriodo === 'function') return window.escDiasPeriodo(escala, de, ate);
+    var d = typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 22;
+    if (typeof escBase === 'function' && escBase(escala) === '56') { var fer = new Set(); [+de.slice(0, 4), +ate.slice(0, 4)].forEach(function (a) { if (typeof getFeriadosSPGlobal === 'function') getFeriadosSPGlobal(a).forEach(function (f) { fer.add(f); }); }); for (var t = new Date(de + 'T12:00:00'); t <= new Date(ate + 'T12:00:00'); t.setDate(t.getDate() + 1)) { var ds = t.toISOString().slice(0, 10); if (t.getDay() === 6 && !fer.has(ds)) d++; } }
+    return d;
+  }
+  function brD(i) { return i ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  function perTxt(G) { return G.de && G.ate ? brD(G.de) + ' a ' + brD(G.ate) : MES[G.m] + '/' + G.a; }
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   // valor do VT: Mobilidade (ou VT antigo) cadastrado em Atribuir Benefícios
   function vtDe(c) {
     var L = DB.g('benef-atrib').filter(function (a) { return a.fid === 'x:' + c.id && a.st === 'Ativo' && parseFloat(a.valor) > 0; });
@@ -22865,10 +22876,10 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.body.insertAdjacentHTML('beforeend',
       '<div class="modal-bg" id="modal-rvt"><div class="modal" style="max-width:1100px;">' +
       '<div class="modal-header"><span class="modal-title">🚌 Recibo de Vale-Transporte — Sem registro</span><button class="modal-close" onclick="closeModal(\'modal-rvt\')">×</button></div>' +
-      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">O valor vem de <strong>Benefícios › Atribuir</strong> (campo <strong>Mobilidade</strong>; se for por dia, multiplica pelos dias do mês). Tudo pode ser alterado antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">O valor vem de <strong>Benefícios › Atribuir</strong> (campo <strong>Mobilidade</strong>; se for por dia, multiplica pelos dias úteis do período). Tudo pode ser alterado antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
       '<div class="form-grid">' +
-      '<div class="form-group"><label>Mês de referência</label><select id="rvt-mes" onchange="rvtLista(true)">' + MES.map(function (m, i) { return '<option value="' + i + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="form-group"><label>Ano</label><input id="rvt-ano" type="number" min="2000" max="2100" onchange="rvtLista(true)"></div>' +
+      '<div class="form-group"><label>Período de referência — de</label><input id="rvt-de" type="date" onchange="rvtDe()"></div>' +
+      '<div class="form-group"><label>até</label><input id="rvt-ate" type="date" onchange="rvtLista(true)"></div>' +
       '<div class="form-group form-full"><label>Empresa no recibo</label><select id="rvt-emp"></select></div>' +
       '<div class="form-group form-full"><label>Forma de pagamento</label><div style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">' + ['', 'Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'].map(function (f) { return '<label style="display:flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--gray-800);cursor:pointer;"><input type="radio" name="rvt-forma" value="' + f + '" style="width:auto;"' + (f ? '' : ' checked') + '> ' + (f || 'Marcar à mão') + '</label>'; }).join('') + '</div></div>' +
       '<div class="form-group"><label>Cidade – UF</label><input id="rvt-cidade" type="text"></div>' +
@@ -22881,17 +22892,20 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   }
   window.rvtAbrir = function (pre) {
     injetar(); LIN = {};
-    var h = new Date(); el('rvt-mes').value = String(h.getMonth()); el('rvt-ano').value = h.getFullYear();
+    var h = new Date(), ini = new Date(h.getFullYear(), h.getMonth() - (h.getDate() < 6 ? 1 : 0), 6), fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 5);
+    el('rvt-de').value = iso(ini); el('rvt-ate').value = iso(fim);
     el('rvt-emp').innerHTML = '<option value="">Empresa do cadastro de cada colaborador</option>' + DB.g('empresas').map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.razao) + '</option>'; }).join('') + '<option value="__perfil">Dados da empresa (⚙️ topo do sistema)</option>';
     el('rvt-cidade').value = ls('rh_rec_cidade') || 'Guarulhos – SP'; el('rvt-data').value = hoje();
     rvtLista(true);
     if (pre && LIN[pre]) { LIN[pre].ck = true; rvtLista(); }
     el('modal-rvt').classList.add('open');
   };
+  // ao escolher o início, sugere o fim (dia anterior no mês seguinte: 06/11 → 05/12)
+  window.rvtDe = function () { var de = el('rvt-de').value; if (de) { var t = new Date(de + 'T12:00:00'); el('rvt-ate').value = iso(new Date(t.getFullYear(), t.getMonth() + 1, t.getDate() - 1)); } rvtLista(true); };
   window.rvtLista = function (recalc) {
-    var m = +el('rvt-mes').value, a = +el('rvt-ano').value || new Date().getFullYear(), P = pessoas();
+    var de = el('rvt-de').value, ate = el('rvt-ate').value, P = pessoas();
     P.forEach(function (c) {
-      var L = LIN[c.id], b = vtDe(c), d = diasMes(m, a, c.escala);
+      var L = LIN[c.id], b = vtDe(c), d = diasPer(de, ate, c.escala);
       if (!L) L = LIN[c.id] = { ck: b.tem, nome: up(c.n), cpf: c.cpf || '', cargo: up(c.car || ''), dias: '', vdia: '', total: '', man: false };
       if (recalc && !L.man) { if (b.dia) { L.dias = b.v ? String(d) : ''; L.vdia = b.v ? brl(b.v) : ''; L.total = b.v ? brl(b.v * d) : ''; } else { L.dias = ''; L.vdia = ''; L.total = b.v ? brl(b.v) : ''; } }
     });
@@ -22923,40 +22937,43 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function linha(n) { return '<span style="display:inline-block;min-width:' + (n || 10) * 5 + 'pt;border-bottom:.6pt solid #3A2E1A;">&nbsp;</span>'; }
   function via(G, x, n) {
     var cel = function (r, v) { return '<td><div class="rot">' + r + '</div><div class="val">' + (v ? esc(v) : '&nbsp;') + '</div></td>'; }, u = function (v, l) { return v ? '<span class="pre">' + esc(v) + '</span>' : linha(l); };
-    var ok = x.v > 0, dp = G.data ? G.data.split('-') : null, ref = MES[G.m] + '/' + G.a;
+    var ok = x.v > 0, dp = G.data ? G.data.split('-') : null, ref = perTxt(G);
     var det = x.dias && x.vdia ? ', correspondente a ' + u(String(x.dias), 4) + ' dia(s) × R$ ' + u(brl(x.vdia), 8) + ' por dia' : '';
     return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">RECIBO DE VALE-TRANSPORTE</p><p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
-      '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup><tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('CPF', x.cpf) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('MÊS DE REFERÊNCIA', ref.toUpperCase()) + '</tr>' +
+      '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup><tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('CPF', x.cpf) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel(G.de ? 'PERÍODO DE REFERÊNCIA' : 'MÊS DE REFERÊNCIA', ref.toUpperCase()) + '</tr>' +
       '<tr>' + cel('DIAS × VALOR POR DIA', x.dias && x.vdia ? x.dias + ' × R$ ' + brl(x.vdia) : '') + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
-      '<p class="txt">Recebi da empresa <b>' + esc(up(x.razao) || 'BIN EMBALAGENS') + '</b>, inscrita no CNPJ nº ' + u(x.cnpj, 20) + ', a importância de R$ ' + u(ok ? brl(x.v) : '', 14) + ' (' + u(ok ? (window.recPorExtenso ? recPorExtenso(x.v) : '') : '', 48) + '), referente ao <b>vale-transporte</b> do mês de ' + ref + det + ', destinado ao meu deslocamento residência–trabalho–residência, dando plena quitação do valor aqui recebido.</p>' +
+      '<p class="txt">Recebi da empresa <b>' + esc(up(x.razao) || 'BIN EMBALAGENS') + '</b>, inscrita no CNPJ nº ' + u(x.cnpj, 20) + ', a importância de R$ ' + u(ok ? brl(x.v) : '', 14) + ' (' + u(ok ? (window.recPorExtenso ? recPorExtenso(x.v) : '') : '', 48) + '), referente ao <b>vale-transporte</b> ' + (G.de ? 'do período de ' : 'do mês de ') + ref + det + ', destinado ao meu deslocamento residência–trabalho–residência, dando plena quitação do valor aqui recebido.</p>' +
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
       '<p class="local">' + esc(G.cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : linha(6)) + ' de ' + (dp ? MES[+dp[1] - 1] : linha(22)) + ' de ' + (dp ? dp[0] : linha(8)) + '.</p>' +
       '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table></div>';
   }
   function documento(G, L) {
     var t = L.reduce(function (s, x) { return s + x.v; }, 0);
-    var rel = L.length > 1 ? '<div class="pg"><div class="tit">RELAÇÃO · VALE-TRANSPORTE SEM REGISTRO</div><div class="sub">' + MES[G.m] + '/' + G.a + ' · ' + L.length + ' recibo(s) · total R$ ' + brl(t) + '</div><table class="rel"><tr><th>Colaborador</th><th>CPF</th><th class="n">Dias</th><th class="n">Valor/dia</th><th class="n">Total</th></tr>' +
+    var rel = L.length > 1 ? '<div class="pg"><div class="tit">RELAÇÃO · VALE-TRANSPORTE SEM REGISTRO</div><div class="sub">' + perTxt(G) + ' · ' + L.length + ' recibo(s) · total R$ ' + brl(t) + '</div><table class="rel"><tr><th>Colaborador</th><th>CPF</th><th class="n">Dias</th><th class="n">Valor/dia</th><th class="n">Total</th></tr>' +
       L.map(function (x) { return '<tr><td>' + esc(x.nome) + '</td><td>' + esc(x.cpf) + '</td><td class="n">' + (x.dias || '') + '</td><td class="n">' + (x.vdia ? 'R$ ' + brl(x.vdia) : '') + '</td><td class="n">R$ ' + brl(x.v) + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="4">TOTAL</td><td class="n">R$ ' + brl(t) + '</td></tr></table></div>' : '';
-    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Recibo de Vale-Transporte ' + MES[G.m] + '-' + G.a + (L.length === 1 ? ' - ' + L[0].nome : '')) + '</title><style>' + CSS + '</style></head><body>' +
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Recibo de Vale-Transporte ' + perTxt(G).replace(/\//g, '-') + (L.length === 1 ? ' - ' + L[0].nome : '')) + '</title><style>' + CSS + '</style></head><body>' +
       L.map(function (x) { return '<div class="pg">' + via(G, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(G, x, 2) + '</div>'; }).join('') + rel + '</body></html>';
   }
   window.rvtGerar = function () {
     var ids = Object.keys(LIN).filter(function (k) { return LIN[k].ck; }); if (!ids.length) { alert('Marque pelo menos um colaborador.'); return; }
     var empSel = el('rvt-emp').value, ext = DB.g('colab-ext');
-    var G = { m: +el('rvt-mes').value, a: +el('rvt-ano').value, forma: (document.querySelector('input[name="rvt-forma"]:checked') || {}).value || '', cidade: el('rvt-cidade').value.trim() || 'Guarulhos – SP', data: el('rvt-data').value };
+    var de = el('rvt-de').value, ate = el('rvt-ate').value;
+    if (!de || !ate) { alert('Informe o período de referência (de / até).'); return; }
+    if (ate < de) { alert('A data final do período está antes da inicial.'); return; }
+    var G = { de: de, ate: ate, m: +de.slice(5, 7) - 1, a: +de.slice(0, 4), forma: (document.querySelector('input[name="rvt-forma"]:checked') || {}).value || '', cidade: el('rvt-cidade').value.trim() || 'Guarulhos – SP', data: el('rvt-data').value };
     var L = ids.map(function (id) { var x = LIN[id], c = ext.find(function (q) { return q.id === id; }) || {}, e = empDados(empSel === '__perfil' ? '' : (empSel || c.emp));
       return { id: id, nome: up(x.nome), cpf: x.cpf, cargo: up(x.cargo), dias: num(x.dias) || '', vdia: num(x.vdia) || '', v: Math.round(num(x.total) * 100) / 100, razao: e.razao, cnpj: e.cnpj }; });
     ls('rh_rec_cidade', G.cidade);
     var H = DB.g(K_HIST); H.push(Object.assign({ id: 'rvt' + Date.now().toString(36), em: new Date().toISOString(), itens: L }, G)); DB.s(K_HIST, H);
     closeModal('modal-rvt');
-    _abrirDocSimples(documento(G, L), ('Recibo_VT_' + MES[G.m] + '_' + G.a + '_' + (L.length === 1 ? L[0].nome : L.length + '_colaboradores')).replace(/[\s\/]+/g, '_'));
+    _abrirDocSimples(documento(G, L), ('Recibo_VT_' + brD(G.de).slice(0, 5) + '_a_' + brD(G.ate) + '_' + (L.length === 1 ? L[0].nome : L.length + '_colaboradores')).replace(/[\s\/]+/g, '_'));
   };
   function card() {
     var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="rec_vt_sr"]')) return;
     var ref = grid.querySelector('[data-docbase="rec_avulso"]') || grid.querySelector('[data-docbase="termo_uni"]');
     var h = '<div class="trein-card" data-docbase="rec_vt_sr" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">🚌 Recibo de Vale-Transporte (Sem registro)</div><div class="tc-meta">Recibo em 2 vias · modelo BIN</div></div>' +
       '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'rec_vt_sr\')">🗑️</button></div>' +
-      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Vale-transporte do mês para os colaboradores sem registro. Puxa o valor de Mobilidade cadastrado em Benefícios › Atribuir (por dia × dias úteis do mês); tudo editável. Um ou todos de uma vez, com relação do total.</p>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Vale-transporte do mês para os colaboradores sem registro. Puxa o valor de Mobilidade cadastrado em Benefícios › Atribuir (por dia × dias úteis do período escolhido); tudo editável. Um ou todos de uma vez, com relação do total.</p>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="rvtAbrir()">📄 Gerar Recibo</button></div></div>';
     if (ref) ref.insertAdjacentHTML('afterend', h); else grid.insertAdjacentHTML('beforeend', h);
     try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
