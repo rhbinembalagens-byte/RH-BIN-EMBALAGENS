@@ -24034,7 +24034,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       'h2{font-size:13px;background:' + COR + ';color:#fff;padding:5px 8px;margin:16px 0 6px;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}th{background:#e8eaf6}td.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f3f3f3}' +
       '.vz{color:#777;font-style:italic;margin:4px 0}.ad{display:flex;flex-wrap:wrap;gap:10px}.ad .c{width:calc(50% - 5px);display:flex;gap:10px;border:1px solid #ccd;border-radius:6px;padding:8px;box-sizing:border-box;page-break-inside:avoid}' +
       '.ad img,.ad .ph{width:70px;height:88px;object-fit:cover;border-radius:4px;flex-shrink:0}.ad .ph{background:#e8eaf6;color:' + COR + ';display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold}.ad .c div{line-height:1.5}' +
-      'tr{page-break-inside:avoid}</style></head><body>' +
+      'tr{page-break-inside:avoid}@page lp{size:A4 landscape}.lp{page:lp;break-before:page}table.dp{font-size:8.5px}table.dp th,table.dp td{padding:3px 4px}</style></head><body>' +
       '<div class="top"><div><h1>Relatório mensal de pessoal — ' + esc(T.mes) + '</h1><p>' + esc(T.emp) + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT') + '</p><p>Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p></div>' + logo + '</div>' +
       '<div class="kp"><div>Funcionários<b>' + D.ativos.length + '</b></div><div>Total de salários<b>R$ ' + brl(D.folha) + '</b></div><div>Admitidos<b>' + D.adm.length + '</b></div><div>Férias no mês<b>' + D.fer.length + '</b>' + (D.ferPago ? '<small>pago R$ ' + brl(D.ferPago) + '</small>' : '') + '</div><div>Desligados<b>' + D.desl.length + '</b>' + (D.rescPago ? '<small>rescisões R$ ' + brl(D.rescPago) + '</small>' : '') + '</div></div>' +
       // 1. relação
@@ -24050,6 +24050,16 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       // 4. desligados
       '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Foto</th><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th><th>Valor da rescisão</th></tr></thead><tbody>' +
         D.desl.map(function (x) { var fd = foto(x.fotoId); return '<tr><td style="width:46px;padding:2px;">' + (fd ? '<img src="' + fd + '" style="width:42px;height:52px;object-fit:cover;border-radius:3px;display:block;">' : '<span style="display:flex;width:42px;height:52px;align-items:center;justify-content:center;background:#e8eaf6;color:' + COR + ';font-weight:bold;border-radius:3px;">' + esc(ini(x.n)) + '</span>') + '</td><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td><td class="n">' + (x.resc ? 'R$ ' + brl(x.resc) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="9">TOTAL DE RESCISÕES</td><td class="n">R$ ' + brl(D.rescPago) + '</td></tr></tbody></table>' : vazio('Nenhum desligamento no mês.')) +
+      // 5. despesas do mês por colaborador (benefícios separados por coluna)
+      (function () {
+        var S = D.desp, K = ['sal'].concat(BCOL.map(function (c) { return c[0]; }), ['fer', 'd13', 'resc', 'tot']), N = ['Salário'].concat(BCOL.map(function (c) { return c[1]; }), ['Férias', '13º', 'Rescisão', 'Total']);
+        var cel = function (v) { return '<td class="n">' + (v ? brl(v) : '—') + '</td>'; }, lj = Object.keys(S.lojas).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+        return '<div class="lp"><h2>5. Despesas do mês por colaborador</h2>' + (S.L.length ? '<table class="dp"><thead><tr><th>Nome</th><th>Loja</th>' + N.map(function (t) { return '<th>' + t + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          S.L.map(function (x) { return '<tr><td>' + esc(x.p.n) + (x.sit !== 'Ativo' ? ' <small>(' + esc(x.sit) + ')</small>' : '') + '</td><td>' + esc(x.p.loja || '—') + '</td>' + K.map(function (c) { return cel(x[c]); }).join('') + '</tr>'; }).join('') +
+          '<tr class="t"><td colspan="2">TOTAL — ' + S.T.n + ' colaborador(es)</td>' + K.map(function (c) { return cel(S.T[c]); }).join('') + '</tr></tbody></table>' +
+          '<h2>Resumo por loja</h2><table class="dp" style="width:70%"><thead><tr><th>Loja</th><th>Colaboradores</th><th>Salários</th><th>Benefícios</th><th>Férias</th><th>13º</th><th>Rescisões</th><th>Total</th></tr></thead><tbody>' +
+          lj.map(function (k) { var o = S.lojas[k]; return '<tr><td>' + esc(k) + '</td><td class="n">' + o.n + '</td>' + ['sal', 'ben', 'fer', 'd13', 'resc', 'tot'].map(function (c) { return cel(o[c]); }).join('') + '</tr>'; }).join('') + '</tbody></table>' : vazio('Nenhum funcionário.')) + '</div>';
+      })() +
       '</body></html>';
     registrar(D, 'pdf');
     if (typeof _abrirDocSimples === 'function') _abrirDocSimples(h, T.arq); else { var w = window.open('', '_blank'); if (w) { w.document.write(h); w.document.close(); setTimeout(function () { w.print(); }, 700); } }
@@ -24143,7 +24153,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       lin(['', 'Férias no mês · valor pago', D.fer.length, D.ferPago || 0], 0, [3]);
       lin(['', 'Desligados no mês · valor das rescisões', D.desl.length, D.rescPago || 0], 0, [3]);
       lin(['', 'TOTAL PAGO (férias + rescisões)', '', Math.round(((D.ferPago || 0) + (D.rescPago || 0)) * 100) / 100], 4, [3]);
-      lin(['', 'Benefícios comprados + VT em dinheiro', '', D.desp.T.ben], 0, [3]);
+      BCOL.forEach(function (c) { lin(['', 'Benefício · ' + c[1], '', D.desp.T[c[0]]], 0, [3]); });
+      lin(['', 'Total de benefícios', '', D.desp.T.ben], 0, [3]);
       lin(['', '13º salário', '', D.desp.T.d13], 0, [3]);
       lin(['', 'TOTAL DE DESPESAS COM FUNCIONÁRIOS (salários + benefícios + férias + 13º + rescisões) — detalhe na aba Funcionários', '', D.desp.T.tot], 4, [3]);
       secao('ADMITIDOS NO MÊS');
