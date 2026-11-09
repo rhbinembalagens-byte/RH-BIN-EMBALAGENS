@@ -22385,13 +22385,15 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS › ATRIBUIR AO FUNCIONÁRIO: só Mobilidade, Livre, Bônus e Alimentação / Refeição ════════ */
 (function () {
-  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', dep: 'Depósito' };
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', comp: 'Comp. Salário', dep: 'Depósito', vtdin: 'VT Dinheiro' };
   var ANTIGOS_CARTAO = ['VT – Vale Transporte', 'VR – Vale Refeição', 'VA – Vale Alimentação', 'Combustível', 'Assiduidade', 'Triênio']; // substituídos pelos novos
-  var COR = { mob: ['#e65100', '🚌'], livre: ['#6a1b9a', '🆓'], alim: ['#1565c0', '🍽️'], dep: ['#2e7d32', '💵'] };
+  var COR = { mob: ['#e65100', '🚌'], livre: ['#6a1b9a', '🆓'], alim: ['#1565c0', '🍽️'], comp: ['#00838f', '💼'], dep: ['#2e7d32', '💵'], vtdin: ['#5d4037', '💸'] };
+  var ROT = { dep: 'VT Depósito' };   // nome na tela (o registro continua 'Depósito', usado no relatório de depósito)
+  var FORA_CARTAO = ['dep', 'comp', 'vtdin'];   // não entram na planilha de pedido do cartão
   function el(id) { return document.getElementById(id); }
   var S = 'font-size:12px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-family:inherit;';
   function linha(k) {
-    return '<tr id="batr-row-' + k + '"><td><strong style="color:' + COR[k][0] + ';">' + COR[k][1] + ' ' + NOVOS[k] + '</strong></td>' +
+    return '<tr id="batr-row-' + k + '"><td><strong style="color:' + COR[k][0] + ';">' + COR[k][1] + ' ' + (ROT[k] || NOVOS[k]) + '</strong></td>' +
       '<td><select id="batr-' + k + '-tipo" onchange="batrUpdateCalc(\'' + k + '\')" style="' + S + 'width:100%;"><option value="dia">Por dia</option><option value="mes">Mensal fixo</option></select></td>' +
       '<td><input type="number" id="batr-' + k + '-val" step="0.01" min="0" placeholder="0,00" oninput="batrUpdateCalc(\'' + k + '\')" style="width:100%;padding:5px 6px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:13px;font-family:inherit;"></td>' +
       '<td id="batr-' + k + '-calc" style="font-size:12px;color:var(--gray-400);text-align:center;">—</td>' +
@@ -22404,7 +22406,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var b = el('batr-row-bonus');
     if (b) {
       b.insertAdjacentHTML('beforebegin', linha('mob') + linha('livre'));
-      b.insertAdjacentHTML('afterend', linha('alim') + linha('dep'));
+      b.insertAdjacentHTML('afterend', linha('alim') + linha('comp') + linha('dep') + linha('vtdin'));
+      var rc = el('batr-row-comp'); if (rc) { var tc = el('batr-comp-tipo'); if (tc) tc.value = 'mes'; var sc = rc.querySelector('td strong'); if (sc) sc.insertAdjacentHTML('afterend', '<div style="font-size:10.5px;color:var(--gray-500);font-weight:400;">complemento salarial</div>'); }
+      var rv = el('batr-row-vtdin'); if (rv) { var sv = rv.querySelector('td strong'); if (sv) sv.insertAdjacentHTML('afterend', '<div style="font-size:10.5px;color:var(--gray-500);font-weight:400;">pago em dinheiro — recibo de VT</div>'); }
       var rd = el('batr-row-dep'); if (rd) { var tdn = rd.querySelector('td strong'); if (tdn) tdn.insertAdjacentHTML('afterend', '<div style="font-size:10.5px;color:var(--gray-500);font-weight:400;">pago por depósito — relatório separado</div>'); var tp = el('batr-dep-tipo'); if (tp) tp.value = 'mes'; }
       var t = b.querySelector('td strong'); if (t) t.textContent = '💰 Bônus';
       var tp = el('batr-bonus-tipo'); if (tp && !tp.querySelector('option[value="dia"]')) { tp.innerHTML = '<option value="mes">Mensal</option><option value="dia">Por dia</option>'; tp.setAttribute('onchange', "batrUpdateCalc('bonus')"); }
@@ -22442,7 +22446,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       return { id: ant ? ant.id : uid(), fid: fid, tipo: NOVOS[k], tipoBase: NOVOS[k], tipoCalc: (el('batr-' + k + '-tipo') || {}).value || 'mes', valor: (parseFloat((el('batr-' + k + '-val') || {}).value) || 0).toFixed(2),
         ini: ant && ant.ini ? ant.ini : ini, fim: '', st: (el('batr-' + k + '-st') || {}).value || 'Ativo', obs: (el('batr-' + k + '-obs') || {}).value || '' };
     });
-    var temNovo = novos.some(function (n) { return n.tipoBase !== 'Depósito' && parseFloat(n.valor) > 0; });
+    var temNovo = novos.some(function (n) { var k = Object.keys(NOVOS).find(function (x) { return NOVOS[x] === n.tipoBase; }); return FORA_CARTAO.indexOf(k) === -1 && parseFloat(n.valor) > 0; });
     var resto = atribs.filter(function (a) { return !(a.fid === fid && nomes.indexOf(a.tipoBase || a.tipo) !== -1); }).map(function (a) {
       if (temNovo && a.fid === fid && ANTIGOS_CARTAO.indexOf(a.tipoBase || a.tipo) !== -1 && a.st !== 'Encerrado') return Object.assign({}, a, { st: 'Encerrado', fim: ini, obs: ((a.obs ? a.obs + ' · ' : '') + 'substituído por Mobilidade/Livre/Bônus/Alimentação') });
       return a;
@@ -22460,6 +22464,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.benefNovosDoFunc = function (fid) {
     var o = null; DB.g('benef-atrib').forEach(function (a) {
       if (a.fid !== fid || a.st !== 'Ativo') return; var k = Object.keys(NOVOS).find(function (x) { return NOVOS[x] === (a.tipoBase || a.tipo); }); if (!k) return;
+      if (k === 'comp' || k === 'vtdin') return; // Comp. Salário e VT Dinheiro não vão para o pedido do cartão
       if (k === 'bonus' && !o) return; // bônus sozinho não muda a regra antiga
       o = o || {}; o[k] = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' };
     });
@@ -22610,7 +22615,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS: atribuir a vários/todos de uma vez + Agência e Sem registro ════════ */
 (function () {
-  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', dep: 'Depósito' };
+  var NOVOS = { mob: 'Mobilidade', livre: 'Livre', bonus: 'Bônus', alim: 'Alimentação / Refeição', comp: 'Comp. Salário', dep: 'Depósito', vtdin: 'VT Dinheiro' };
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
@@ -22695,7 +22700,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var fids = Object.keys(marcados); if (!fids.length) { alert('Selecione pelo menos um colaborador.'); return; }
     var lin = Object.keys(NOVOS).map(function (k) { var v = el('batr-' + k + '-val'); return { k: k, preench: v && v.value !== '', val: (parseFloat((v || {}).value) || 0).toFixed(2), tipoCalc: (el('batr-' + k + '-tipo') || {}).value || 'mes', st: (el('batr-' + k + '-st') || {}).value || 'Ativo', obs: (el('batr-' + k + '-obs') || {}).value || '' }; }).filter(function (l) { return l.preench; });
     if (!lin.length) { alert('Preencha o valor de pelo menos um benefício.'); return; }
-    if (!confirm('Aplicar ' + lin.map(function (l) { return NOVOS[l.k] + ' R$ ' + l.val.replace('.', ',') + (l.tipoCalc === 'dia' ? '/dia' : ''); }).join(', ') + '\npara ' + fids.length + ' colaborador(es)?')) return;
+    if (!confirm('Aplicar ' + lin.map(function (l) { return (l.k === 'dep' ? 'VT Depósito' : NOVOS[l.k]) + ' R$ ' + l.val.replace('.', ',') + (l.tipoCalc === 'dia' ? '/dia' : ''); }).join(', ') + '\npara ' + fids.length + ' colaborador(es)?')) return;
     var ini = (el('batr-ini') || {}).value || td(), atribs = DB.g('benef-atrib'), n = 0;
     fids.forEach(function (fid) {
       lin.forEach(function (l) {
@@ -22870,9 +22875,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // valor do VT: Mobilidade (ou VT antigo) cadastrado em Atribuir Benefícios
   function vtDe(c) {
     var L = DB.g('benef-atrib').filter(function (a) { return a.fid === 'x:' + c.id && a.st === 'Ativo' && parseFloat(a.valor) > 0; });
-    var b = L.find(function (a) { return (a.tipoBase || a.tipo) === 'Mobilidade'; }) || L.find(function (a) { return /^VT/i.test(a.tipoBase || a.tipo || ''); });
+    var b = L.find(function (a) { return (a.tipoBase || a.tipo) === 'VT Dinheiro'; }) || L.find(function (a) { return (a.tipoBase || a.tipo) === 'Mobilidade'; }) || L.find(function (a) { return /^VT/i.test(a.tipoBase || a.tipo || ''); });
     if (!b) return { v: 0, dia: true, tem: false };
-    return { v: parseFloat(b.valor) || 0, dia: b.tipoCalc ? b.tipoCalc === 'dia' : /^VT/i.test(b.tipoBase || ''), tem: true };
+    return { v: parseFloat(b.valor) || 0, dia: b.tipoCalc ? b.tipoCalc === 'dia' : /^VT/i.test(b.tipoBase || ''), tem: true, nome: b.tipoBase || b.tipo };
   }
   function pessoas() { return DB.g('colab-ext').filter(function (c) { return c.tipo === 'semreg' && c.st === 'Ativo'; }).sort(function (a, b) { return (a.n || '').localeCompare(b.n || ''); }); }
   var LIN = {};
@@ -22881,7 +22886,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     document.body.insertAdjacentHTML('beforeend',
       '<div class="modal-bg" id="modal-rvt"><div class="modal" style="max-width:1100px;">' +
       '<div class="modal-header"><span class="modal-title">🚌 Recibo de Vale-Transporte — Sem registro</span><button class="modal-close" onclick="closeModal(\'modal-rvt\')">×</button></div>' +
-      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">O valor vem de <strong>Benefícios › Atribuir</strong> (campo <strong>Mobilidade</strong>; se for por dia, multiplica pelos dias úteis do período). Tudo pode ser alterado antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px;">O valor vem de <strong>Benefícios › Atribuir</strong> (campo <strong>VT Dinheiro</strong> ou, se não houver, <strong>Mobilidade</strong>; se for por dia, multiplica pelos dias úteis do período). Tudo pode ser alterado antes de gerar. Sai em 2 vias por folha, no modelo BIN.</div>' +
       '<div class="form-grid">' +
       '<div class="form-group"><label>Período de referência — de</label><input id="rvt-de" type="date" onchange="rvtDe()"></div>' +
       '<div class="form-group"><label>até</label><input id="rvt-ate" type="date" onchange="rvtLista(true)"></div>' +
@@ -22918,7 +22923,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('rvt-tab').innerHTML = '<thead><tr><th></th><th>Nome no recibo</th><th>CPF</th><th>Dias</th><th>Valor/dia (R$)</th><th>Total (R$)</th><th>Cadastro</th></tr></thead><tbody>' +
       (P.length ? P.map(function (c) { var L = LIN[c.id], b = vtDe(c);
         return '<tr class="' + (L.ck ? 'on' : '') + '"><td><input type="checkbox" style="width:auto;" data-id="' + c.id + '"' + (L.ck ? ' checked' : '') + ' onchange="rvtCk(this)"></td>' + inp(c.id, 'nome', L.nome) + inp(c.id, 'cpf', L.cpf, 120) + inp(c.id, 'dias', L.dias, 55) + inp(c.id, 'vdia', L.vdia, 80) + inp(c.id, 'total', L.total, 90) +
-          '<td style="font-size:11px;color:var(--gray-500);">' + (b.tem ? 'Mobilidade R$ ' + brl(b.v) + (b.dia ? '/dia' : '/mês') : '<span style="color:#b26a00;">sem Mobilidade cadastrada</span>') + '</td></tr>'; }).join('') : '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum colaborador sem registro ativo.</td></tr>') + '</tbody>';
+          '<td style="font-size:11px;color:var(--gray-500);">' + (b.tem ? (b.nome || 'Mobilidade') + ' R$ ' + brl(b.v) + (b.dia ? '/dia' : '/mês') : '<span style="color:#b26a00;">sem VT Dinheiro/Mobilidade cadastrado</span>') + '</td></tr>'; }).join('') : '<tr><td colspan="7" style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum colaborador sem registro ativo.</td></tr>') + '</tbody>';
     rvtTot();
   };
   window.rvtEdit = function (i) {
