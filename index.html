@@ -8934,7 +8934,7 @@ async function gerarFlashXLSX() {
         vt:vt2, vr:vr2, va:va2, comb:cb2, assim:as2, bonus:bn2, odonto:od2, med:md2 };
     })
   };
-  try { snapshot.linhas = itensModelo.map(function (it) { return { nome: it.f.n, cpf: it.f.cpf || '', dep: it.dep, dias: it.dias, vt: it.vt, vr: it.vr, va: it.va, comb: it.comb, assim: it.assim, bonus: it.bonus, odonto: it.odonto, med: it.med, mob: it.tot ? it.tot.mob : null, livre: it.tot ? it.tot.livre : null, alim: it.tot ? it.tot.alim : null, bonusLivre: it.tot ? it.tot.bonus : null }; }); } catch (e) {}
+  try { snapshot.linhas = itensModelo.map(function (it) { return { nome: it.f.n, cpf: it.f.cpf || '', dep: it.dep, dias: it.dias, vt: it.vt, vr: it.vr, va: it.va, comb: it.comb, assim: it.assim, bonus: it.bonus, odonto: it.odonto, med: it.med, mob: it.tot ? it.tot.mob : null, livre: it.tot ? it.tot.livre : null, alim: it.tot ? it.tot.alim : null, bonusLivre: it.tot ? it.tot.bonus : null, compLivre: it.tot ? it.tot.comp : null, vtdepLivre: it.tot ? it.tot.vtdep : null }; }); } catch (e) {}
   var hist = DB.g('flash-hist');
   // Replace if same empresa+periodo already exists
   var existIdx = hist.findIndex(function(h){ return h.empId===empId && h.de===de && h.ate===ate; });
@@ -22272,16 +22272,17 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 /* ════════ BENEFÍCIOS › GERAR ARQUIVO: lançar direto em Mobilidade, Livre e Alimentação + Refeição ════════ */
 (function () {
-  var CAT = [['mob', 'Mobilidade', '#e65100'], ['livre', 'Livre', '#6a1b9a'], ['bonus', 'Bônus (soma no Livre)', '#bf360c'], ['alim', 'Alimentação + Refeição', '#1565c0'], ['dep', '💵 Depósito (separado)', '#2e7d32']];
+  // Livre, Bônus, Comp. Salário e VT Depósito saem somados na coluna LIVRE do arquivo de compra
+  var CAT = [['mob', 'Mobilidade', '#e65100'], ['livre', 'Livre', '#6a1b9a'], ['bonus', 'Bônus (soma no Livre)', '#bf360c'], ['comp', 'Comp. Salário (soma no Livre)', '#00838f'], ['dep', '💵 VT Depósito (soma no Livre)', '#2e7d32'], ['alim', 'Alimentação + Refeição', '#1565c0']];
   function el(id) { return document.getElementById(id); }
   function n(id) { return parseFloat((el(id) || {}).value) || 0; }
   function brl(v) { return 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   // sugestão pelos benefícios do cadastro (VT/VR por dia × dias) conforme o seletor de colunas
   function sugestao(fid) {
-    var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 };
+    var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0, comp: 0, dep: 0 };
     var v = { vt: n('vt-' + fid) * d, vr: n('vr-' + fid) * d, va: n('va-' + fid), comb: n('comb-' + fid), assim: n('assim-' + fid), bonus: n('bonus-' + fid), odonto: n('odonto-' + fid), med: n('med-' + fid) };
     var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(fid) : null;
-    if (nv) { ['mob', 'livre', 'alim', 'bonus', 'dep'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
+    if (nv) { ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
     else {
     Object.keys(v).forEach(function (k) { if (k === 'bonus') return; if (m[k] && t[m[k]] != null) t[m[k]] += v[k]; });
     t.bonus = v.bonus;
@@ -22291,15 +22292,18 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return t;
   }
   // o Bônus vai somado na coluna Livre da planilha
-  function idDe(c, fid) { return (c === 'bonus' ? 'b3bonus' : c === 'dep' ? 'b3dep' : c) + '-' + fid; }
+  function idDe(c, fid) { return (c === 'bonus' ? 'b3bonus' : c === 'dep' ? 'b3dep' : c === 'comp' ? 'b3comp' : c) + '-' + fid; }
+  function livreSoma(fid) { return Math.round((n('livre-' + fid) + n('b3bonus-' + fid) + n('b3comp-' + fid) + n('b3dep-' + fid)) * 100) / 100; }
+  window.b3LivreSoma = livreSoma;
   window.b3Dep = function (fid) { return n('b3dep-' + fid); };
-  window.benefModeloTot = function (fid) { if (!el('mob-' + fid)) return null; return { mob: n('mob-' + fid), livre: Math.round((n('livre-' + fid) + n('b3bonus-' + fid)) * 100) / 100, alim: n('alim-' + fid), bonus: n('b3bonus-' + fid) }; };
-  function total(fid) { var c = el('b3tot-' + fid); if (c) { var t = n('mob-' + fid) + n('livre-' + fid) + n('b3bonus-' + fid) + n('alim-' + fid); c.textContent = t > 0 ? brl(t) : '—'; } totGeral(); }
+  window.benefModeloTot = function (fid) { if (!el('mob-' + fid)) return null; return { mob: n('mob-' + fid), livre: livreSoma(fid), alim: n('alim-' + fid), bonus: n('b3bonus-' + fid), comp: n('b3comp-' + fid), vtdep: n('b3dep-' + fid) }; };
+  function total(fid) { var c = el('b3tot-' + fid); if (c) { var t = n('mob-' + fid) + livreSoma(fid) + n('alim-' + fid); c.textContent = t > 0 ? brl(t) : '—'; } totGeral(); }
   function totGeral() {
-    var box = el('b3-totais'); if (!box) return; var T = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 }, q = 0;
+    var box = el('b3-totais'); if (!box) return; var T = { mob: 0, livre: 0, alim: 0, bonus: 0, comp: 0, dep: 0 }, q = 0;
     document.querySelectorAll('#flash-tbody input.b3').forEach(function (i) { T[i.dataset.c] += parseFloat(i.value) || 0; });
     document.querySelectorAll('#flash-tbody tr').forEach(function (tr) { if (Array.prototype.some.call(tr.querySelectorAll('input.b3'), function (i) { return parseFloat(i.value) > 0; })) q++; });
-    box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.filter(function (c) { return c[0] !== 'dep'; }).map(function (c) { return c[1] + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total cartão: <strong>' + brl(T.mob + T.livre + T.bonus + T.alim) + '</strong> · 💵 Depósito (relatório separado): <strong>' + brl(T.dep) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus = ' + brl(T.livre + T.bonus) + ')</span>';
+    var LS = T.livre + T.bonus + T.comp + T.dep;
+    box.innerHTML = q + ' funcionário(s) com valor · ' + CAT.map(function (c) { return c[1].replace(/ \(soma no Livre\)/, '') + ': <strong>' + brl(T[c[0]]) + '</strong>'; }).join(' · ') + ' · Total cartão: <strong>' + brl(T.mob + LS + T.alim) + '</strong> <span style="color:var(--gray-500);">(na planilha, Livre = Livre + Bônus + Comp. Salário + VT Depósito = ' + brl(LS) + ')</span>';
   }
   window.b3TotGeral = function () { totGeral(); };
   window.b3Sugerir = function (fid) { if (String(fid).indexOf('x:') === 0) return; var s = sugestao(fid); CAT.forEach(function (c) { var i = el(idDe(c[0], fid)); if (i && !i.dataset.man) { i.value = s[c[0]] > 0 ? s[c[0]].toFixed(2) : ''; i.className = 'b3' + (i.value ? ' has-val' : ''); } }); total(fid); };
@@ -22315,7 +22319,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var chk = el('flash-benef-checks'); if (chk && chk.parentNode && !chk.parentNode.dataset.b3) {
       chk.parentNode.dataset.b3 = '1';
       Array.prototype.forEach.call(chk.parentNode.children, function (c) { if (c.id !== 'benef-modelo-map') c.style.display = 'none'; });
-      chk.parentNode.insertAdjacentHTML('afterbegin', '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin-bottom:6px;">💳 Lance os valores do pedido direto em <span style="color:#e65100;">Mobilidade</span>, <span style="color:#6a1b9a;">Livre</span> e <span style="color:#1565c0;">Alimentação + Refeição</span>.</div>' +
+      chk.parentNode.insertAdjacentHTML('afterbegin', '<div style="font-weight:700;font-size:13px;color:var(--green-dark);margin-bottom:6px;">💳 Lance os valores do pedido direto em <span style="color:#e65100;">Mobilidade</span>, <span style="color:#6a1b9a;">Livre</span> e <span style="color:#1565c0;">Alimentação + Refeição</span>. <span style="font-weight:500;color:var(--gray-600);">Livre, Bônus, Comp. Salário e VT Depósito saem somados na coluna Livre do arquivo.</span></div>' +
         '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;">Os campos já vêm com uma sugestão calculada pelos benefícios do cadastro (VT/VR por dia × dias, VA, combustível etc., conforme as colunas abaixo). É só ajustar o que precisar; o que você digitar fica valendo.</div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn btn-outline btn-sm" onclick="b3Recalcular()">🔄 Recalcular sugestão</button><button class="btn btn-outline btn-sm" onclick="b3Limpar()">🧹 Limpar valores</button>' +
         '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin-left:6px;"><input type="checkbox" onchange="b3Detalhe(this.checked)" style="width:auto;"> Ver detalhamento (dias, VT, VR, VA…)</label></div>');
@@ -22343,8 +22347,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         if (el('mob-' + x.fid)) return;
         var c = x.p, dep = (DB.g('departamentos').find(function (d) { return d.id === c.dep; }) || {}).nome || '';
         var dd = (typeof window.escDiasPeriodo === 'function' && de && ate) ? window.escDiasPeriodo(c.escala, de, ate) : ((typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22));
-        var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0, dep: 0 };
-        if (nv) ['mob', 'livre', 'alim', 'bonus', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
+        var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0, comp: 0, dep: 0 };
+        if (nv) ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
         var bBase = s.bonus; try { if (typeof window.benefBonusRecibo === 'function') s.bonus = Math.round((s.bonus + benefBonusRecibo(x.fid).v) * 100) / 100; } catch (e) {}
         var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
         tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
@@ -22464,11 +22468,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.benefNovosDoFunc = function (fid) {
     var o = null; DB.g('benef-atrib').forEach(function (a) {
       if (a.fid !== fid || a.st !== 'Ativo') return; var k = Object.keys(NOVOS).find(function (x) { return NOVOS[x] === (a.tipoBase || a.tipo); }); if (!k) return;
-      if (k === 'comp' || k === 'vtdin') return; // Comp. Salário e VT Dinheiro não vão para o pedido do cartão
-      if (k === 'bonus' && !o) return; // bônus sozinho não muda a regra antiga
+      if (k === 'vtdin') return; // VT Dinheiro não vai para o pedido do cartão
+      if ((k === 'bonus' || k === 'comp') && !o) return; // bônus / comp. salário sozinhos não mudam a regra antiga
       o = o || {}; o[k] = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' };
     });
     if (o) DB.g('benef-atrib').forEach(function (a) { if (a.fid === fid && a.st === 'Ativo' && (a.tipoBase || a.tipo) === 'Bônus') o.bonus = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' }; });
+    if (o) DB.g('benef-atrib').forEach(function (a) { if (a.fid === fid && a.st === 'Ativo' && (a.tipoBase || a.tipo) === 'Comp. Salário') o.comp = { v: parseFloat(a.valor) || 0, dia: a.tipoCalc === 'dia' }; });
     return o;
   };
   montar();
@@ -23896,8 +23901,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     });
     return L;
   }
-  function dados(m, a, empId, incExt) {
-    var P = periodo(m, a), L = pessoas(incExt).filter(function (p) { return !empId || p.emp === empId; });
+  function dados(m, a, empId, incExt, loja) {
+    var P = periodo(m, a), L = pessoas(incExt).filter(function (p) { return (!empId || p.emp === empId) && (!loja || (p.loja || '(sem loja)') === loja); });
     // rescisão enviada (📎 Rescisões): a data de afastamento vale como data de desligamento quando o cadastro está sem data
     if (typeof window.rescisoesDe === 'function') L.forEach(function (p) {
       var d = rescisoesDe(p.id).map(function (r) { return iso(r.data); }).filter(Boolean).sort().pop(); if (!d) return;
@@ -23929,7 +23934,48 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var ferPago = Math.round(fer.reduce(function (s, x) { return s + (x.pago || 0); }, 0) * 100) / 100, rescPago = Math.round(desl.reduce(function (s, x) { return s + (x.resc || 0); }, 0) * 100) / 100;
     var folha = Math.round(ativos.reduce(function (s, p) { return s + p.sal; }, 0) * 100) / 100;
     var porLoja = {}; ativos.forEach(function (p) { var k = p.loja || '(sem loja)'; porLoja[k] = porLoja[k] || { n: 0, sal: 0 }; porLoja[k].n++; porLoja[k].sal += p.sal; });
-    return { m: m, a: a, P: P, ativos: ativos, adm: adm, fer: fer, desl: desl, folha: folha, ferPago: ferPago, rescPago: rescPago, porLoja: porLoja, empId: empId, incExt: incExt };
+    var R = { m: m, a: a, P: P, ativos: ativos, adm: adm, fer: fer, desl: desl, folha: folha, ferPago: ferPago, rescPago: rescPago, porLoja: porLoja, empId: empId, incExt: incExt, loja: loja || '' };
+    R.desp = despesas(R);
+    return R;
+  }
+  // ── despesas do mês por colaborador: salário, benefícios comprados (por coluna), VT em dinheiro, férias, 13º e rescisão ──
+  function dg(s) { return String(s || '').replace(/\D/g, ''); }
+  function nm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var BCOL = [['mob', 'Mobilidade'], ['livre', 'Livre'], ['bonus', 'Bônus'], ['comp', 'Comp. Salário'], ['vtdep', 'VT Depósito'], ['alim', 'Alimentação + Refeição'], ['vtdin', 'VT Dinheiro']];
+  function despesas(D) {
+    var P = D.P, ok = function (d) { d = iso(d); return d && d >= P.de && d <= P.ate; }, r2 = function (v) { return Math.round((v || 0) * 100) / 100; };
+    var lista = D.ativos.slice(); D.desl.forEach(function (p) { if (lista.indexOf(p) === -1) lista.push(p); });
+    var porCpf = {}, porNome = {}, porId = {}, X = {};
+    lista.forEach(function (p) { X[p.id] = { p: p, sal: p.sal || 0, mob: 0, livre: 0, bonus: 0, comp: 0, vtdep: 0, alim: 0, vtdin: 0, fer: 0, d13: 0, resc: p.resc || 0, sit: D.desl.indexOf(p) !== -1 ? 'Desligado em ' + br(p.dtDesl) : 'Ativo' }; var c = dg(p.cpf); if (c.length === 11) porCpf[c] = p.id; porNome[nm(p.n)] = p.id; porId[p.id] = p.id; });
+    function achar(cpf, nome) { var c = dg(cpf); return (c.length === 11 && porCpf[c]) || porNome[nm(nome)] || null; }
+    // benefícios comprados: pedidos (Histórico de compras) com período começando no mês
+    DB.g('flash-hist').forEach(function (hh) {
+      if (!ok(hh.de) || (D.empId && hh.empId && hh.empId !== D.empId)) return;
+      (hh.linhas || []).forEach(function (l) {
+        var id = achar(l.cpf, l.nome); if (!id) return; var x = X[id];
+        var t = typeof window.histLinhaTot === 'function' ? histLinhaTot(l) : { mob: +l.mob || 0, livre: +l.livre || 0, alim: +l.alim || 0 };
+        var bo = +l.bonusLivre || 0, co = +l.compLivre || 0, vd = +l.vtdepLivre || 0;
+        x.mob += t.mob; x.alim += t.alim; x.bonus += bo; x.comp += co; x.vtdep += vd; x.livre += Math.max(0, t.livre - bo - co - vd);
+      });
+    });
+    // VT em dinheiro: recibos de VT (Sem registro) do mês
+    DB.g('recibos-vt').forEach(function (G) {
+      if (!(G.de ? ok(G.de) : (G.m === D.m && G.a === D.a))) return;
+      (G.itens || []).forEach(function (it) { var id = porId['x:' + it.id] || achar(it.cpf, it.nome); if (id) X[id].vtdin += +it.v || 0; });
+    });
+    // férias pagas no mês (recibos de férias enviados)
+    D.fer.forEach(function (f) { if (X[f.p.id]) X[f.p.id].fer += f.pago || 0; });
+    // 13º salário: arquivos de pagamento do banco (13º 1ª/2ª parcela) gerados no mês; sem arquivo, vale o recibo de 13º gerado no mês
+    var tem13 = {};
+    DB.g('pag-liq').forEach(function (r) { if (!/^rec_13/.test(r.tipo || '') || !ok(r.em)) return; (r.itens || []).forEach(function (it) { var id = achar(it.cpf, it.nome); if (id) { X[id].d13 += +it.valor || 0; tem13[id] = 1; } }); });
+    DB.g('recibos-hist').forEach(function (r) { if (!/^rec_13/.test(r.tipo || '') || !ok(r.em)) return; var id = (r.pk && (porId[r.pk] || porId[r.pk.replace(/^f:/, '')])) || achar('', r.nome); if (id && !tem13[id]) X[id].d13 += +r.vN || 0; });
+    var L = lista.map(function (p) {
+      var x = X[p.id]; ['sal', 'mob', 'livre', 'bonus', 'comp', 'vtdep', 'alim', 'vtdin', 'fer', 'd13', 'resc'].forEach(function (k) { x[k] = r2(x[k]); });
+      x.ben = r2(BCOL.reduce(function (s, c) { return s + x[c[0]]; }, 0)); x.tot = r2(x.sal + x.ben + x.fer + x.d13 + x.resc); return x;
+    });
+    var lojas = {}; L.forEach(function (x) { var k = x.p.loja || '(sem loja)', o = lojas[k] = lojas[k] || { n: 0, sal: 0, ben: 0, fer: 0, d13: 0, resc: 0, tot: 0 }; o.n++; ['sal', 'ben', 'fer', 'd13', 'resc', 'tot'].forEach(function (c) { o[c] = r2(o[c] + x[c]); }); });
+    var T = { n: L.length }; ['sal', 'mob', 'livre', 'bonus', 'comp', 'vtdep', 'alim', 'vtdin', 'ben', 'fer', 'd13', 'resc', 'tot'].forEach(function (c) { T[c] = r2(L.reduce(function (s, x) { return s + x[c]; }, 0)); });
+    return { L: L, lojas: lojas, T: T };
   }
 
   // ── janela ──
@@ -23944,11 +23990,20 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="form-group"><label>Mês</label><select id="rdr-mes" onchange="rdrPrevia()">' + MES.map(function (m, i) { return '<option value="' + i + '"' + (i === h.getMonth() ? ' selected' : '') + '>' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
       '<div class="form-group"><label>Ano</label><input id="rdr-ano" type="number" min="2000" max="2100" value="' + h.getFullYear() + '" onchange="rdrPrevia()"></div>' +
       '<div class="form-group"><label>Empresa</label><select id="rdr-emp" onchange="rdrPrevia()"></select></div>' +
+      '<div class="form-group"><label>Loja</label><select id="rdr-loja" onchange="rdrPrevia()"><option value="">🏬 Todas as lojas</option></select></div>' +
       '<div class="form-group" style="display:flex;align-items:flex-end;"><label style="display:flex;gap:6px;align-items:center;cursor:pointer;font-weight:500;"><input id="rdr-ext" type="checkbox" checked style="width:auto;" onchange="rdrPrevia()"> Incluir Agência e Sem registro</label></div>' +
       '</div><div id="rdr-previa" style="margin-top:10px;"></div>' +
       '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-reldir\')">Fechar</button><button class="btn btn-outline" onclick="rdrExcel()">📥 Excel</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="rdrPdf()">🖨️ PDF</button></div></div></div>');
   }
-  function sel() { return dados(+el('rdr-mes').value, +el('rdr-ano').value || new Date().getFullYear(), el('rdr-emp').value, el('rdr-ext').checked); }
+  function sel() { return dados(+el('rdr-mes').value, +el('rdr-ano').value || new Date().getFullYear(), el('rdr-emp').value, el('rdr-ext').checked, (el('rdr-loja') || {}).value || ''); }
+  // lojas do filtro, com a quantidade de colaboradores ativos no fim do mês
+  function lojasOpts() {
+    var s = el('rdr-loja'); if (!s) return; var cur = s.value;
+    var D = dados(+el('rdr-mes').value, +el('rdr-ano').value || new Date().getFullYear(), el('rdr-emp').value, el('rdr-ext').checked, '');
+    var ks = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+    s.innerHTML = '<option value="">🏬 Todas as lojas (' + D.ativos.length + ')</option>' + ks.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + ' (' + D.porLoja[k].n + ')</option>'; }).join('');
+    s.value = ks.indexOf(cur) !== -1 ? cur : '';
+  }
   window.rdrAbrir = function () {
     injetar();
     var s = el('rdr-emp'), ant = s.value;
@@ -23957,12 +24012,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     rdrPrevia(); el('modal-reldir').classList.add('open');
   };
   window.rdrPrevia = function () {
+    lojasOpts();
     var D = sel(), c = function (ic, t, v, s) { return '<div style="flex:1;min-width:130px;background:var(--gray-50);border-radius:var(--radius-sm);padding:10px;"><div style="font-size:12px;color:var(--gray-600);">' + ic + ' ' + t + '</div><div style="font-size:20px;font-weight:700;">' + v + '</div>' + (s ? '<div style="font-size:11.5px;color:var(--gray-600);">' + s + '</div>' : '') + '</div>'; };
     el('rdr-previa').innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-      c('👥', 'Funcionários', D.ativos.length, 'Salários R$ ' + brl(D.folha)) + c('🟢', 'Admitidos', D.adm.length, '') + c('🏖️', 'Férias no mês', D.fer.length, D.ferPago ? 'Pago R$ ' + brl(D.ferPago) : '') + c('🔴', 'Desligados', D.desl.length, D.rescPago ? 'Rescisões R$ ' + brl(D.rescPago) : '') + '</div>' +
-      '<div style="font-size:12px;color:var(--gray-600);margin-top:6px;">' + MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a + ' · funcionários ativos no fim do mês.</div>';
+      c('👥', 'Funcionários', D.ativos.length, 'Salários R$ ' + brl(D.folha)) + c('🟢', 'Admitidos', D.adm.length, '') + c('🏖️', 'Férias no mês', D.fer.length, D.ferPago ? 'Pago R$ ' + brl(D.ferPago) : '') + c('🔴', 'Desligados', D.desl.length, D.rescPago ? 'Rescisões R$ ' + brl(D.rescPago) : '') + c('💰', 'Despesas do mês', 'R$ ' + brl(D.desp.T.tot), 'Benefícios R$ ' + brl(D.desp.T.ben) + (D.desp.T.d13 ? ' · 13º R$ ' + brl(D.desp.T.d13) : '')) + '</div>' +
+      '<div style="font-size:12px;color:var(--gray-600);margin-top:6px;">' + MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a + (D.loja ? ' · loja <strong>' + esc(D.loja) + '</strong>' : '') + ' · funcionários ativos no fim do mês. Despesas: salário, benefícios comprados (pedidos com período iniciando no mês), VT em dinheiro, férias, 13º e rescisões.</div>';
   };
-  function titulo(D) { var e = D.empId ? emp(D.empId) : null; return { mes: MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a, emp: e ? e.razao + (e.cnpj ? ' · CNPJ ' + e.cnpj : '') : 'Todas as empresas', arq: 'Relatorio_Diretoria_' + String(D.m + 1).padStart(2, '0') + '-' + D.a + (e ? '_' + String(e.razao || '').replace(/[^\wÀ-ÿ]+/g, '_') : '') }; }
+  function titulo(D) { var e = D.empId ? emp(D.empId) : null; return { mes: MES[D.m].charAt(0).toUpperCase() + MES[D.m].slice(1) + '/' + D.a, emp: (e ? e.razao + (e.cnpj ? ' · CNPJ ' + e.cnpj : '') : 'Todas as empresas') + (D.loja ? ' · Loja ' + D.loja : ''), arq: 'Relatorio_Diretoria_' + String(D.m + 1).padStart(2, '0') + '-' + D.a + (e ? '_' + String(e.razao || '').replace(/[^\wÀ-ÿ]+/g, '_') : '') + (D.loja ? '_' + String(D.loja).replace(/[^\wÀ-ÿ]+/g, '_') : '') }; }
   function registrar(D, fmt) { try { var h = DB.g(K_HIST); h.push({ id: Date.now().toString(36), em: new Date().toISOString(), mes: D.m, ano: D.a, emp: D.empId || '', fmt: fmt, n: D.ativos.length, adm: D.adm.length, fer: D.fer.length, desl: D.desl.length, folha: D.folha }); DB.s(K_HIST, h.slice(-36)); } catch (e) {} }
 
   // ── PDF (impressão) ──
@@ -24011,7 +24067,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var te = new TextEncoder();
     function x(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function col(c) { var s = ''; c++; while (c) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; }
-    var arqs = [], ct = '', rels = '', sh = '', nImg = 0, nDr = 0;
+    var arqs = [], ct = '', rels = '', sh = '', dn = '', nImg = 0, nDr = 0;
     abas.forEach(function (A, k) {
       var n = k + 1, rows = A.linhas, maxC = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([1])), fotos = (A.fotos || []).filter(function (f) { return f.bytes; });
       var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:' + col(maxC - 1) + Math.max(rows.length, 1) + '"/><sheetViews><sheetView workbookViewId="0"' + (k === 0 ? ' tabSelected="1"' : '') + (A.fixa ? '><pane ySplit="' + A.fixa + '" topLeftCell="A' + (A.fixa + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView>' : '/>') + '</sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
@@ -24020,12 +24076,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
           var st = (A.est || {})[i] || 0, ht = (A.alt || {})[i], mo = (A.moedaLin || {})[i] || A.moeda || [];
           return '<row r="' + (i + 1) + '"' + (ht ? ' ht="' + ht + '" customHeight="1"' : '') + '>' + r.map(function (v, c) {
             if (v === null || v === undefined || v === '') return st ? '<c r="' + col(c) + (i + 1) + '" s="' + st + '"/>' : '';
+            if (typeof v === 'object' && v.f) { var sf = st === 4 ? (v.moeda ? 5 : 4) : (v.moeda ? 3 : 0); return '<c r="' + col(c) + (i + 1) + '"' + (sf ? ' s="' + sf + '"' : '') + (v.txt ? ' t="str"' : '') + '><f>' + x(v.f) + '</f><v>' + x(v.v) + '</v></c>'; }
             var ref = col(c) + (i + 1), s = st || (typeof v === 'number' && mo.indexOf(c) !== -1 ? 3 : (ht ? 6 : 0));
             if (typeof v === 'number' && st === 4 && mo.indexOf(c) !== -1) s = 5;
             if (typeof v === 'number' && ht && !st) s = mo.indexOf(c) !== -1 ? 7 : 6;
             return typeof v === 'number' ? '<c r="' + ref + '"' + (s ? ' s="' + s + '"' : '') + '><v>' + v + '</v></c>' : '<c r="' + ref + '" t="inlineStr"' + (s ? ' s="' + s + '"' : '') + '><is><t xml:space="preserve">' + x(v) + '</t></is></c>';
           }).join('') + '</row>';
-        }).join('') + '</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>' + (fotos.length ? '<drawing r:id="rId1"/>' : '') + '</worksheet>';
+        }).join('') + '</sheetData>' + (A.filtro ? '<autoFilter ref="' + A.filtro + '"/>' : '') + '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>' + (fotos.length ? '<drawing r:id="rId1"/>' : '') + '</worksheet>';
       arqs.push(['xl/worksheets/sheet' + n + '.xml', xml]);
       if (fotos.length) {
         nDr++; var dr = '', drRels = '';
@@ -24043,12 +24100,13 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       ct += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
       rels += '<Relationship Id="rId' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/>';
       sh += '<sheet name="' + x(A.nome.slice(0, 31)) + '" sheetId="' + n + '" r:id="rId' + n + '"/>';
+      if (A.filtro) dn += '<definedName name="_xlnm._FilterDatabase" localSheetId="' + k + '" hidden="1">\'' + x(A.nome.slice(0, 31)) + '\'!' + A.filtro.replace(/([A-Z]+)(\d+)/g, '$$$1$$$2') + '</definedName>';
     });
     var N = abas.length;
     arqs.unshift(
       ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + '</Types>'],
       ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
-      ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' + sh + '</sheets></workbook>'],
+      ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' + sh + '</sheets>' + (dn ? '<definedNames>' + dn + '</definedNames>' : '') + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'],
       ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '<Relationship Id="rId' + (N + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
       // estilos: 0 normal · 1 título · 2 cabeçalho · 3 moeda · 4 total · 5 total moeda · 6 texto centralizado na vertical (linhas com foto) · 7 moeda idem · 8 título de seção
       ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R$&quot; #,##0.00"/></numFmts><fonts count="5"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="13"/><color rgb="FF283593"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts>' +
@@ -24085,6 +24143,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       lin(['', 'Férias no mês · valor pago', D.fer.length, D.ferPago || 0], 0, [3]);
       lin(['', 'Desligados no mês · valor das rescisões', D.desl.length, D.rescPago || 0], 0, [3]);
       lin(['', 'TOTAL PAGO (férias + rescisões)', '', Math.round(((D.ferPago || 0) + (D.rescPago || 0)) * 100) / 100], 4, [3]);
+      lin(['', 'Benefícios comprados + VT em dinheiro', '', D.desp.T.ben], 0, [3]);
+      lin(['', '13º salário', '', D.desp.T.d13], 0, [3]);
+      lin(['', 'TOTAL DE DESPESAS COM FUNCIONÁRIOS (salários + benefícios + férias + 13º + rescisões) — detalhe na aba Funcionários', '', D.desp.T.tot], 4, [3]);
       secao('ADMITIDOS NO MÊS');
       lin(['Foto', 'Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Salário', 'CPF'], 2);
       if (!D.adm.length) lin(['', 'Nenhuma admissão no mês.']);
@@ -24101,14 +24162,24 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       D.fer.forEach(function (f) { lin(['', f.p.n, f.p.car, f.p.loja, emp(f.p.emp).razao || '', br(f.ini), br(f.fim), f.dias, f.per, f.st, f.pago || ''], 0, [10]); });
       if (D.fer.length) lin(['', 'TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', '', D.ferPago], 4, [10]);
       var aba1 = { nome: 'Relatório', linhas: R, est: est, alt: alt, moedaLin: ml, fotos: fotos, larg: [9, 36, 24, 20, 30, 16, 13, 13, 22, 26, 17], fixa: 0 };
-      // aba 2: funcionários
-      var F = [['Relação de funcionários — cargo, salário e loja'], [sub], [], ['Nome', 'Cargo', 'Salário', 'Loja', 'Empresa', 'CNPJ', 'Vínculo', 'Admissão']], fe = { 0: 1, 3: 2 };
-      D.ativos.forEach(function (p) { var e = emp(p.emp); F.push([p.n, p.car, p.sal || '', p.loja, e.razao || '', e.cnpj || '', p.vinc, br(p.adm)]); });
-      F.push(['TOTAL — ' + D.ativos.length + ' funcionário(s)', '', D.folha, '', '', '', '', '']); fe[F.length - 1] = 4;
-      var lojas = Object.keys(D.porLoja).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-      F.push([]); F.push(['Loja', 'Funcionários', 'Total de salários']); fe[F.length - 1] = 2;
-      var fml = {}; lojas.forEach(function (k) { F.push([k, D.porLoja[k].n, Math.round(D.porLoja[k].sal * 100) / 100]); fml[F.length - 1] = [2]; });
-      var aba2 = { nome: 'Funcionários', linhas: F, est: fe, moeda: [2], moedaLin: fml, larg: [38, 26, 15, 24, 34, 20, 18, 12], fixa: 4 };
+      // aba 2: funcionários com todas as despesas do mês (filtro por loja e total do filtro)
+      var DS = D.desp, H0 = ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Situação', 'Salário'].concat(BCOL.map(function (c) { return c[1]; }), ['Total benefícios', 'Férias', '13º salário', 'Rescisão', 'TOTAL DESPESAS']);
+      var NC = H0.length, MO = []; for (var q = 7; q < NC; q++) MO.push(q);
+      var IH = 5, I0 = IH + 1, I1 = IH + Math.max(DS.L.length, 1), cl = function (c) { var s = '', n2 = c + 1; while (n2) { var m2 = (n2 - 1) % 26; s = String.fromCharCode(65 + m2) + s; n2 = (n2 - m2 - 1) / 26; } return s; };
+      var F = [['Funcionários e despesas do mês — ' + T.mes], [sub], ['Use o filtro ▼ da coluna Loja (ou qualquer outra) — a linha TOTAL DO FILTRO mostra quantos colaboradores e os valores do que está filtrado.'], []], fe = { 0: 1 };
+      var tf = ['TOTAL DO FILTRO', { f: 'SUBTOTAL(103,A' + (I0 + 1) + ':A' + (I1 + 1) + ')&" colaborador(es)"', v: DS.L.length + ' colaborador(es)', txt: 1 }, '', '', '', '', ''];
+      var KS = ['sal'].concat(BCOL.map(function (c) { return c[0]; }), ['ben', 'fer', 'd13', 'resc', 'tot']);
+      KS.forEach(function (k, z) { var cc = cl(7 + z); tf.push({ f: 'SUBTOTAL(109,' + cc + (I0 + 1) + ':' + cc + (I1 + 1) + ')', v: DS.T[k], moeda: 1 }); });
+      F.push(tf); fe[4] = 4; F.push(H0); fe[IH] = 2;
+      DS.L.forEach(function (x) { var p = x.p, e = emp(p.emp); F.push([p.n, p.car, p.loja || '(sem loja)', e.razao || '', p.vinc, br(p.adm), x.sit].concat(KS.map(function (k) { return x[k] || 0; }))); });
+      if (!DS.L.length) F.push(['Nenhum funcionário.']);
+      var lojas = Object.keys(DS.lojas).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+      F.push([]); F.push(['RESUMO POR LOJA']); fe[F.length - 1] = 8;
+      F.push(['Loja', 'Colaboradores', 'Salários', 'Benefícios', 'Férias', '13º salário', 'Rescisões', 'TOTAL DESPESAS']); fe[F.length - 1] = 2;
+      var fml = {}; lojas.forEach(function (k) { var o = DS.lojas[k]; F.push([k, o.n, o.sal, o.ben, o.fer, o.d13, o.resc, o.tot]); fml[F.length - 1] = [2, 3, 4, 5, 6, 7]; });
+      F.push(['TOTAL', DS.T.n, DS.T.sal, DS.T.ben, DS.T.fer, DS.T.d13, DS.T.resc, DS.T.tot]); fe[F.length - 1] = 4; fml[F.length - 1] = [2, 3, 4, 5, 6, 7];
+      for (var rr = I0; rr <= I1; rr++) fml[rr] = MO;
+      var aba2 = { nome: 'Funcionários', linhas: F, est: fe, moedaLin: fml, larg: [36, 24, 20, 30, 16, 12, 20, 13, 13, 13, 13, 14, 13, 15, 13, 15, 13, 13, 13, 16], fixa: IH + 1, filtro: 'A' + (IH + 1) + ':' + cl(NC - 1) + (I1 + 1) };
       var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx([aba1, aba2])); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
       registrar(D, 'xlsx'); if (typeof toast === 'function') toast('📥 Relatório da diretoria exportado');
@@ -24242,8 +24313,9 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       if (tr.style.display === 'none') return;
       var empId = tr.dataset.emp || empSel, e = DB.g('empresas').find(function (x) { return x.id === empId; }) || {};
       var rb = typeof window.benefBonusRecibo === 'function' ? benefBonusRecibo(f) : { v: 0 };
-      var L = { f: f, nome: nome, ext: f.indexOf('x:') === 0, emp: e.razao || '', cnpj: e.cnpj || '', mob: n('mob-' + f), livre: n('livre-' + f), bonus: n('b3bonus-' + f), alim: n('alim-' + f), dep: n('b3dep-' + f), brec: rb.v };
-      L.tot = Math.round((L.mob + L.livre + L.bonus + L.alim) * 100) / 100;
+      var L = { f: f, nome: nome, ext: f.indexOf('x:') === 0, emp: e.razao || '', cnpj: e.cnpj || '', mob: n('mob-' + f), livre: n('livre-' + f), bonus: n('b3bonus-' + f), comp: n('b3comp-' + f), alim: n('alim-' + f), dep: n('b3dep-' + f), brec: rb.v };
+      L.ls = Math.round((L.livre + L.bonus + L.comp + L.dep) * 100) / 100;
+      L.tot = Math.round((L.mob + L.ls + L.alim) * 100) / 100;
       out.push(L);
     });
     return out;
@@ -24258,23 +24330,26 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   function tabela(L) {
     var grupos = {}, ordem = [];
     L.forEach(function (x) { var k = x.emp + '|' + x.cnpj; if (!grupos[k]) { grupos[k] = []; ordem.push(k); } grupos[k].push(x); });
-    var T = { mob: 0, livre: 0, bonus: 0, alim: 0, tot: 0, dep: 0, brec: 0 }, r = 'text-align:right;white-space:nowrap;';
-    var h = '<thead><tr><th>Colaborador</th><th style="' + r + '">Mobilidade</th><th style="' + r + '">Livre</th><th style="' + r + '">Bônus</th><th style="' + r + '">Livre na planilha<br><small>(Livre + Bônus)</small></th><th style="' + r + '">Alimentação + Refeição</th><th style="' + r + '">Total cartão</th><th style="' + r + '">💵 Depósito<br><small>(fora do arquivo)</small></th></tr></thead><tbody>';
+    var C = ['mob', 'livre', 'bonus', 'comp', 'dep', 'ls', 'alim', 'tot'];
+    var T = { mob: 0, livre: 0, bonus: 0, comp: 0, dep: 0, ls: 0, alim: 0, tot: 0, brec: 0 }, r = 'text-align:right;white-space:nowrap;';
+    var h = '<thead><tr><th>Colaborador</th><th style="' + r + '">Mobilidade</th><th style="' + r + '">Livre</th><th style="' + r + '">Bônus</th><th style="' + r + '">Comp. Salário</th><th style="' + r + '">VT Depósito</th><th style="' + r + '">Livre na planilha<br><small>(Livre + Bônus + Comp. + VT Dep.)</small></th><th style="' + r + '">Alimentação + Refeição</th><th style="' + r + '">Total cartão</th></tr></thead><tbody>';
+    function lin(rot, S, st) { return '<tr style="' + st + '"><td>' + rot + '</td>' + C.map(function (c) { return '<td style="' + r + '">' + brl(S[c]) + '</td>'; }).join('') + '</tr>'; }
     ordem.forEach(function (k) {
-      var G = grupos[k], S = { mob: 0, livre: 0, bonus: 0, alim: 0, tot: 0, dep: 0 };
-      h += '<tr><td colspan="8" style="background:var(--green-pale);font-weight:700;color:var(--green-dark);">🏢 ' + esc(G[0].emp || 'Empresa') + (G[0].cnpj ? ' <span style="font-weight:400;color:var(--gray-500);">· CNPJ ' + esc(G[0].cnpj) + '</span>' : '') + ' <span style="font-weight:400;">· ' + G.length + ' colaborador(es)</span></td></tr>';
+      var G = grupos[k], S = { mob: 0, livre: 0, bonus: 0, comp: 0, dep: 0, ls: 0, alim: 0, tot: 0 };
+      h += '<tr><td colspan="9" style="background:var(--green-pale);font-weight:700;color:var(--green-dark);">🏢 ' + esc(G[0].emp || 'Empresa') + (G[0].cnpj ? ' <span style="font-weight:400;color:var(--gray-500);">· CNPJ ' + esc(G[0].cnpj) + '</span>' : '') + ' <span style="font-weight:400;">· ' + G.length + ' colaborador(es)</span></td></tr>';
       G.forEach(function (x) {
-        ['mob', 'livre', 'bonus', 'alim', 'tot', 'dep'].forEach(function (c) { S[c] += x[c]; T[c] += x[c]; }); T.brec += x.brec;
+        C.forEach(function (c) { S[c] += x[c]; T[c] += x[c]; }); T.brec += x.brec;
         var v = function (c) { return x[c] ? brl(x[c]) : '<span style="color:var(--gray-400);">—</span>'; };
-        h += '<tr style="' + (x.tot || x.dep ? '' : 'opacity:.55;') + '"><td><strong>' + esc(x.nome) + '</strong>' + (x.ext ? ' <span class="badge badge-yellow" style="font-size:9.5px;">Sem registro</span>' : '') + '</td>' +
+        h += '<tr style="' + (x.tot ? '' : 'opacity:.55;') + '"><td><strong>' + esc(x.nome) + '</strong>' + (x.ext ? ' <span class="badge badge-yellow" style="font-size:9.5px;">Sem registro</span>' : '') + '</td>' +
           '<td style="' + r + '">' + v('mob') + '</td><td style="' + r + '">' + v('livre') + '</td>' +
           '<td style="' + r + '">' + v('bonus') + (x.brec ? '<div style="font-size:10.5px;color:#bf360c;">🏆 bônus por resultado ' + brl(x.brec) + (x.bonus - x.brec > 0.004 ? ' + atribuído ' + brl(x.bonus - x.brec) : '') + '</div>' : '') + '</td>' +
-          '<td style="' + r + 'font-weight:600;">' + (x.livre + x.bonus ? brl(x.livre + x.bonus) : '—') + '</td><td style="' + r + '">' + v('alim') + '</td>' +
-          '<td style="' + r + 'font-weight:700;">' + v('tot') + '</td><td style="' + r + '">' + v('dep') + '</td></tr>';
+          '<td style="' + r + '">' + v('comp') + '</td><td style="' + r + '">' + v('dep') + '</td>' +
+          '<td style="' + r + 'font-weight:600;">' + v('ls') + '</td><td style="' + r + '">' + v('alim') + '</td>' +
+          '<td style="' + r + 'font-weight:700;">' + v('tot') + '</td></tr>';
       });
-      if (ordem.length > 1) h += '<tr style="font-weight:700;background:var(--gray-50);"><td>Subtotal</td><td style="' + r + '">' + brl(S.mob) + '</td><td style="' + r + '">' + brl(S.livre) + '</td><td style="' + r + '">' + brl(S.bonus) + '</td><td style="' + r + '">' + brl(S.livre + S.bonus) + '</td><td style="' + r + '">' + brl(S.alim) + '</td><td style="' + r + '">' + brl(S.tot) + '</td><td style="' + r + '">' + brl(S.dep) + '</td></tr>';
+      if (ordem.length > 1) h += lin('Subtotal', S, 'font-weight:700;background:var(--gray-50);');
     });
-    h += '<tr style="font-weight:700;background:#fdf3e6;font-size:13px;"><td>TOTAL GERAL</td><td style="' + r + '">' + brl(T.mob) + '</td><td style="' + r + '">' + brl(T.livre) + '</td><td style="' + r + '">' + brl(T.bonus) + '</td><td style="' + r + '">' + brl(T.livre + T.bonus) + '</td><td style="' + r + '">' + brl(T.alim) + '</td><td style="' + r + '">' + brl(T.tot) + '</td><td style="' + r + '">' + brl(T.dep) + '</td></tr></tbody>';
+    h += lin('TOTAL GERAL', T, 'font-weight:700;background:#fdf3e6;font-size:13px;') + '</tbody>';
     return { html: h, T: T };
   }
   var ULT = null;
@@ -24287,7 +24362,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     el('bconf-cab').innerHTML = 'Período do pedido: <strong>' + br(de) + ' a ' + br(ate) + '</strong> · ' + L.filter(function (x) { return x.tot > 0; }).length + ' colaborador(es) com valor no cartão · <strong>Total cartão ' + brl(R.T.tot) + '</strong>' +
       (A ? ' · 🏆 Bônus por resultado de ' + A + ': <strong>' + brl(R.T.brec) + '</strong>' : '');
     el('bconf-tab').innerHTML = R.html;
-    el('bconf-obs').innerHTML = 'Confira os valores. Para alterar, clique em <strong>← Voltar e ajustar</strong>, corrija na tabela e clique em Gerar Compra de novo. O Bônus vai somado na coluna <strong>Livre</strong> da planilha; o Depósito não entra no arquivo.';
+    el('bconf-obs').innerHTML = 'Confira os valores. Para alterar, clique em <strong>← Voltar e ajustar</strong>, corrija na tabela e clique em Gerar Compra de novo. Livre, Bônus, Comp. Salário e VT Depósito vão <strong>somados na coluna Livre</strong> da planilha.';
     el('modal-bconf').classList.add('open');
   };
   window.bconfConfirmar = function () { closeModal('modal-bconf'); OK = true; window.gerarFlashXLSX(); };
