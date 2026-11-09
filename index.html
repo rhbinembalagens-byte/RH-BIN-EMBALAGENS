@@ -24034,7 +24034,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       'h2{font-size:13px;background:' + COR + ';color:#fff;padding:5px 8px;margin:16px 0 6px;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}th{background:#e8eaf6}td.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f3f3f3}' +
       '.vz{color:#777;font-style:italic;margin:4px 0}.ad{display:flex;flex-wrap:wrap;gap:10px}.ad .c{width:calc(50% - 5px);display:flex;gap:10px;border:1px solid #ccd;border-radius:6px;padding:8px;box-sizing:border-box;page-break-inside:avoid}' +
       '.ad img,.ad .ph{width:70px;height:88px;object-fit:cover;border-radius:4px;flex-shrink:0}.ad .ph{background:#e8eaf6;color:' + COR + ';display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:bold}.ad .c div{line-height:1.5}' +
-      'tr{page-break-inside:avoid}@page lp{size:A4 landscape}.lp{page:lp;break-before:page}table.dp{font-size:8.5px}table.dp th,table.dp td{padding:3px 4px}</style></head><body>' +
+      'tr{page-break-inside:avoid}@page lp{size:A4 landscape}.lp{page:lp;break-before:page}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}table.dp{font-size:8.5px}table.dp th,table.dp td{padding:3px 4px}</style></head><body>' +
       '<div class="top"><div><h1>Relatório mensal de pessoal — ' + esc(T.mes) + '</h1><p>' + esc(T.emp) + (D.incExt ? ' · inclui Agência e Sem registro' : ' · somente CLT') + '</p><p>Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</p></div>' + logo + '</div>' +
       '<div class="kp"><div>Funcionários<b>' + D.ativos.length + '</b></div><div>Total de salários<b>R$ ' + brl(D.folha) + '</b></div><div>Admitidos<b>' + D.adm.length + '</b></div><div>Férias no mês<b>' + D.fer.length + '</b>' + (D.ferPago ? '<small>pago R$ ' + brl(D.ferPago) + '</small>' : '') + '</div><div>Desligados<b>' + D.desl.length + '</b>' + (D.rescPago ? '<small>rescisões R$ ' + brl(D.rescPago) + '</small>' : '') + '</div></div>' +
       // 1. relação
@@ -24054,9 +24054,15 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       (function () {
         var S = D.desp, K = ['sal'].concat(BCOL.map(function (c) { return c[0]; }), ['fer', 'd13', 'resc', 'tot']), N = ['Salário'].concat(BCOL.map(function (c) { return c[1]; }), ['Férias', '13º', 'Rescisão', 'Total']);
         var cel = function (v) { return '<td class="n">' + (v ? brl(v) : '—') + '</td>'; }, lj = Object.keys(S.lojas).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-        return '<div class="lp"><h2>5. Despesas do mês por colaborador</h2>' + (S.L.length ? '<table class="dp"><thead><tr><th>Nome</th><th>Loja</th>' + N.map(function (t) { return '<th>' + t + '</th>'; }).join('') + '</tr></thead><tbody>' +
-          S.L.map(function (x) { return '<tr><td>' + esc(x.p.n) + (x.sit !== 'Ativo' ? ' <small>(' + esc(x.sit) + ')</small>' : '') + '</td><td>' + esc(x.p.loja || '—') + '</td>' + K.map(function (c) { return cel(x[c]); }).join('') + '</tr>'; }).join('') +
-          '<tr class="t"><td colspan="2">TOTAL — ' + S.T.n + ' colaborador(es)</td>' + K.map(function (c) { return cel(S.T[c]); }).join('') + '</tr></tbody></table>' +
+        return '<div class="lp"><h2>5. Despesas do mês por colaborador</h2>' + (S.L.length ? '<table class="dp"><thead><tr><th>Nome</th><th>Cargo</th>' + N.map(function (t) { return '<th>' + t + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          lj.map(function (k) {
+            var G = S.L.filter(function (x) { return (x.p.loja || '(sem loja)') === k; }).sort(function (a, b) { return a.p.n.localeCompare(b.p.n, 'pt-BR'); }), sb = {};
+            K.forEach(function (c) { sb[c] = Math.round(G.reduce(function (s, x) { return s + (x[c] || 0); }, 0) * 100) / 100; });
+            return '<tr><td colspan="' + (K.length + 2) + '" style="background:' + COR + ';color:#fff;font-weight:bold;">🏬 ' + esc(k) + ' — ' + G.length + ' colaborador(es)</td></tr>' +
+              G.map(function (x) { return '<tr><td>' + esc(x.p.n) + (x.sit !== 'Ativo' ? ' <small>(' + esc(x.sit) + ')</small>' : '') + '</td><td>' + esc(x.p.car || '—') + '</td>' + K.map(function (c) { return cel(x[c]); }).join('') + '</tr>'; }).join('') +
+              '<tr class="t"><td colspan="2">Subtotal ' + esc(k) + '</td>' + K.map(function (c) { return cel(sb[c]); }).join('') + '</tr>';
+          }).join('') +
+          '<tr class="t" style="background:#fdf3e6"><td colspan="2">TOTAL GERAL — ' + S.T.n + ' colaborador(es)</td>' + K.map(function (c) { return cel(S.T[c]); }).join('') + '</tr></tbody></table>' +
           '<h2>Resumo por loja</h2><table class="dp" style="width:70%"><thead><tr><th>Loja</th><th>Colaboradores</th><th>Salários</th><th>Benefícios</th><th>Férias</th><th>13º</th><th>Rescisões</th><th>Total</th></tr></thead><tbody>' +
           lj.map(function (k) { var o = S.lojas[k]; return '<tr><td>' + esc(k) + '</td><td class="n">' + o.n + '</td>' + ['sal', 'ben', 'fer', 'd13', 'resc', 'tot'].map(function (c) { return cel(o[c]); }).join('') + '</tr>'; }).join('') + '</tbody></table>' : vazio('Nenhum funcionário.')) + '</div>';
       })() +
@@ -24176,21 +24182,27 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       // aba 2: funcionários com todas as despesas do mês (filtro por loja e total do filtro)
       var DS = D.desp, H0 = ['Nome', 'Cargo', 'Loja', 'Empresa', 'Vínculo', 'Admissão', 'Situação', 'Salário'].concat(BCOL.map(function (c) { return c[1]; }), ['Total benefícios', 'Férias', '13º salário', 'Rescisão', 'TOTAL DESPESAS']);
       var NC = H0.length, MO = []; for (var q = 7; q < NC; q++) MO.push(q);
-      var IH = 5, I0 = IH + 1, I1 = IH + Math.max(DS.L.length, 1), cl = function (c) { var s = '', n2 = c + 1; while (n2) { var m2 = (n2 - 1) % 26; s = String.fromCharCode(65 + m2) + s; n2 = (n2 - m2 - 1) / 26; } return s; };
-      var F = [['Funcionários e despesas do mês — ' + T.mes], [sub], ['Use o filtro ▼ da coluna Loja (ou qualquer outra) — a linha TOTAL DO FILTRO mostra quantos colaboradores e os valores do que está filtrado.'], []], fe = { 0: 1 };
-      var tf = ['TOTAL DO FILTRO', { f: 'SUBTOTAL(103,A' + (I0 + 1) + ':A' + (I1 + 1) + ')&" colaborador(es)"', v: DS.L.length + ' colaborador(es)', txt: 1 }, '', '', '', '', ''];
+      var cl = function (c) { var s = '', n2 = c + 1; while (n2) { var m2 = (n2 - 1) % 26; s = String.fromCharCode(65 + m2) + s; n2 = (n2 - m2 - 1) / 26; } return s; };
       var KS = ['sal'].concat(BCOL.map(function (c) { return c[0]; }), ['ben', 'fer', 'd13', 'resc', 'tot']);
-      KS.forEach(function (k, z) { var cc = cl(7 + z); tf.push({ f: 'SUBTOTAL(109,' + cc + (I0 + 1) + ':' + cc + (I1 + 1) + ')', v: DS.T[k], moeda: 1 }); });
-      F.push(tf); fe[4] = 4; F.push(H0); fe[IH] = 2;
-      DS.L.forEach(function (x) { var p = x.p, e = emp(p.emp); F.push([p.n, p.car, p.loja || '(sem loja)', e.razao || '', p.vinc, br(p.adm), x.sit].concat(KS.map(function (k) { return x[k] || 0; }))); });
+      var vaz = function () { var r = []; for (var z = 0; z < NC; z++) r.push(''); return r; };
+      var F = [['Funcionários e despesas do mês — ' + T.mes], [sub], []], fe = { 0: 1 }, fml = {};
+      F.push(H0); fe[F.length - 1] = 2; var IH = F.length - 1;
+      // separado por loja: linha colorida com a loja e a quantidade, os funcionários embaixo e o subtotal da loja
+      var grupos = {}; DS.L.forEach(function (x) { var k = x.p.loja || '(sem loja)'; (grupos[k] = grupos[k] || []).push(x); });
+      Object.keys(grupos).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); }).forEach(function (k) {
+        var G = grupos[k], o = DS.lojas[k], hr = vaz(); hr[0] = '🏬 ' + k + ' — ' + G.length + ' colaborador(es)'; F.push(hr); fe[F.length - 1] = 8;
+        G.sort(function (a, b) { return a.p.n.localeCompare(b.p.n, 'pt-BR'); }).forEach(function (x) { var p = x.p, e = emp(p.emp); F.push([p.n, p.car, k, e.razao || '', p.vinc, br(p.adm), x.sit].concat(KS.map(function (c) { return x[c] || 0; }))); fml[F.length - 1] = MO; });
+        var st = ['Subtotal ' + k + ' — ' + G.length + ' colaborador(es)', '', '', '', '', '', ''].concat(KS.map(function (c) { return Math.round(G.reduce(function (s, x) { return s + (x[c] || 0); }, 0) * 100) / 100; }));
+        F.push(st); fe[F.length - 1] = 4; fml[F.length - 1] = MO;
+      });
       if (!DS.L.length) F.push(['Nenhum funcionário.']);
+      F.push([]); var tg = ['TOTAL GERAL — ' + DS.T.n + ' colaborador(es)', '', '', '', '', '', ''].concat(KS.map(function (c) { return DS.T[c]; })); F.push(tg); fe[F.length - 1] = 4; fml[F.length - 1] = MO;
       var lojas = Object.keys(DS.lojas).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
       F.push([]); F.push(['RESUMO POR LOJA']); fe[F.length - 1] = 8;
       F.push(['Loja', 'Colaboradores', 'Salários', 'Benefícios', 'Férias', '13º salário', 'Rescisões', 'TOTAL DESPESAS']); fe[F.length - 1] = 2;
-      var fml = {}; lojas.forEach(function (k) { var o = DS.lojas[k]; F.push([k, o.n, o.sal, o.ben, o.fer, o.d13, o.resc, o.tot]); fml[F.length - 1] = [2, 3, 4, 5, 6, 7]; });
+      lojas.forEach(function (k) { var o = DS.lojas[k]; F.push([k, o.n, o.sal, o.ben, o.fer, o.d13, o.resc, o.tot]); fml[F.length - 1] = [2, 3, 4, 5, 6, 7]; });
       F.push(['TOTAL', DS.T.n, DS.T.sal, DS.T.ben, DS.T.fer, DS.T.d13, DS.T.resc, DS.T.tot]); fe[F.length - 1] = 4; fml[F.length - 1] = [2, 3, 4, 5, 6, 7];
-      for (var rr = I0; rr <= I1; rr++) fml[rr] = MO;
-      var aba2 = { nome: 'Funcionários', linhas: F, est: fe, moedaLin: fml, larg: [36, 24, 20, 30, 16, 12, 20, 13, 13, 13, 13, 14, 13, 15, 13, 15, 13, 13, 13, 16], fixa: IH + 1, filtro: 'A' + (IH + 1) + ':' + cl(NC - 1) + (I1 + 1) };
+      var aba2 = { nome: 'Funcionários', linhas: F, est: fe, moedaLin: fml, larg: [36, 24, 20, 30, 16, 12, 20, 13, 13, 13, 13, 14, 13, 15, 13, 15, 13, 13, 13, 16], fixa: IH + 1 };
       var a = document.createElement('a'); a.href = URL.createObjectURL(xlsx([aba1, aba2])); a.download = T.arq + '.xlsx'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
       registrar(D, 'xlsx'); if (typeof toast === 'function') toast('📥 Relatório da diretoria exportado');
