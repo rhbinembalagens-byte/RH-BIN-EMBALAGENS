@@ -24895,5 +24895,239 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   var _cm = window.closeModal; if (typeof _cm === 'function') window.closeModal = function () { var r = _cm.apply(this, arguments); talvez(); return r; };
 })();
 </script>
+<script>
+/* ═══════ GERAR DOCUMENTOS: ⚠️ Advertência disciplinar — um único modelo com caixas de seleção do motivo (atrasos, faltas, desídia, abandono de posto, outro) ═══════ */
+(function () {
+  var COR = '#c62828', K_HIST = 'advertencias';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K_HIST) === -1) { RT.LIST.push(K_HIST); if (RT.ALL && RT.ALL.indexOf(K_HIST) === -1) RT.ALL.push(K_HIST); }
+  var SEM = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  var MOT = [
+    ['atraso', 'Atrasos', 'Chegadas após o horário de entrada, sem justificativa aceita'],
+    ['falta', 'Faltas injustificadas', 'Ausência ao trabalho sem atestado ou justificativa legal'],
+    ['desidia', 'Desídia no desempenho das funções', 'Descuido, negligência ou baixo empenho nas tarefas'],
+    ['abandono', 'Abandono de posto de trabalho', 'Sair do posto ou da loja durante o expediente sem autorização'],
+    ['outro', 'Outro motivo', 'Uso de celular, uniforme, conduta etc.']
+  ];
+  var DES = ['Não execução ou execução incompleta das tarefas atribuídas / atendimento ao cliente com descaso', 'Erros reiterados por falta de atenção (separação de pedidos, conferência, caixa, estoque etc.)', 'Descumprimento de procedimentos e normas internas já orientados', 'Descuido com mercadorias, equipamentos ou materiais da empresa', 'Atrasos e/ou faltas reiterados, já objeto de orientação ou advertência anterior'];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function nl(s) { return esc(s).replace(/\n/g, '<br>'); }
+  function up(s) { return String(s || '').toUpperCase(); }
+  function hoje() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function br(i) { return i && /^\d{4}-\d{2}-\d{2}/.test(i) ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+  function nid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function depNome(v) { if (!v) return ''; var d = DB.g('departamentos').find(function (x) { return x.id === v || x.nome === v; }); return d ? d.nome : (/^[a-z0-9]{8,}$/i.test(v) ? '' : v); }
+  function empDados(id) { var e = id ? DB.g('empresas').find(function (x) { return x.id === id; }) : null; if (e) return { razao: e.razao || '', cnpj: e.cnpj || '' }; var p = window.rhPerfil ? rhPerfil() : {}; return { razao: p.razao || 'BIN EMBALAGENS', cnpj: p.cnpj || '' }; }
+  function min(h) { var m = /^(\d{1,2}):(\d{2})/.exec(h || ''); return m ? +m[1] * 60 + +m[2] : null; }
+  function dur(a, b) { var x = min(a), y = min(b); if (x == null || y == null || y <= x) return ''; var d = y - x; return (d >= 60 ? Math.floor(d / 60) + 'h' : '') + String(d % 60).padStart(d >= 60 ? 2 : 1, '0') + (d >= 60 ? '' : ' min'); }
+  function func(id) { return DB.g('funcionarios').find(function (f) { return f.id === id; }); }
+  function anteriores(fid) { return DB.g(K_HIST).filter(function (h) { return h.fid === fid; }).sort(function (a, b) { return (a.data || '').localeCompare(b.data || ''); }); }
+
+  // ── janela ──
+  function linhaAtraso(v) { v = v || {}; return '<tr><td><input type="date" class="ad-a-d" value="' + esc(v.d || '') + '"></td><td><input type="time" class="ad-a-p" value="' + esc(v.p || '') + '" oninput="advCalc()"></td><td><input type="time" class="ad-a-c" value="' + esc(v.c || '') + '" oninput="advCalc()"></td><td class="ad-a-t" style="font-weight:600;white-space:nowrap;">' + esc(dur(v.p, v.c)) + '</td><td><button type="button" class="btn-icon danger" onclick="this.closest(\'tr\').remove()">✕</button></td></tr>'; }
+  function linhaFalta(v) { v = v || {}; return '<tr><td><input type="date" class="ad-f-d" value="' + esc(v.d || '') + '" onchange="advCalc()"></td><td class="ad-f-s">' + (v.d ? SEM[new Date(v.d + 'T12:00:00').getDay()] : '') + '</td><td><select class="ad-f-c"><option value="não"' + (v.c === 'sim' ? '' : ' selected') + '>Não</option><option value="sim"' + (v.c === 'sim' ? ' selected' : '') + '>Sim</option></select></td><td><button type="button" class="btn-icon danger" onclick="this.closest(\'tr\').remove()">✕</button></td></tr>'; }
+  function injetar() {
+    if (el('modal-adv')) return;
+    var css = '#modal-adv .ad-box{border:1.5px solid #f3c7c7;border-radius:10px;padding:10px 12px;margin-top:8px;background:#fff8f8;}#modal-adv table.ad{width:100%;border-collapse:collapse;font-size:12.5px;}#modal-adv table.ad th{text-align:left;font-size:11px;color:var(--gray-500);padding:3px 4px;}#modal-adv table.ad td{padding:2px 4px;}#modal-adv table.ad input,#modal-adv table.ad select{padding:4px 6px;font-size:12.5px;width:100%;}' +
+      '#modal-adv .ad-mot{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1.5px solid var(--gray-200,#e5e5e5);border-radius:9px;cursor:pointer;background:#fff;}#modal-adv .ad-mot:has(input:checked){border-color:' + COR + ';background:#fff1f1;}#modal-adv .ad-mot input{margin-top:3px;width:16px;height:16px;accent-color:' + COR + ';}';
+    var mot = MOT.map(function (m) { return '<label class="ad-mot"><input type="checkbox" class="ad-mot-chk" value="' + m[0] + '" onchange="advMotivos()"><span><strong style="font-size:13px;">' + m[1] + '</strong><br><span style="font-size:11.5px;color:var(--gray-500);">' + m[2] + '</span></span></label>'; }).join('');
+    var h = '<style>' + css + '</style><div class="modal-bg" id="modal-adv"><div class="modal" style="max-width:860px;">' +
+      '<div class="modal-header"><h3>⚠️ Advertência disciplinar</h3><button class="modal-close" onclick="closeModal(\'modal-adv\')">&#10005;</button></div>' +
+      '<p style="font-size:12.5px;color:var(--gray-600);margin:0 0 10px;">Escolha o colaborador (empresa, CNPJ, loja, CPF, matrícula e cargo vêm do cadastro), marque o(s) motivo(s) e preencha os fatos. Sai um único documento, em 2 vias.</p>' +
+      '<div class="form-grid">' +
+      '<div class="form-group form-full"><label>Colaborador(a) *</label><select id="ad-func" onchange="advFunc()"></select></div>' +
+      '<div class="form-group"><label>Empresa</label><select id="ad-emp"></select></div>' +
+      '<div class="form-group"><label>Loja / Unidade</label><input id="ad-loja"></div>' +
+      '<div class="form-group"><label>CPF</label><input id="ad-cpf"></div>' +
+      '<div class="form-group"><label>Matrícula</label><input id="ad-mat"></div>' +
+      '<div class="form-group"><label>Cargo / Função</label><input id="ad-car"></div>' +
+      '<div class="form-group"><label>Data de emissão</label><input id="ad-data" type="date"></div>' +
+      '<div class="form-group"><label>Advertência nº</label><select id="ad-num"><option value="1">1ª</option><option value="2">2ª</option><option value="3">3ª</option></select></div>' +
+      '<div class="form-group"><label>&nbsp;</label><div id="ad-ant" style="font-size:12px;color:var(--gray-600);padding-top:6px;"></div></div>' +
+      '</div>' +
+      '<div style="font-weight:700;font-size:13px;margin:12px 0 6px;color:' + COR + ';">Motivo(s) da advertência — marque um ou mais</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px;">' + mot + '</div>' +
+      // atrasos
+      '<div class="ad-box" id="ad-b-atraso" style="display:none;"><strong style="font-size:13px;">⏰ Atrasos — registros de ponto</strong><table class="ad"><thead><tr><th>Data</th><th>Horário previsto</th><th>Horário de chegada</th><th>Tempo de atraso</th><th></th></tr></thead><tbody id="ad-atr"></tbody></table><button type="button" class="btn btn-outline btn-sm" onclick="advAdd(\'atr\')">+ Linha</button></div>' +
+      // faltas
+      '<div class="ad-box" id="ad-b-falta" style="display:none;"><strong style="font-size:13px;">📅 Faltas injustificadas</strong><table class="ad"><thead><tr><th>Data</th><th>Dia da semana</th><th>Comunicou a ausência?</th><th></th></tr></thead><tbody id="ad-flt"></tbody></table><button type="button" class="btn btn-outline btn-sm" onclick="advAdd(\'flt\')">+ Linha</button></div>' +
+      // desídia
+      '<div class="ad-box" id="ad-b-desidia" style="display:none;"><strong style="font-size:13px;">📉 Desídia — fato(s)</strong>' + DES.map(function (d, i) { return '<label style="display:flex;gap:6px;font-size:12.5px;margin:4px 0;"><input type="checkbox" class="ad-des" value="' + i + '"> ' + esc(d) + '</label>'; }).join('') +
+      '<div style="display:flex;gap:6px;align-items:center;font-size:12.5px;"><input type="checkbox" id="ad-des-o"> Outro: <input id="ad-des-ot" style="flex:1;padding:4px 6px;" oninput="el_adv(\'ad-des-o\').checked=!!this.value"></div>' +
+      '<div class="form-group" style="margin-top:6px;"><label>Orientações anteriores sobre o mesmo assunto (datas e forma – verbal ou escrita)</label><textarea id="ad-des-ant" rows="2"></textarea></div></div>' +
+      // abandono
+      '<div class="ad-box" id="ad-b-abandono" style="display:none;"><strong style="font-size:13px;">🚪 Abandono de posto de trabalho</strong><div class="form-grid" style="margin-top:6px;">' +
+      '<div class="form-group"><label>Data</label><input type="date" id="ad-ab-d"></div><div class="form-group"><label>Horário de saída</label><input type="time" id="ad-ab-s" oninput="advCalc()"></div>' +
+      '<div class="form-group"><label>Horário de retorno</label><input type="time" id="ad-ab-r" oninput="advCalc()"></div><div class="form-group"><label>Tempo ausente</label><input id="ad-ab-t"></div>' +
+      '<div class="form-group"><label>Posto / setor</label><input id="ad-ab-p"></div><div class="form-group"><label>Quem constatou</label><input id="ad-ab-q"></div></div></div>' +
+      // outro
+      '<div class="ad-box" id="ad-b-outro" style="display:none;"><strong style="font-size:13px;">📝 Outro motivo</strong><div class="form-grid" style="margin-top:6px;">' +
+      '<div class="form-group form-full"><label>Motivo</label><input id="ad-o-m" placeholder="Ex.: uso de celular durante o atendimento"></div>' +
+      '<div class="form-group form-full"><label>Norma descumprida (regulamento interno, ordem do gestor, contrato, CLT)</label><input id="ad-o-n"></div></div></div>' +
+      '<div class="form-grid" style="margin-top:10px;">' +
+      '<div class="form-group form-full"><label>Descrição dos fatos / observações do gestor (data, horário, local e o que ocorreu)</label><textarea id="ad-fatos" rows="3"></textarea></div>' +
+      '<div class="form-group"><label>Responsável pela empresa (nome e cargo)</label><input id="ad-resp"></div>' +
+      '<div class="form-group"><label>Vias</label><select id="ad-vias"><option value="2">2 vias (RH e colaborador)</option><option value="1">1 via</option></select></div>' +
+      '</div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="advHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="advGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-adv\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="advGerar()">🖨️ Gerar advertência</button></div>' +
+      '</div></div>' +
+      '<div class="modal-bg" id="modal-adv-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Advertências emitidas</h3><button class="modal-close" onclick="closeModal(\'modal-adv-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ad-htab"></table></div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', h);
+  }
+  window.el_adv = el;
+  window.advAdd = function (t) { el('ad-' + t).insertAdjacentHTML('beforeend', t === 'atr' ? linhaAtraso() : linhaFalta()); };
+  window.advCalc = function () {
+    document.querySelectorAll('#ad-atr tr').forEach(function (tr) { tr.querySelector('.ad-a-t').textContent = dur(tr.querySelector('.ad-a-p').value, tr.querySelector('.ad-a-c').value); });
+    document.querySelectorAll('#ad-flt tr').forEach(function (tr) { var d = tr.querySelector('.ad-f-d').value; tr.querySelector('.ad-f-s').textContent = d ? SEM[new Date(d + 'T12:00:00').getDay()] : ''; });
+    var t = dur(el('ad-ab-s').value, el('ad-ab-r').value); if (t) el('ad-ab-t').value = t;
+  };
+  window.advMotivos = function () {
+    document.querySelectorAll('.ad-mot-chk').forEach(function (c) {
+      var b = el('ad-b-' + c.value); b.style.display = c.checked ? '' : 'none';
+      if (c.checked && c.value === 'atraso' && !el('ad-atr').children.length) advAdd('atr');
+      if (c.checked && c.value === 'falta' && !el('ad-flt').children.length) advAdd('flt');
+    });
+  };
+  window.advFunc = function () {
+    var f = func(el('ad-func').value) || {};
+    el('ad-emp').value = f.emp || el('ad-emp').value; el('ad-loja').value = depNome(f.dep); el('ad-cpf').value = f.cpf || ''; el('ad-mat').value = f.cod || f.mat || ''; el('ad-car').value = up(f.car);
+    var A = f.id ? anteriores(f.id) : [];
+    el('ad-num').value = String(Math.min(3, A.length + 1));
+    el('ad-ant').innerHTML = f.id ? (A.length ? '⚠️ <strong>' + A.length + '</strong> advertência(s) anterior(es): ' + A.slice(-3).map(function (h) { return br(h.data) + ' (' + (h.mot || []).map(function (k) { return (MOT.find(function (m) { return m[0] === k; }) || [, k])[1]; }).join(', ') + ')'; }).join('; ') : '✅ Nenhuma advertência anterior no sistema.') : '';
+  };
+  window.advAbrir = function (fid) {
+    injetar();
+    var F = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado'; }).sort(function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); });
+    el('ad-func').innerHTML = '<option value="">— selecione —</option>' + F.map(function (f) { return '<option value="' + f.id + '">' + esc(up(f.n)) + (f.dep ? ' · ' + esc(depNome(f.dep)) : '') + '</option>'; }).join('');
+    var E = DB.g('empresas'); el('ad-emp').innerHTML = (E.length ? '' : '<option value="">BIN EMBALAGENS</option>') + E.map(function (e) { return '<option value="' + e.id + '">' + esc(e.razao) + '</option>'; }).join('');
+    ['ad-loja', 'ad-cpf', 'ad-mat', 'ad-car', 'ad-fatos', 'ad-des-ant', 'ad-des-ot', 'ad-ab-d', 'ad-ab-s', 'ad-ab-r', 'ad-ab-t', 'ad-ab-p', 'ad-ab-q', 'ad-o-m', 'ad-o-n'].forEach(function (i) { el(i).value = ''; });
+    document.querySelectorAll('.ad-mot-chk,.ad-des,#ad-des-o').forEach(function (c) { c.checked = false; });
+    el('ad-atr').innerHTML = ''; el('ad-flt').innerHTML = ''; advMotivos();
+    el('ad-data').value = hoje(); el('ad-num').value = '1'; el('ad-ant').innerHTML = ''; el('ad-resp').value = ls('rh_adv_resp');
+    if (fid) { el('ad-func').value = fid; advFunc(); }
+    openModal('modal-adv');
+  };
+
+  // ── documento ──
+  var CSS = '@page{size:A4;margin:12mm 14mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11.2px;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.pg{page-break-after:always}.pg:last-child{page-break-after:auto}.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #8b1a1a;padding-bottom:5px;margin-bottom:8px}.top .e{font-weight:bold;font-size:13px;color:#8b1a1a;letter-spacing:.5px}.top .v{font-size:9.5px;color:#555}' +
+    'h1{text-align:center;font-size:16px;margin:4px 0 8px;letter-spacing:1px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #999;padding:4px 6px;vertical-align:top}th{background:#f3e5e5;font-size:10px;text-align:left}.lb{background:#f7f2f2;font-weight:bold;width:17%;font-size:10px}' +
+    '.mot{margin:8px 0;border:1.5px solid #8b1a1a;border-radius:4px;padding:6px 9px}.mot b.t{display:block;font-size:10.5px;color:#8b1a1a;margin-bottom:3px}.mot .i{display:inline-block;width:49%;margin:1px 0;font-size:11px}.bx{font-family:"DejaVu Sans",Arial,sans-serif;font-size:13px;margin-right:4px}' +
+    'p{margin:6px 0;text-align:justify;line-height:1.38}.sec{margin-top:7px}.sec h3{font-size:11.5px;margin:0 0 3px;color:#8b1a1a}.lin{border-bottom:1px solid #999;min-height:17px;margin:2px 0}.ass{display:flex;gap:30px;margin-top:22px}.ass div{flex:1;text-align:center;font-size:10px}.ass .l{border-top:1px solid #111;padding-top:3px;margin-top:26px}' +
+    '.peq{font-size:9.6px;color:#333}.rod{margin-top:8px;font-size:9px;color:#555;text-align:center;border-top:1px dashed #aaa;padding-top:4px}';
+  function bx(v) { return '<span class="bx">' + (v ? '☒' : '☐') + '</span>'; }
+  function linhas(n) { var s = ''; for (var i = 0; i < n; i++) s += '<div class="lin"></div>'; return s; }
+  function via(A, nv, total) {
+    var t = A.mot || [], tem = function (k) { return t.indexOf(k) !== -1; }, branco = A.branco;
+    var h = '<div class="top"><span class="e">' + esc(up(A.razao || 'BIN EMBALAGENS')) + '</span><span class="v">' + (total > 1 ? (nv === 1 ? '1ª via – pasta do colaborador (RH)' : '2ª via – colaborador') : '') + '</span></div>' +
+      '<h1>ADVERTÊNCIA DISCIPLINAR</h1>' +
+      '<table><tr><td class="lb">Empregador</td><td>' + esc(A.razao) + '</td><td class="lb">CNPJ</td><td>' + esc(A.cnpj) + '</td></tr>' +
+      '<tr><td class="lb">Loja / Unidade</td><td>' + esc(A.loja) + '</td><td class="lb">Data de emissão</td><td>' + (br(A.data) || '____/____/______') + '</td></tr>' +
+      '<tr><td class="lb">Colaborador(a)</td><td colspan="3"><b>' + esc(up(A.nome)) + '</b></td></tr>' +
+      '<tr><td class="lb">CPF</td><td>' + esc(A.cpf) + '</td><td class="lb">Matrícula</td><td>' + esc(A.mat) + '</td></tr>' +
+      '<tr><td class="lb">Cargo / Função</td><td>' + esc(up(A.cargo)) + '</td><td class="lb">Advertência nº</td><td>' + [1, 2, 3].map(function (n) { return bx(+A.num === n) + n + 'ª'; }).join('&nbsp;&nbsp; ') + '</td></tr></table>' +
+      '<p style="margin-top:9px;">Prezado(a) Sr.(a) <b>' + (A.nome ? esc(up(A.nome)) : '______________________________') + '</b>,</p>' +
+      '<p>Pela presente, comunicamos a aplicação de <b>ADVERTÊNCIA DISCIPLINAR</b>, em razão do(s) motivo(s) assinalado(s) abaixo:</p>' +
+      '<div class="mot"><b class="t">MOTIVO(S) DA ADVERTÊNCIA</b>' + MOT.map(function (m) { return '<span class="i">' + bx(tem(m[0])) + (m[0] === 'outro' ? 'Outro' + (A.outro && A.outro.m ? ': <b>' + esc(A.outro.m) + '</b>' : '') : m[1]) + '</span>'; }).join('') + '</div>';
+    if (tem('atraso') || branco) {
+      var R = (A.atr || []).filter(function (r) { return r.d || r.p || r.c; }); while (branco && R.length < 3) R.push({});
+      h += '<div class="sec"><h3>' + (branco ? bx(false) : '') + 'Atrasos</h3><p>Atrasos no horário de entrada ao trabalho, sem justificativa aceita pela empresa, conforme registros de ponto abaixo:</p>' +
+        '<table><tr><th>Data</th><th>Horário previsto</th><th>Horário de chegada</th><th>Tempo de atraso</th></tr>' + R.map(function (r) { return '<tr><td>' + (br(r.d) || '&nbsp;') + '</td><td>' + esc(r.p) + '</td><td>' + esc(r.c) + '</td><td>' + esc(dur(r.p, r.c)) + '</td></tr>'; }).join('') + '</table>' +
+        '<p class="peq">A pontualidade é obrigação do(a) empregado(a), prevista no contrato de trabalho e nas normas internas da empresa. Os atrasos comprometem a abertura e o funcionamento da loja, o atendimento aos clientes e a organização da equipe. Os minutos de atraso não trabalhados serão descontados na forma da lei, independentemente desta advertência.</p></div>';
+    }
+    if (tem('falta') || branco) {
+      var F = (A.flt || []).filter(function (r) { return r.d; }); while (branco && F.length < 3) F.push({});
+      h += '<div class="sec"><h3>' + (branco ? bx(false) : '') + 'Faltas injustificadas</h3><p>Ausência(s) ao trabalho sem apresentação de atestado médico ou de qualquer justificativa prevista em lei (art. 473 da CLT) ou aceita pela empresa, nas seguintes datas:</p>' +
+        '<table><tr><th>Data</th><th>Dia da semana</th><th>Comunicou a ausência?</th></tr>' + F.map(function (r) { return '<tr><td>' + (br(r.d) || '&nbsp;') + '</td><td>' + (r.d ? SEM[new Date(r.d + 'T12:00:00').getDay()] : '') + '</td><td>' + (r.d ? (r.c === 'sim' ? bx(true) + 'Sim ' + bx(false) + 'Não' : bx(false) + 'Sim ' + bx(true) + 'Não') : bx(false) + 'Sim ' + bx(false) + 'Não') + '</td></tr>'; }).join('') + '</table>' +
+        '<p class="peq">A falta sem aviso prévio e sem justificativa prejudica a escala da loja, sobrecarrega os colegas e compromete o atendimento aos clientes. O(s) dia(s) de falta e o descanso semanal remunerado correspondente serão descontados na forma da lei, independentemente desta advertência.</p></div>';
+    }
+    if (tem('desidia') || branco) {
+      var D = A.des || { i: [] };
+      h += '<div class="sec"><h3>' + (branco ? bx(false) : '') + 'Desídia no desempenho das funções</h3><p>Desídia (descuido, negligência ou falta de empenho) no desempenho das suas funções, caracterizada pelo(s) fato(s) a seguir:</p>' +
+        DES.map(function (d, i) { return '<div style="margin:2px 0;">' + bx((D.i || []).indexOf(i) !== -1) + esc(d) + '</div>'; }).join('') + '<div style="margin:2px 0;">' + bx(!!D.o) + 'Outro: ' + (D.o ? '<b>' + esc(D.o) + '</b>' : '__________________________________________') + '</div>' +
+        '<p style="margin-bottom:2px;"><b>Orientações anteriores sobre o mesmo assunto:</b> ' + (D.ant ? nl(D.ant) : '') + '</p>' + (D.ant ? '' : linhas(1)) +
+        '<p class="peq">Esperamos do(a) colaborador(a) o cumprimento das suas atribuições com zelo, atenção e responsabilidade. A desídia é falta disciplinar prevista no art. 482, alínea "e", da CLT.</p></div>';
+    }
+    if (tem('abandono') || branco) {
+      var B = A.ab || {};
+      h += '<div class="sec"><h3>' + (branco ? bx(false) : '') + 'Abandono de posto de trabalho</h3><p>Ter se ausentado do seu posto de trabalho durante o expediente, sem autorização do(a) superior imediato(a) e sem motivo justificado, conforme descrito abaixo:</p>' +
+        '<table><tr><td class="lb">Data</td><td>' + (br(B.d) || '&nbsp;') + '</td><td class="lb">Horário de saída</td><td>' + esc(B.s) + '</td></tr><tr><td class="lb">Horário de retorno</td><td>' + esc(B.r) + '</td><td class="lb">Tempo ausente</td><td>' + esc(B.t) + '</td></tr><tr><td class="lb">Posto / setor</td><td>' + esc(B.p) + '</td><td class="lb">Quem constatou</td><td>' + esc(B.q) + '</td></tr></table>' +
+        '<p class="peq">Saídas do posto durante o expediente, fora dos intervalos previstos, devem ser previamente autorizadas pelo(a) gestor(a). Deixar o posto desassistido coloca em risco o atendimento, o patrimônio da empresa e a segurança da equipe, e representa descumprimento de ordem e das normas internas (art. 482, alíneas "e" e "h", da CLT).</p></div>';
+    }
+    if (tem('outro') || branco) {
+      var O = A.outro || {};
+      h += '<div class="sec"><h3>' + (branco ? bx(false) : '') + 'Outro motivo</h3><table><tr><td class="lb">Motivo</td><td>' + (esc(O.m) || '&nbsp;') + '</td></tr><tr><td class="lb">Norma descumprida</td><td>' + (esc(O.n) || '&nbsp;') + '</td></tr></table>' +
+        '<p class="peq">Solicitamos que tal conduta não se repita, observando-se as normas da empresa e as obrigações do contrato de trabalho.</p></div>';
+    }
+    h += '<div class="sec"><h3>Descrição dos fatos / observações do gestor</h3>' + (A.fatos ? '<p>' + nl(A.fatos) + '</p>' : linhas(3)) + '</div>' +
+      '<p>Fica V.Sa. ciente de que a repetição desta conduta, ou de outra falta disciplinar, poderá resultar na aplicação de suspensão disciplinar e, persistindo a conduta, na rescisão do contrato de trabalho por justa causa, nos termos do art. 482 da Consolidação das Leis do Trabalho (CLT).</p>' +
+      '<div class="sec"><h3>Ciência do(a) colaborador(a)</h3><p class="peq">Declaro que recebi a 2ª via desta advertência e que tomei ciência do seu conteúdo. A assinatura indica apenas o recebimento, não necessariamente a concordância com os fatos descritos.</p></div>' +
+      '<div class="ass"><div><div class="l">' + esc(up(A.nome) || 'Colaborador(a)') + '</div>Colaborador(a) · Data: ____/____/______</div><div><div class="l">' + (A.resp ? esc(A.resp) : 'Responsável pela empresa (gerente / RH)') + '</div>Responsável pela empresa (nome e cargo)</div></div>' +
+      '<p class="peq" style="margin-top:12px;"><b>Recusa de assinatura:</b> caso o(a) colaborador(a) se recuse a assinar, as testemunhas abaixo declaram que a advertência foi lida e entregue a ele(a) na data indicada.</p>' +
+      '<div class="ass" style="margin-top:4px;"><div><div class="l">Testemunha 1 – Nome:</div>CPF:</div><div><div class="l">Testemunha 2 – Nome:</div>CPF:</div></div>' +
+      '<div class="rod">Emitir em 2 vias: 1ª via – pasta do colaborador (RH) | 2ª via – colaborador</div>';
+    return h;
+  }
+  function documento(A) {
+    var n = +A.vias || 2, s = '';
+    for (var i = 1; i <= n; i++) s += '<div class="pg">' + via(A, i, n) + '</div>';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Advertência - ' + esc(A.nome || 'em branco') + '</title><style>' + CSS + '</style></head><body>' + s + '</body></html>';
+  }
+  function coletar() {
+    var fid = el('ad-func').value, f = func(fid) || {}, e = empDados(el('ad-emp').value);
+    return {
+      fid: fid, nome: f.n || '', razao: e.razao, cnpj: e.cnpj, loja: el('ad-loja').value.trim(), cpf: el('ad-cpf').value.trim(), mat: el('ad-mat').value.trim(), cargo: el('ad-car').value.trim(),
+      data: el('ad-data').value, num: el('ad-num').value, vias: el('ad-vias').value, resp: el('ad-resp').value.trim(), fatos: el('ad-fatos').value.trim(),
+      mot: Array.prototype.filter.call(document.querySelectorAll('.ad-mot-chk'), function (c) { return c.checked; }).map(function (c) { return c.value; }),
+      atr: Array.prototype.map.call(document.querySelectorAll('#ad-atr tr'), function (tr) { return { d: tr.querySelector('.ad-a-d').value, p: tr.querySelector('.ad-a-p').value, c: tr.querySelector('.ad-a-c').value }; }),
+      flt: Array.prototype.map.call(document.querySelectorAll('#ad-flt tr'), function (tr) { return { d: tr.querySelector('.ad-f-d').value, c: tr.querySelector('.ad-f-c').value }; }),
+      des: { i: Array.prototype.filter.call(document.querySelectorAll('.ad-des'), function (c) { return c.checked; }).map(function (c) { return +c.value; }), o: el('ad-des-o').checked ? el('ad-des-ot').value.trim() || ' ' : '', ant: el('ad-des-ant').value.trim() },
+      ab: { d: el('ad-ab-d').value, s: el('ad-ab-s').value, r: el('ad-ab-r').value, t: el('ad-ab-t').value.trim(), p: el('ad-ab-p').value.trim(), q: el('ad-ab-q').value.trim() },
+      outro: { m: el('ad-o-m').value.trim(), n: el('ad-o-n').value.trim() }
+    };
+  }
+  window.advGerar = function (branco) {
+    var A;
+    if (branco) { var e = empDados(el('ad-emp').value); A = { branco: true, razao: e.razao, cnpj: e.cnpj, mot: [], vias: el('ad-vias').value }; _abrirDocSimples(documento(A), 'Advertencia_em_branco'); return; }
+    A = coletar();
+    if (!A.fid) { alert('Selecione o colaborador.'); el('ad-func').focus(); return; }
+    if (!A.mot.length) { alert('Marque pelo menos um motivo da advertência.'); return; }
+    if (A.mot.indexOf('atraso') !== -1 && !A.atr.some(function (r) { return r.d; })) { alert('Informe ao menos uma data de atraso.'); return; }
+    if (A.mot.indexOf('falta') !== -1 && !A.flt.some(function (r) { return r.d; })) { alert('Informe ao menos uma data de falta.'); return; }
+    if (A.mot.indexOf('desidia') !== -1 && !A.des.i.length && !A.des.o) { alert('Marque ao menos um fato de desídia.'); return; }
+    if (A.mot.indexOf('outro') !== -1 && !A.outro.m) { alert('Informe o motivo em "Outro motivo".'); el('ad-o-m').focus(); return; }
+    ls('rh_adv_resp', A.resp);
+    var H = DB.g(K_HIST); H.push(Object.assign({ id: nid(), em: new Date().toISOString() }, A)); DB.s(K_HIST, H);
+    closeModal('modal-adv');
+    _abrirDocSimples(documento(A), ('Advertencia_' + (A.nome || '') + '_' + br(A.data)).replace(/[\s\/]+/g, '_'));
+  };
+  window.advHistorico = function () {
+    injetar();
+    var H = DB.g(K_HIST).slice().sort(function (a, b) { return (b.data || b.em || '').localeCompare(a.data || a.em || ''); });
+    el('ad-htab').innerHTML = H.length ? '<thead><tr><th>Data</th><th>Colaborador(a)</th><th>Loja</th><th>Nº</th><th>Motivo(s)</th><th></th></tr></thead><tbody>' + H.map(function (h) {
+      return '<tr><td>' + br(h.data) + '</td><td>' + esc(up(h.nome)) + '</td><td>' + esc(h.loja) + '</td><td>' + esc(h.num) + 'ª</td><td style="white-space:normal;">' + esc((h.mot || []).map(function (k) { var m = MOT.find(function (x) { return x[0] === k; }); return k === 'outro' && h.outro && h.outro.m ? h.outro.m : m ? m[1] : k; }).join(', ')) + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="advReabrir(\'' + h.id + '\')">📄 Abrir</button> <button class="btn-icon danger" title="Excluir do histórico" onclick="advHistExcluir(\'' + h.id + '\')">&#128465;</button></td></tr>';
+    }).join('') + '</tbody>' : '<tr><td style="padding:18px;text-align:center;color:var(--gray-400);">Nenhuma advertência emitida ainda.</td></tr>';
+    openModal('modal-adv-h');
+  };
+  window.advReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(documento(h), ('Advertencia_' + (h.nome || '') + '_' + br(h.data)).replace(/[\s\/]+/g, '_')); };
+  window.advHistExcluir = function (id) { if (!confirm('Excluir esta advertência do histórico?')) return; DB.s(K_HIST, DB.g(K_HIST).filter(function (x) { return x.id !== id; })); advHistorico(); };
+
+  // ── cartão em Gerar Documentos ──
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="advertencia"]')) return;
+    var ref = grid.querySelector('[data-docbase="rel_dir"]') || grid.querySelector('[data-docbase="pag_banco"]');
+    var h = '<div class="trein-card" data-docbase="advertencia" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">⚠️ Advertência disciplinar</div><div class="tc-meta">Um modelo · motivo por caixa de seleção · 2 vias</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'advertencia\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Puxa empresa, CNPJ, loja, CPF, matrícula e cargo do cadastro. Marque o motivo (atrasos, faltas injustificadas, desídia, abandono de posto ou outro) e preencha os fatos. Fica guardada no histórico do colaborador.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" style="background:' + COR + ';border-color:' + COR + ';" onclick="advAbrir()">⚠️ Gerar advertência</button><button class="btn btn-outline btn-sm" onclick="advHistorico()">🗂️ Histórico</button></div></div>';
+    if (ref) ref.insertAdjacentHTML('afterend', h); else grid.insertAdjacentHTML('beforeend', h);
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
 </body>
 </html>
