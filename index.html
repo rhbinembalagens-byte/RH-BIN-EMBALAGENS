@@ -25129,5 +25129,296 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
 })();
 </script>
+<script>
+/* ═══════ GERAR DOCUMENTOS › 📝 CONTRATOS: Contrato de Experiência (padrão, Regime Híbrido e Motorista) — papel timbrado com logo; filtro empresa › departamento › funcionário; dados do contrato editáveis ═══════ */
+(function () {
+  var COR = '#a51c1f', K_HIST = 'contratos-hist';
+  if (window.RT && RT.LIST && RT.LIST.indexOf(K_HIST) === -1) { RT.LIST.push(K_HIST); if (RT.ALL && RT.ALL.indexOf(K_HIST) === -1) RT.ALL.push(K_HIST); }
+  var MODELOS = {
+    padrao: { t: 'CONTRATO DE EXPERIÊNCIA', n: 'Contrato de Experiência', d: '90 dias (45 + 45) com empresa registradora e local de trabalho' },
+    hibrido: { t: 'CONTRATO DE EXPERIÊNCIA – REGIME HÍBRIDO', n: 'Contrato de Experiência – Regime Híbrido', d: '90 dias (45 + 45), 2 dias remotos por semana + Termo de teletrabalho' },
+    motorista: { t: 'CONTRATO DE EXPERIÊNCIA – MOTORISTA', n: 'Contrato de Experiência – Motorista', d: '90 dias (45 + 45), uso do veículo, CNH, multas e danos' }
+  };
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  var L_ = '____________________';
+  function el(id) { return document.getElementById(id); }
+  function v(id) { var e = el(id); return e ? String(e.value || '').trim() : ''; }
+  function sv(id, x) { var e = el(id); if (e) e.value = x == null ? '' : x; }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function ls(k, x) { try { if (x === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, x); } catch (e) { return ''; } }
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function hoje() { return iso(new Date()); }
+  function soma(i, n) { if (!i) return ''; var d = new Date(i + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); }
+  function br(i) { return i && /^\d{4}-\d{2}-\d{2}/.test(i) ? i.slice(8, 10) + '/' + i.slice(5, 7) + '/' + i.slice(0, 4) : ''; }
+  function num(x) { var s = String(x || '').replace(/R\$|\s/g, ''); if (!s) return NaN; if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.'); return parseFloat(s); }
+  function brl(n) { return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function nid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function empEnd(e) { if (typeof _dmEmpresaEndereco === 'function') return _dmEmpresaEndereco(e); return [e.end, e.cid].filter(Boolean).join(', '); }
+  function cidUF(e) { var c = (e && e.cid) || ''; if (!c && e && e.end) { var m = /([A-Za-zÀ-ÿ' ]+)\s*[\/–-]\s*([A-Z]{2})\b/.exec(e.end); if (m) c = m[1].trim() + '/' + m[2]; } return c; }
+  function ops(L, sel, vaz) { return (vaz != null ? '<option value="">' + vaz + '</option>' : '') + L.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); }
+
+  // ── janela ──
+  function campo(id, rot, ext, cls) { return '<div class="form-group' + (cls ? ' ' + cls : '') + '"><label>' + rot + '</label>' + (ext || '<input id="' + id + '">') + '</div>'; }
+  function injetar() {
+    if (el('modal-ctr')) return;
+    var css = '#modal-ctr .ct-sec{font-weight:700;font-size:13px;color:' + COR + ';margin:14px 0 4px;border-bottom:1px solid #f0d6d6;padding-bottom:3px;}#modal-ctr .ct-mods{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}' +
+      '#modal-ctr .ct-mod{display:flex;gap:8px;padding:9px 11px;border:1.5px solid var(--gray-200,#e5e5e5);border-radius:10px;cursor:pointer;background:#fff;}#modal-ctr .ct-mod:has(input:checked){border-color:' + COR + ';background:#fff4f4;}#modal-ctr .ct-mod input{accent-color:' + COR + ';margin-top:3px;}' +
+      '#modal-ctr .ct-jor{width:100%;border-collapse:collapse;font-size:12.5px}#modal-ctr .ct-jor td{padding:3px 4px}#modal-ctr .ct-jor input{padding:5px 7px;width:100%}';
+    var mods = Object.keys(MODELOS).map(function (k, i) { var m = MODELOS[k]; return '<label class="ct-mod"><input type="radio" name="ct-mod" value="' + k + '"' + (i ? '' : ' checked') + ' onchange="ctrModelo()"><span><strong style="font-size:13px;">' + esc(m.n) + '</strong><br><span style="font-size:11.5px;color:var(--gray-500);">' + esc(m.d) + '</span></span></label>'; }).join('');
+    var h = '<style>' + css + '</style><div class="modal-bg" id="modal-ctr"><div class="modal" style="max-width:900px;">' +
+      '<div class="modal-header"><h3>📝 Contratos</h3><button class="modal-close" onclick="closeModal(\'modal-ctr\')">&#10005;</button></div>' +
+      '<div class="ct-sec" style="margin-top:0;">1. Qual contrato?</div><div class="ct-mods">' + mods + '</div>' +
+      '<div class="ct-sec">2. Empresa, departamento e funcionário</div><div class="form-grid">' +
+      campo('ct-f-emp', 'Empresa', '<select id="ct-f-emp" onchange="ctrFiltro(\'emp\')"></select>') +
+      campo('ct-f-dep', 'Departamento / Loja', '<select id="ct-f-dep" onchange="ctrFiltro(\'dep\')"></select>') +
+      campo('ct-f-func', 'Funcionário', '<select id="ct-f-func" onchange="ctrFunc()"></select>', 'form-full') + '</div>' +
+      '<div class="ct-sec">3. Dados do empregado</div><div class="form-grid">' +
+      campo('ct-nome', 'Nome completo', null, 'form-full') + campo('ct-cpf', 'CPF') + campo('ct-ctps', 'CTPS nº / série', '<input id="ct-ctps" placeholder="ou CTPS Digital">') +
+      campo('ct-end', 'Endereço residencial completo', null, 'form-full') + campo('ct-cargo', 'Cargo / função') +
+      '<div class="form-group ct-mot"><label>CNH nº</label><input id="ct-cnh"></div><div class="form-group ct-mot"><label>Categoria</label><input id="ct-cnhcat" placeholder="Ex.: D"></div><div class="form-group ct-mot"><label>CNH válida até</label><input id="ct-cnhval" type="date"></div>' + '</div>' +
+      '<div class="ct-sec">4. Empregadora e empresa registradora</div><div class="form-grid">' +
+      campo('ct-e-razao', 'Razão social da EMPREGADORA', null, 'form-full') + campo('ct-e-cnpj', 'CNPJ') + campo('ct-e-cid', 'Cidade/UF da sede') + campo('ct-e-end', 'Endereço completo da sede', null, 'form-full') +
+      campo('ct-r-emp', 'Empresa REGISTRADORA', '<select id="ct-r-emp" onchange="ctrReg()"></select>') + campo('ct-r-cnpj', 'CNPJ da registradora') + '<input type="hidden" id="ct-r-razao">' + '</div>' +
+      '<div class="ct-sec">5. Local de trabalho' + '<span class="ct-hib" style="font-weight:400;color:var(--gray-500);"> (dias presenciais)</span><span class="ct-mot" style="font-weight:400;color:var(--gray-500);"> (base de onde parte para as rotas)</span></div><div class="form-grid">' +
+      campo('ct-l-end', 'Endereço completo do local de trabalho', null, 'form-full') + campo('ct-l-cid', 'Cidade/UF') +
+      campo('ct-l-tipo', 'O local é', '<select id="ct-l-tipo" onchange="ctrLocal()"><option value="proprio">Estabelecimento da própria EMPREGADORA</option><option value="grupo">Empresa do mesmo grupo econômico</option></select>') +
+      '<div class="form-group" id="ct-l-loja-g"><label>Nome da loja / unidade</label><input id="ct-l-loja"></div>' +
+      '<div class="form-group" id="ct-l-grp-g" style="display:none;"><label>Empresa do grupo</label><select id="ct-l-grp" onchange="ctrLocal()"></select></div>' + '<input type="hidden" id="ct-l-grazao"><input type="hidden" id="ct-l-gcnpj">' + '</div>' +
+      '<div class="ct-sec">6. Jornada, remuneração e prazo</div>' +
+      '<table class="ct-jor"><tr><td style="width:24%;"></td><td><b>Expediente</b></td><td></td><td><b>Intervalo</b></td><td></td></tr>' +
+      '<tr><td>Segunda a sexta-feira</td><td><input id="ct-j-e1" type="time"></td><td><input id="ct-j-e2" type="time"></td><td><input id="ct-j-i1" type="time"></td><td><input id="ct-j-i2" type="time"></td></tr>' +
+      '<tr><td>Sábado</td><td colspan="2"><input id="ct-j-sab" placeholder="Compensado / ou horário, ex.: 08:00 às 12:00"></td><td colspan="2"><input id="ct-j-sabi" placeholder="—"></td></tr>' +
+      '<tr><td>Domingo</td><td colspan="2"><input id="ct-j-dom"></td><td colspan="2"><input id="ct-j-domi"></td></tr></table>' +
+      '<div class="form-grid" style="margin-top:6px;">' +
+      campo('ct-sal', 'Remuneração mensal (R$)', '<input id="ct-sal" oninput="ctrExt()">') + campo('ct-salext', 'Por extenso') +
+      campo('ct-ini', 'Início do contrato (admissão)', '<input id="ct-ini" type="date" onchange="ctrDatas()">') +
+      '<div class="form-group"><label>Períodos</label><div id="ct-per" style="font-size:12.5px;padding-top:6px;"></div></div>' + '</div>' +
+      '<div class="ct-hib"><div class="ct-sec">7. Regime híbrido</div><div class="form-grid">' +
+      campo('ct-h-dias', 'Dias de teletrabalho', '<input id="ct-h-dias" placeholder="Ex.: terça e quinta-feira">') + campo('ct-h-aviso', 'Aviso para alterar os dias', '<input id="ct-h-aviso" placeholder="48 (quarenta e oito) horas">') +
+      campo('ct-h-eq', 'Equipamentos em comodato', '<input id="ct-h-eq" placeholder="Ex.: notebook, headset">', 'form-full') +
+      campo('ct-h-aj', 'Internet e energia nos dias remotos', '<select id="ct-h-aj" onchange="ctrLocal()"><option value="nao">Não haverá reembolso</option><option value="sim">Ajuda de custo mensal</option></select>') +
+      '<div class="form-group" id="ct-h-ajv-g" style="display:none;"><label>Valor da ajuda de custo (R$)</label><input id="ct-h-ajv"></div>' + '</div></div>' +
+      '<div class="ct-sec">Assinatura</div><div class="form-grid">' +
+      campo('ct-cid', 'Cidade da assinatura') + campo('ct-data', 'Data da assinatura', '<input id="ct-data" type="date">') +
+      '<div class="form-group form-full"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
+      '<label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-menor"> Incluir linha "Responsável legal (quando menor de idade)"</label></div></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar contrato</button></div>' +
+      '</div></div>' +
+      '<div class="modal-bg" id="modal-ctr-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Contratos gerados</h3><button class="modal-close" onclick="closeModal(\'modal-ctr-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ct-htab"></table></div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', h);
+  }
+  function mod() { var r = document.querySelector('input[name="ct-mod"]:checked'); return r ? r.value : 'padrao'; }
+  window.ctrModelo = function () {
+    var m = mod();
+    document.querySelectorAll('#modal-ctr .ct-mot').forEach(function (x) { x.style.display = m === 'motorista' ? '' : 'none'; });
+    document.querySelectorAll('#modal-ctr .ct-hib').forEach(function (x) { x.style.display = m === 'hibrido' ? '' : 'none'; });
+    if (m === 'motorista') sv('ct-cargo', 'MOTORISTA');
+    el('ct-menor').checked = m !== 'motorista';
+  };
+  function emps() { return DB.g('empresas').slice().sort(function (a, b) { return String(a.razao || '').localeCompare(String(b.razao || ''), 'pt-BR'); }); }
+  window.ctrFiltro = function (de) {
+    var e = v('ct-f-emp'), d = v('ct-f-dep');
+    if (de === 'emp' || de === 'ini') {
+      var D = DB.g('departamentos').filter(function (x) { return !e || !x.emp || x.emp === e; }).sort(function (a, b) { return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'); });
+      el('ct-f-dep').innerHTML = ops(D.map(function (x) { return [x.id, x.nome]; }), d, 'Todos os departamentos');
+      if (!D.some(function (x) { return x.id === d; })) el('ct-f-dep').value = '';
+      d = v('ct-f-dep');
+      if (e) empresaPara(e);
+    }
+    var cur = v('ct-f-func');
+    var F = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!e || f.emp === e) && (!d || f.dep === d); }).sort(function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); });
+    el('ct-f-func').innerHTML = ops(F.map(function (f) { return [f.id, String(f.n || '').toUpperCase() + (f.adm ? ' · adm. ' + br(f.adm) : '')]; }), cur, '— selecione (' + F.length + ') —');
+    if (!F.some(function (f) { return f.id === cur; })) el('ct-f-func').value = '';
+    if (de === 'dep' && d) { var dp = DB.g('departamentos').find(function (x) { return x.id === d; }); if (dp) sv('ct-l-loja', dp.nome); }
+  };
+  function empresaPara(id) {
+    var e = DB.g('empresas').find(function (x) { return x.id === id; }); if (!e) return;
+    sv('ct-e-razao', e.razao); sv('ct-e-cnpj', e.cnpj); sv('ct-e-end', [e.end, e.cep && String(e.end || '').indexOf(e.cep) === -1 ? 'CEP ' + e.cep : ''].filter(Boolean).join(', ')); sv('ct-e-cid', cidUF(e));
+    el('ct-r-emp').value = id; ctrReg();
+    if (!v('ct-l-end')) { sv('ct-l-end', e.end || ''); sv('ct-l-cid', cidUF(e)); }
+    if (!v('ct-cid')) sv('ct-cid', (cidUF(e) || '').split('/')[0]);
+  }
+  window.ctrReg = function () { var e = DB.g('empresas').find(function (x) { return x.id === v('ct-r-emp'); }) || {}; sv('ct-r-razao', e.razao || ''); sv('ct-r-cnpj', e.cnpj || ''); };
+  window.ctrLocal = function () {
+    var g = v('ct-l-tipo') === 'grupo'; el('ct-l-loja-g').style.display = g ? 'none' : ''; el('ct-l-grp-g').style.display = g ? '' : 'none';
+    var e = DB.g('empresas').find(function (x) { return x.id === v('ct-l-grp'); }) || {}; sv('ct-l-grazao', e.razao || ''); sv('ct-l-gcnpj', e.cnpj || '');
+    el('ct-h-ajv-g').style.display = v('ct-h-aj') === 'sim' ? '' : 'none';
+  };
+  window.ctrExt = function () { var n = num(v('ct-sal')); sv('ct-salext', n > 0 && window.recPorExtenso ? recPorExtenso(n) : ''); };
+  window.ctrDatas = function () {
+    var i = v('ct-ini'); if (!i) { el('ct-per').innerHTML = ''; return; }
+    var a2 = soma(i, 44), b1 = soma(i, 45), b2 = soma(i, 89);
+    el('ct-per').innerHTML = '1º: <b>' + br(i) + '</b> a <b>' + br(a2) + '</b> · prorrogação: <b>' + br(b1) + '</b> a <b>' + br(b2) + '</b>';
+    if (!v('ct-data') || el('ct-data').dataset.auto === '1') { sv('ct-data', i); el('ct-data').dataset.auto = '1'; }
+  };
+  window.ctrFunc = function () {
+    var f = DB.g('funcionarios').find(function (x) { return x.id === v('ct-f-func'); }); if (!f) return;
+    sv('ct-nome', String(f.n || '').toUpperCase()); sv('ct-cpf', f.cpf); sv('ct-ctps', f.ctps || ''); sv('ct-end', [f.end, f.cep ? 'CEP ' + f.cep : ''].filter(Boolean).join(', '));
+    if (mod() !== 'motorista') sv('ct-cargo', String(f.car || '').toUpperCase());
+    var s = num(f.sal); sv('ct-sal', s > 0 ? brl(s) : ''); ctrExt();
+    sv('ct-ini', f.adm || ''); el('ct-data').dataset.auto = '1'; sv('ct-data', ''); ctrDatas();
+    if (f.emp && v('ct-f-emp') !== f.emp) { el('ct-f-emp').value = f.emp; sv('ct-l-end', ''); empresaPara(f.emp); } else if (f.emp) empresaPara(f.emp);
+    var dp = DB.g('departamentos').find(function (x) { return x.id === f.dep; }); if (dp) sv('ct-l-loja', dp.nome);
+  };
+  window.ctrAbrir = function (m) {
+    injetar();
+    var E = emps(), eo = E.map(function (e) { return [e.id, e.razao]; });
+    el('ct-f-emp').innerHTML = ops(eo, '', 'Todas as empresas'); el('ct-r-emp').innerHTML = ops(eo, '', '—'); el('ct-l-grp').innerHTML = ops(eo, '', '—');
+    ['ct-nome', 'ct-cpf', 'ct-ctps', 'ct-end', 'ct-cargo', 'ct-cnh', 'ct-cnhcat', 'ct-cnhval', 'ct-e-razao', 'ct-e-cnpj', 'ct-e-cid', 'ct-e-end', 'ct-r-cnpj', 'ct-r-razao', 'ct-l-end', 'ct-l-cid', 'ct-l-loja', 'ct-sal', 'ct-salext', 'ct-ini', 'ct-data', 'ct-cid', 'ct-h-ajv'].forEach(function (i) { sv(i, ''); });
+    var J = {}; try { J = JSON.parse(ls('rh_ctr_jor') || '{}'); } catch (e) {}
+    sv('ct-j-e1', J.e1 || '08:00'); sv('ct-j-e2', J.e2 || '18:00'); sv('ct-j-i1', J.i1 || '12:00'); sv('ct-j-i2', J.i2 || '13:00'); sv('ct-j-sab', J.sab || 'Compensado'); sv('ct-j-sabi', J.sabi || '—'); sv('ct-j-dom', J.dom || 'Folga'); sv('ct-j-domi', J.domi || '—');
+    sv('ct-h-dias', ls('rh_ctr_hdias') || 'terça e quinta-feira'); sv('ct-h-aviso', '48 (quarenta e oito) horas'); sv('ct-h-eq', ls('rh_ctr_heq') || 'notebook, headset'); el('ct-h-aj').value = 'nao';
+    el('ct-l-tipo').value = 'proprio'; el('ct-data').dataset.auto = '1'; el('ct-prorr').checked = true;
+    if (m) { var r = document.querySelector('input[name="ct-mod"][value="' + m + '"]'); if (r) r.checked = true; }
+    el('ct-f-func').innerHTML = ''; ctrFiltro('ini'); ctrModelo(); ctrLocal(); ctrDatas();
+    if (E.length === 1) { el('ct-f-emp').value = E[0].id; ctrFiltro('emp'); }
+    var fs = (el('doc-func-sel') || {}).value; if (fs && DB.g('funcionarios').some(function (f) { return f.id === fs; })) { var f = DB.g('funcionarios').find(function (x) { return x.id === fs; }); el('ct-f-emp').value = f.emp || ''; ctrFiltro('emp'); el('ct-f-func').value = fs; ctrFunc(); }
+    openModal('modal-ctr');
+  };
+
+  // ── documento (papel timbrado igual aos outros documentos: faixa, logo e margens) ──
+  function c(x, lin) { return x ? '<b>' + esc(x) + '</b>' : (lin || L_); }
+  function dataExt(i) { if (!i) return '____ de ______________ de ______'; var p = i.split('-'); return +p[2] + ' de ' + MESES[+p[1] - 1] + ' de ' + p[0]; }
+  function ass(L) { return '<table class="ass">' + L.map(function (x) { return '<tr><td><div class="l"></div>' + x + '</td></tr>'; }).join('') + '</table>'; }
+  function corpo(d) {
+    var M = d.mod, H = M === 'hibrido', MO = M === 'motorista', P = function (t, cl) { return '<p class="' + (cl || 'c') + '">' + t + '</p>'; }, n = 0, cl = function (tit) { n++; return '<b>' + n + ' – ' + tit + '.</b> '; };
+    var a2 = d.ini ? soma(d.ini, 44) : '', b1 = d.ini ? soma(d.ini, 45) : '', b2 = d.ini ? soma(d.ini, 89) : '';
+    var dd = function (x) { return x ? '<b>' + br(x) + '</b>' : '___/___/______'; };
+    var s = P(MODELOS[M].t, 'tit');
+    s += P('Pelo presente instrumento particular de Contrato de Experiência, a empresa ' + c(d.eRazao) + ', com sede à ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : ', ' + L_ + '/___') + ', inscrita no CNPJ sob nº ' + c(d.eCnpj) + ', doravante denominada <b>EMPREGADORA</b>, e o(a) Sr.(a) ' + c(d.nome) + ', residente e domiciliado(a) à ' + c(d.end) + ', portador(a) do CPF nº ' + c(d.cpf) +
+      (MO ? ', da CTPS nº ' + c(d.ctps || (d.nome ? 'CTPS Digital' : '')) + ' e da CNH nº ' + c(d.cnh) + ', categoria ' + c(d.cnhCat, '______') + ', válida até ' + dd(d.cnhVal) : ' e da CTPS nº ' + c(d.ctps || (d.nome ? 'CTPS Digital' : ''))) +
+      ', doravante denominado(a) <b>EMPREGADO(A)</b>, celebram o presente Contrato Individual de Trabalho por prazo determinado, a título de experiência, nos termos dos arts. 443, § 2º, alínea "c", 445, parágrafo único, ' + (H ? '451 e 75-A a 75-F' : 'e 451') + ' da Consolidação das Leis do Trabalho (CLT), regido pelas seguintes cláusulas:');
+    s += P(cl('FUNÇÃO') + (MO ? 'O(A) EMPREGADO(A) trabalhará para a EMPREGADORA na função de <b>MOTORISTA</b>, cabendo-lhe conduzir os veículos da EMPREGADORA para entrega de mercadorias, transporte entre lojas e demais deslocamentos a serviço, auxiliar na conferência, carga e descarga das mercadorias transportadas, além das tarefas que vierem a ser objeto de ordens verbais, cartas ou avisos, desde que compatíveis com sua função e condição pessoal.'
+      : 'O(A) EMPREGADO(A) trabalhará para a EMPREGADORA na função de ' + c(d.cargo) + ', além das tarefas que vierem a ser objeto de ordens verbais, cartas ou avisos, segundo as necessidades da EMPREGADORA, desde que compatíveis com sua função e condição pessoal.'));
+    var proprio = d.lTipo !== 'grupo', bl = d.nome || d.eRazao;
+    s += P(cl(H ? 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO PRESENCIAL' : 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO') + 'O(A) EMPREGADO(A) será registrado(a) na empresa ' + c(d.rRazao) + ', CNPJ nº ' + c(d.rCnpj) + ', e ' + (MO ? 'terá como base de trabalho o endereço ' : H ? 'nos dias de trabalho presencial, realizará suas atividades no endereço ' : 'realizará suas atividades no endereço ') + c(d.lEnd) + (d.lCid ? ', ' + c(d.lCid) : ', ' + L_ + '/___') + (MO ? ', de onde partirá para as rotas definidas pela EMPREGADORA' : '') + ', correspondente a:');
+    s += P('(' + (bl && proprio ? 'X' : '&nbsp;&nbsp;') + ') estabelecimento da própria EMPREGADORA (' + (proprio ? c(d.lLoja) : L_) + ');', 'c it');
+    s += P('(' + (bl && !proprio ? 'X' : '&nbsp;&nbsp;') + ') estabelecimento da empresa ' + (!proprio ? c(d.gRazao) : L_) + ', CNPJ nº ' + (!proprio ? c(d.gCnpj) : L_) + ', integrante do mesmo grupo econômico da EMPREGADORA, sem que isso caracterize a coexistência de mais de um contrato de trabalho (art. 2º, § 2º, da CLT e Súmula 129 do TST).', 'c it');
+    s += P('<b>Parágrafo único</b> – A EMPREGADORA poderá transferir o(a) EMPREGADO(A), a título temporário ou definitivo, para outro estabelecimento seu ou de empresa do mesmo grupo econômico, observados os requisitos e limites do art. 469 da CLT, inclusive o pagamento do adicional de transferência quando devido.');
+    var J = d.jor || {}, hh = function (a, b) { return a && b ? a + ' às ' + b : '____:____ às ____:____'; };
+    s += P(cl('JORNADA DE TRABALHO') + 'O horário de trabalho do(a) EMPREGADO(A)' + (H ? ', tanto nos dias presenciais quanto nos dias remotos,' : '') + ' será o seguinte:');
+    s += '<table class="jor"><tr><th>Dia</th><th>Expediente</th><th>Intervalo</th></tr><tr><td>Segunda a sexta-feira</td><td>' + hh(J.e1, J.e2) + '</td><td>' + hh(J.i1, J.i2) + '</td></tr><tr><td>Sábado</td><td>' + esc(J.sab || '') + '&nbsp;</td><td>' + esc(J.sabi || '') + '&nbsp;</td></tr><tr><td>Domingo</td><td>' + esc(J.dom || 'Folga') + '</td><td>' + esc(J.domi || '—') + '</td></tr></table>';
+    s += P('<b>Parágrafo único</b> – ' + (MO ? 'A jornada, inclusive o tempo em rota, será registrada de forma fiel no sistema de ponto adotado pela EMPREGADORA, sendo que horas extras somente poderão ser realizadas mediante autorização prévia da chefia. O(A) EMPREGADO(A) deverá respeitar os intervalos de descanso, sendo vedado dirigir além dos limites legais de jornada.' : H ? 'A jornada será registrada no sistema de ponto eletrônico adotado pela EMPREGADORA, inclusive nos dias de trabalho remoto, sendo que horas extras somente poderão ser realizadas mediante autorização prévia da chefia.' : 'A jornada será registrada no sistema de ponto adotado pela EMPREGADORA, sendo que horas extras somente poderão ser realizadas mediante autorização prévia da chefia.'));
+    if (H) {
+      s += P(cl('REGIME HÍBRIDO DE TRABALHO') + 'O(A) EMPREGADO(A) prestará serviços em regime híbrido, nos termos dos arts. 75-B e 75-C da CLT, trabalhando 2 (dois) dias por semana em teletrabalho (trabalho remoto) e os demais dias de trabalho presencialmente no local indicado na cláusula 2.');
+      s += P('<b>§ 1º</b> – Os dias de teletrabalho serão, preferencialmente, ' + c(d.hDias) + ', podendo ser alterados pela EMPREGADORA conforme a necessidade do serviço, mediante comunicação prévia de, no mínimo, ' + c(d.hAviso) + '.');
+      s += P('<b>§ 2º</b> – O teletrabalho será realizado na residência do(a) EMPREGADO(A) indicada neste contrato ou em outro local previamente autorizado pela EMPREGADORA. Caso o(a) EMPREGADO(A) opte por trabalhar remotamente fora da localidade prevista neste contrato, a EMPREGADORA não será responsável pelas despesas decorrentes do retorno ao trabalho presencial (art. 75-C, § 3º, da CLT).');
+      s += P('<b>§ 3º</b> – O teletrabalho será prestado por jornada (art. 75-B, § 2º, da CLT), aplicando-se integralmente as regras de duração do trabalho, controle de ponto e horas extras previstas na cláusula 3.');
+      s += P('<b>§ 4º</b> – O comparecimento às dependências da EMPREGADORA em dia previsto como remoto, para reuniões, treinamentos ou atividades que exijam a presença do(a) EMPREGADO(A), não descaracteriza o regime híbrido (art. 75-B, § 1º, da CLT).');
+      var aj = d.hAj === 'sim', bh = !!d.nome;
+      s += P('<b>§ 5º</b> – Equipamentos e despesas (art. 75-D da CLT): a EMPREGADORA fornecerá, em regime de comodato, os seguintes equipamentos: ' + c(d.hEq) + ', que deverão ser utilizados exclusivamente para o trabalho e devolvidos ao término do contrato em bom estado, ressalvado o desgaste natural. Quanto às despesas com internet e energia elétrica nos dias remotos: (' + (bh && aj ? 'X' : '&nbsp;&nbsp;') + ') a EMPREGADORA pagará ajuda de custo de R$ ' + (aj && d.hAjv ? '<b>' + esc(d.hAjv) + '</b>' : '__________') + ' por mês; (' + (bh && !aj ? 'X' : '&nbsp;&nbsp;') + ') não haverá reembolso, considerando a infraestrutura já existente na residência do(a) EMPREGADO(A). Os equipamentos fornecidos e eventuais valores pagos a esse título não integram a remuneração.');
+      s += P('<b>§ 6º</b> – Saúde e segurança (art. 75-E da CLT): o(a) EMPREGADO(A) declara ter recebido instruções expressas sobre as precauções para evitar doenças e acidentes de trabalho no ambiente remoto e assina, juntamente com este contrato, o Termo de Responsabilidade anexo, comprometendo-se a segui-las.');
+      s += P('<b>§ 7º</b> – O uso de aplicativos e ferramentas de comunicação fora da jornada normal não constitui tempo à disposição, prontidão ou sobreaviso, salvo previsão em acordo individual ou norma coletiva (art. 75-B, § 5º, da CLT), respeitando-se o direito à desconexão do(a) EMPREGADO(A).');
+      s += P('<b>§ 8º</b> – A EMPREGADORA poderá determinar o retorno ao regime integralmente presencial, garantido prazo de transição mínimo de 15 (quinze) dias, com o devido registro em aditivo contratual (art. 75-C, § 2º, da CLT).');
+      s += P('<b>§ 9º</b> – O(A) EMPREGADO(A) compromete-se a zelar pelo sigilo das informações da EMPREGADORA e dos dados pessoais a que tiver acesso, especialmente nos dias de trabalho remoto, utilizando apenas os meios e sistemas autorizados.');
+    }
+    s += P(cl('REMUNERAÇÃO') + 'O(A) EMPREGADO(A) receberá a remuneração de R$ ' + (d.sal ? '<b>' + esc(d.sal) + '</b>' : '__________') + ' (' + (d.salExt ? '<b>' + esc(d.salExt) + '</b>' : '__________________________________________') + ') por mês.');
+    var nPrazo = n + 1;
+    s += P(cl('PRAZO DE EXPERIÊNCIA') + 'O presente contrato de experiência terá duração total de 90 (noventa) dias, dividida em dois períodos:');
+    s += P('a) primeiro período de 45 (quarenta e cinco) dias, com início em ' + dd(d.ini) + ' e término em ' + dd(a2) + ';', 'c it');
+    s += P('b) prorrogação por mais 45 (quarenta e cinco) dias, com início em ' + dd(b1) + ' e término em ' + dd(b2) + '.', 'c it');
+    s += P('<b>Parágrafo único</b> – A prorrogação prevista na alínea "b" ocorrerá automaticamente, por uma única vez, caso nenhuma das partes manifeste intenção contrária até o término do primeiro período, conforme o art. 451 da CLT, sem prejuízo da assinatura do Termo de Prorrogação ao final deste instrumento. Em nenhuma hipótese o prazo total ultrapassará 90 (noventa) dias.');
+    if (MO) {
+      s += P(cl('HABILITAÇÃO') + 'O(A) EMPREGADO(A) declara possuir Carteira Nacional de Habilitação (CNH) válida e compatível com a categoria dos veículos que conduzirá, obrigando-se a:');
+      s += P('a) apresentá-la sempre que solicitado e mantê-la válida durante todo o contrato;', 'c it') + P('b) comunicar imediatamente à EMPREGADORA qualquer suspensão, cassação, vencimento, restrição ou instauração de processo que possa afetar o direito de dirigir, ficando proibido de conduzir veículo da EMPREGADORA enquanto não estiver regularmente habilitado(a);', 'c it') + P('c) submeter-se aos exames toxicológicos exigidos pela legislação, quando aplicáveis à sua categoria de habilitação (art. 168, § 6º, da CLT).', 'c it');
+      s += P('<b>Parágrafo único</b> – A perda da habilitação ou dos requisitos para o exercício da profissão, em decorrência de conduta dolosa do(a) EMPREGADO(A), constitui justa causa para rescisão do contrato, nos termos do art. 482, alínea "m", da CLT.');
+      s += P(cl('USO E CONSERVAÇÃO DO VEÍCULO') + 'O(A) EMPREGADO(A) é responsável pela guarda e boa conservação do veículo que lhe for confiado e obriga-se a:');
+      ['a) dirigir com prudência, observando o Código de Trânsito Brasileiro (CTB), os limites de velocidade e a sinalização;', 'b) não utilizar telefone celular enquanto dirige e não dirigir sob efeito de álcool ou de qualquer substância psicoativa;', 'c) utilizar o veículo exclusivamente a serviço da EMPREGADORA, sendo vedados o uso particular, o transporte de pessoas ou cargas não autorizadas e o desvio de rota sem autorização;', 'd) realizar a inspeção do veículo antes do uso (checklist de pneus, freios, luzes, nível de óleo, água e documentos) e comunicar imediatamente qualquer avaria, defeito ou irregularidade encontrada;', 'e) estacionar somente em locais permitidos e seguros, mantendo o veículo trancado e a carga protegida;', 'f) respeitar a capacidade de carga do veículo e acondicionar corretamente as mercadorias;', 'g) comunicar imediatamente à EMPREGADORA qualquer acidente, roubo ou furto, providenciando o registro do boletim de ocorrência quando cabível.'].forEach(function (t) { s += P(t, 'c it'); });
+      s += P('<b>Parágrafo único</b> – O(A) EMPREGADO(A) declara ciência de que os veículos da EMPREGADORA poderão ser equipados com rastreador ou sistema de telemetria, cujos dados poderão ser utilizados para gestão da frota, segurança e apuração de ocorrências.');
+      s += P(cl('MULTAS DE TRÂNSITO') + 'As infrações de trânsito cometidas enquanto o veículo estiver sob a condução do(a) EMPREGADO(A) são de sua responsabilidade.');
+      s += P('<b>§ 1º</b> – Recebida a notificação, o(a) EMPREGADO(A) será cientificado(a) e assinará a indicação de condutor infrator, para que a pontuação seja lançada em sua CNH (art. 257, § 7º, do CTB), podendo apresentar defesa interna ou, se entender cabível, recurso administrativo, com o apoio documental da EMPREGADORA.');
+      s += P('<b>§ 2º</b> – Confirmada a autoria da infração, o valor da multa paga pela EMPREGADORA poderá ser descontado da remuneração do(a) EMPREGADO(A), com fundamento no § 1º do art. 462 da CLT, observadas as condições da cláusula 10. Havendo recurso administrativo, o desconto aguardará a decisão final.');
+      s += P('<b>§ 3º</b> – Não será descontada a multa decorrente de irregularidade do veículo ou de sua documentação que seja de responsabilidade da EMPREGADORA (licenciamento, equipamentos obrigatórios, manutenção), desde que o(a) EMPREGADO(A) não tenha dado causa a ela.');
+      s += P(cl('DANOS AO VEÍCULO E A TERCEIROS') + 'Os danos causados ao veículo, à carga ou a terceiros em razão de mau uso, imprudência, negligência, imperícia ou dolo do(a) EMPREGADO(A) – tais como excesso de velocidade, desrespeito à sinalização, direção sob efeito de álcool, uso do celular ao volante, uso do veículo fora do serviço ou descumprimento das obrigações da cláusula 7 – poderão ser descontados de sua remuneração, incluindo o valor da franquia do seguro, quando houver, com fundamento no § 1º do art. 462 da CLT e observadas as condições da cláusula 10.');
+      s += P('<b>§ 1º</b> – A culpa ou o dolo serão apurados com base em elementos como boletim de ocorrência, laudo ou perícia, imagens, dados do rastreador ou telemetria e depoimentos de testemunhas, assegurada ao(à) EMPREGADO(A) a apresentação de defesa por escrito.');
+      s += P('<b>§ 2º</b> – Não haverá desconto quando o dano decorrer de desgaste natural, falha mecânica não causada por mau uso, caso fortuito ou força maior, roubo ou furto sem culpa do(a) EMPREGADO(A), ou acidente em que não se comprove sua culpa.');
+      s += P(cl('CONDIÇÕES GERAIS DOS DESCONTOS POR DANOS') + 'Além dos descontos previstos em lei, em norma coletiva ou autorizados por escrito, fica a EMPREGADORA autorizada, com fundamento no § 1º do art. 462 da CLT, a descontar da remuneração as importâncias correspondentes aos danos que o(a) EMPREGADO(A) causar, por dolo ou culpa, a bens, equipamentos, mercadorias, valores ou veículos da EMPREGADORA ou sob sua responsabilidade, bem como a terceiros, quando a EMPREGADORA for obrigada a indenizá-los, observado o seguinte:');
+      s += P('a) o desconto somente será efetuado após apuração interna registrada por escrito, com ciência do(a) EMPREGADO(A), oportunidade de defesa e comprovação do valor do prejuízo (orçamento, nota fiscal, auto de infração ou documento equivalente);', 'c it') + P('b) o valor poderá ser parcelado, de modo que o desconto mensal não ultrapasse 30% (trinta por cento) da remuneração líquida do mês; na rescisão contratual, será observado o limite do § 5º do art. 477 da CLT;', 'c it') + P('c) não serão descontados prejuízos decorrentes dos riscos normais da atividade econômica, que são suportados pela EMPREGADORA.', 'c it');
+      s += P(cl('REGULAMENTO, SEGURANÇA E PENALIDADES') + 'O(A) EMPREGADO(A) declara ter ciência do Regulamento Interno da EMPREGADORA e das normas de segurança e medicina do trabalho, comprometendo-se a cumpri-los e a utilizar os equipamentos de proteção fornecidos (art. 158 da CLT). O descumprimento das obrigações previstas neste contrato, especialmente nas cláusulas 6 e 7, sujeitará o(a) EMPREGADO(A) às penalidades de advertência, suspensão ou dispensa por justa causa, conforme a gravidade da falta (art. 482 da CLT), independentemente do ressarcimento dos danos.');
+    } else {
+      s += P(cl('DESCONTOS POR DANOS') + 'Além dos descontos previstos em lei, em norma coletiva ou autorizados por escrito pelo(a) EMPREGADO(A), fica a EMPREGADORA autorizada, com fundamento no § 1º do art. 462 da CLT, a descontar da remuneração as importâncias correspondentes aos danos que o(a) EMPREGADO(A) causar, por dolo ou por culpa (imprudência, negligência ou imperícia), a bens, equipamentos' + (H ? ' (inclusive os fornecidos para o trabalho remoto)' : '') + ', ferramentas, mercadorias, valores ou veículos da EMPREGADORA ou sob sua responsabilidade, bem como a terceiros, quando a EMPREGADORA for obrigada a indenizá-los.');
+      s += P('<b>§ 1º</b> – O desconto somente será efetuado após apuração interna do fato, registrada por escrito, com ciência do(a) EMPREGADO(A) e oportunidade de apresentar sua defesa, e mediante comprovação do valor do prejuízo (orçamento, nota fiscal ou documento equivalente).');
+      s += P('<b>§ 2º</b> – O valor poderá ser descontado de forma parcelada, de modo que o desconto mensal não ultrapasse 30% (trinta por cento) da remuneração líquida do mês; na rescisão contratual, será observado o limite do § 5º do art. 477 da CLT.');
+      s += P('<b>§ 3º</b> – Não serão descontados prejuízos decorrentes do desgaste natural de bens, de caso fortuito, de força maior ou dos riscos normais da atividade econômica, que são suportados pela EMPREGADORA.');
+      s += P(cl('REGULAMENTO E SEGURANÇA DO TRABALHO') + 'O(A) EMPREGADO(A) declara ter ciência do Regulamento Interno da EMPREGADORA e das normas de segurança e medicina do trabalho que regem suas atividades, comprometendo-se a cumpri-los e a utilizar corretamente os equipamentos de proteção fornecidos, sob pena de aplicação das penalidades previstas na legislação (art. 158 da CLT).');
+    }
+    s += P(cl('CONTINUIDADE') + 'Permanecendo o(a) EMPREGADO(A) a serviço da EMPREGADORA após o término do prazo total de experiência, o contrato passará a vigorar por prazo indeterminado, continuando em vigor as cláusulas deste instrumento' + (H ? ', inclusive as do regime híbrido,' : '') + ' que não forem incompatíveis com essa condição.');
+    s += P(cl('RESCISÃO ANTECIPADA') + 'A rescisão sem justa causa antes do término do prazo pactuado observará os arts. 479 e 480 da CLT: se por iniciativa da EMPREGADORA, esta pagará ao(à) EMPREGADO(A), a título de indenização, metade da remuneração a que teria direito até o término do contrato; se por iniciativa do(a) EMPREGADO(A), este(a) indenizará a EMPREGADORA pelos prejuízos comprovadamente causados, limitada a indenização ao valor que lhe seria devido em idênticas condições.');
+    s += P(cl('PROTEÇÃO DE DADOS') + (MO ? 'O(A) EMPREGADO(A) declara ciência de que seus dados pessoais, inclusive os dados da CNH e os gerados pelo rastreamento do veículo durante a jornada, serão tratados pela EMPREGADORA para a execução deste contrato e o cumprimento de obrigações legais, nos termos da Lei nº 13.709/2018 (LGPD).' : 'O(A) EMPREGADO(A) declara ciência de que seus dados pessoais serão tratados pela EMPREGADORA para a execução deste contrato e o cumprimento de obrigações legais e regulatórias, nos termos da Lei nº 13.709/2018 (LGPD), comprometendo-se a manter sigilo sobre informações da EMPREGADORA e dados pessoais de clientes e colegas a que tiver acesso.'));
+    s += P('E, por estarem assim justos e contratados, as partes assinam o presente instrumento em 2 (duas) vias de igual teor, na presença das testemunhas abaixo.');
+    var local = (d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(d.data) + '.';
+    var A = [d.eRazao ? esc(d.eRazao) : 'EMPREGADORA', d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha 1 – Nome e CPF', 'Testemunha 2 – Nome e CPF'];
+    if (d.menor) A.push('Responsável legal (quando menor de idade)');
+    s += '<div class="nb">' + P(local, 'c dt') + ass(A) + '</div>';
+    if (d.prorr) {
+      var B = [d.eRazao ? esc(d.eRazao) : 'EMPREGADORA', d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha']; if (d.menor) B.push('Responsável legal (quando menor de idade)');
+      s += '<div class="pg nb">' + P('TERMO DE PRORROGAÇÃO DO CONTRATO DE EXPERIÊNCIA', 'tit') + P('Por mútuo acordo, e conforme a cláusula ' + nPrazo + ' do contrato acima, o presente contrato de experiência fica prorrogado por mais 45 (quarenta e cinco) dias, de ' + dd(b1) + ' até ' + dd(b2) + '.') + P((d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(a2) + '.', 'c dt') + ass(B) + '</div>';
+    }
+    if (H) {
+      s += '<div class="pg nb">' + P('ANEXO – TERMO DE RESPONSABILIDADE: SAÚDE E SEGURANÇA NO TELETRABALHO (art. 75-E da CLT)', 'tit') +
+        P('Eu, ' + c(d.nome) + ', CPF nº ' + c(d.cpf) + ', declaro que recebi da EMPREGADORA instruções expressas e ostensivas sobre as precauções a tomar para evitar doenças e acidentes de trabalho durante o teletrabalho, e me comprometo a segui-las, em especial:') +
+        '<ul><li>manter postura adequada, com cadeira, mesa e monitor ajustados de forma ergonômica;</li><li>trabalhar em ambiente com iluminação e ventilação adequadas, livre de riscos elétricos e obstáculos;</li><li>realizar pausas regulares e respeitar os intervalos e o horário de trabalho registrados no ponto;</li><li>comunicar imediatamente à EMPREGADORA qualquer acidente ou mal-estar ocorrido durante a jornada remota;</li><li>utilizar corretamente e conservar os equipamentos fornecidos pela EMPREGADORA.</li></ul>' +
+        P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'EMPREGADO(A)']) + '</div>';
+    }
+    return s;
+  }
+  function pagina(d) {
+    var css = '.tit{font-weight:bold;text-align:center;font-size:13pt;margin:0 0 14pt;}.c{text-align:justify;margin:0 0 8pt;}.it{margin-left:18pt;}.dt{text-align:right;margin-top:14pt;}' +
+      'table.jor{width:100%;border-collapse:collapse;margin:2pt 0 8pt;font-size:10.5pt;}table.jor th,table.jor td{border:1px solid #555;padding:3pt 6pt;text-align:left;}table.jor th{background:#f2e3e3;}' +
+      'table.ass{width:100%;margin-top:8pt;border-collapse:collapse;}table.ass td{padding:24pt 60pt 0;text-align:center;font-size:10.5pt;}table.ass .l{border-top:1px solid #000;margin-bottom:3pt;}' +
+      '.pg{break-before:page;page-break-before:always;}.nb{break-inside:avoid;page-break-inside:avoid;}ul{margin:0 0 8pt;padding-left:22pt;}li{margin:0 0 3pt;text-align:justify;}' +
+      '@page{margin-top:1.6cm;}@page :first{margin-top:0;}';
+    var tit = MODELOS[d.mod].n + (d.nome ? ' - ' + d.nome : '');
+    if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css, body: corpo(d) });
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(tit) + '</title><style>@page{size:A4;margin:2cm}body{font-family:Arial,sans-serif;font-size:11pt}' + css + '</style></head><body>' + corpo(d) + '</body></html>';
+  }
+  function coletar() {
+    return {
+      mod: mod(), fid: v('ct-f-func'), nome: v('ct-nome').toUpperCase(), cpf: v('ct-cpf'), ctps: v('ct-ctps'), end: v('ct-end'), cargo: v('ct-cargo').toUpperCase(), cnh: v('ct-cnh'), cnhCat: v('ct-cnhcat'), cnhVal: v('ct-cnhval'),
+      eRazao: v('ct-e-razao'), eCnpj: v('ct-e-cnpj'), eEnd: v('ct-e-end'), eCid: v('ct-e-cid'), rRazao: v('ct-r-razao') || v('ct-e-razao'), rCnpj: v('ct-r-cnpj') || v('ct-e-cnpj'),
+      lEnd: v('ct-l-end'), lCid: v('ct-l-cid'), lTipo: v('ct-l-tipo'), lLoja: v('ct-l-loja'), gRazao: v('ct-l-grazao'), gCnpj: v('ct-l-gcnpj'),
+      jor: { e1: v('ct-j-e1'), e2: v('ct-j-e2'), i1: v('ct-j-i1'), i2: v('ct-j-i2'), sab: v('ct-j-sab'), sabi: v('ct-j-sabi'), dom: v('ct-j-dom'), domi: v('ct-j-domi') },
+      sal: v('ct-sal'), salExt: v('ct-salext'), ini: v('ct-ini'), hDias: v('ct-h-dias'), hAviso: v('ct-h-aviso'), hEq: v('ct-h-eq'), hAj: v('ct-h-aj'), hAjv: v('ct-h-ajv'),
+      cid: v('ct-cid'), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked
+    };
+  }
+  window.ctrGerar = function (branco) {
+    var d;
+    if (branco) { d = { mod: mod(), jor: {}, prorr: el('ct-prorr').checked, menor: el('ct-menor').checked }; if (d.mod === 'hibrido') { d.hAj = ''; } _abrirDocSimples(pagina(d), MODELOS[d.mod].n.replace(/\s+/g, '_') + '_em_branco'); return; }
+    d = coletar();
+    if (!d.nome) { alert('Selecione o funcionário ou informe o nome do empregado.'); return; }
+    if (!d.eRazao) { alert('Informe a empresa EMPREGADORA.'); return; }
+    if (!d.ini) { alert('Informe a data de início do contrato.'); el('ct-ini').focus(); return; }
+    ls('rh_ctr_jor', JSON.stringify(d.jor)); if (d.mod === 'hibrido') { ls('rh_ctr_hdias', d.hDias); ls('rh_ctr_heq', d.hEq); }
+    var H = DB.g(K_HIST); H.push(Object.assign({ id: nid(), em: new Date().toISOString() }, d)); DB.s(K_HIST, H);
+    closeModal('modal-ctr');
+    _abrirDocSimples(pagina(d), (MODELOS[d.mod].n + '_' + d.nome).replace(/[\s\/–]+/g, '_'));
+  };
+  window.ctrHistorico = function () {
+    injetar();
+    var H = DB.g(K_HIST).slice().sort(function (a, b) { return (b.em || '').localeCompare(a.em || ''); });
+    el('ct-htab').innerHTML = H.length ? '<thead><tr><th>Gerado em</th><th>Contrato</th><th>Empregado(a)</th><th>Início</th><th></th></tr></thead><tbody>' + H.map(function (h) {
+      return '<tr><td>' + esc(new Date(h.em).toLocaleString('pt-BR').slice(0, 17)) + '</td><td>' + esc((MODELOS[h.mod] || {}).n || '') + '</td><td>' + esc(h.nome) + '</td><td>' + br(h.ini) + '</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="ctrReabrir(\'' + h.id + '\')">📄 Abrir</button> <button class="btn-icon danger" title="Excluir do histórico" onclick="ctrHistExcluir(\'' + h.id + '\')">&#128465;</button></td></tr>';
+    }).join('') + '</tbody>' : '<tr><td style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum contrato gerado ainda.</td></tr>';
+    openModal('modal-ctr-h');
+  };
+  window.ctrReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(pagina(h), (MODELOS[h.mod].n + '_' + (h.nome || '')).replace(/[\s\/–]+/g, '_')); };
+  window.ctrHistExcluir = function (id) { if (!confirm('Excluir este contrato do histórico?')) return; DB.s(K_HIST, DB.g(K_HIST).filter(function (x) { return x.id !== id; })); ctrHistorico(); };
+
+  // ── cartão em Gerar Documentos ──
+  function card() {
+    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="contratos"]')) return;
+    var h = '<div class="trein-card" data-docbase="contratos" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">📝 Contratos</div><div class="tc-meta">Contrato de Experiência · Regime Híbrido · Motorista</div></div>' +
+      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'contratos\')">🗑️</button></div>' +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Escolha o modelo, filtre por empresa e departamento, selecione o funcionário e confira os dados do contrato (jornada, salário, local de trabalho e datas de 45 + 45 dias). Sai no papel timbrado com a logo.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + Object.keys(MODELOS).map(function (k, i) { return '<button class="btn ' + (i ? 'btn-outline' : 'btn-primary') + ' btn-sm"' + (i ? '' : ' style="background:' + COR + ';border-color:' + COR + ';"') + ' onclick="ctrAbrir(\'' + k + '\')">' + (k === 'padrao' ? '📝 Experiência' : k === 'hibrido' ? '🏠 Híbrido' : '🚚 Motorista') + '</button>'; }).join('') +
+      '<button class="btn btn-outline btn-sm" onclick="ctrHistorico()">🗂️ Histórico</button></div></div>';
+    grid.insertAdjacentHTML('afterbegin', h);
+    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  }
+  card();
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+})();
+</script>
 </body>
 </html>
