@@ -18403,6 +18403,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
 <script>
 // ════════════════════════════════════════════════════════════
 // GERAR DOCUMENTOS — Recibos (Salário, Adiantamento, 13º 1ª e 2ª parcela, Bônus)
+// nos recibos, no lugar da matrícula sai o DEPARTAMENTO do funcionário
+window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v) return ''; var d = DB.g('departamentos').find(function (x) { return x.id === v || x.nome === v; }); return String(d ? d.nome : (/^[a-z0-9]{8,}$/i.test(v) ? '' : v)).toLocaleUpperCase('pt-BR'); };
 // Reproduzem os modelos .docx da BIN (2 vias na mesma folha A4, com "recortar aqui").
 // Dados do funcionário vêm do cadastro (CLT, Agência ou Sem registro) e os campos podem ser ajustados.
 // ════════════════════════════════════════════════════════════
@@ -18481,7 +18483,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<p class="tit">' + R.titulo + '</p>' +
       '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
       '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup>' +
-      '<tr>' + cel('NOME DO COLABORADOR', d.nome) + cel('MATRÍCULA', d.mat) + '</tr>' +
+      '<tr>' + cel('NOME DO COLABORADOR', d.nome) + cel('DEPARTAMENTO', d.mat) + '</tr>' +
       '<tr>' + cel('CARGO / FUNÇÃO', d.cargo) + cel('CPF', d.cpf) + '</tr>' +
       '<tr>' + cel(R.rot, d.refTxt) + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (d.valorN ? esc(d.valor) : '') + '</div></td></tr></table>' +
       (d.demo ? demonstrativo(d.demo) : '') +
@@ -18661,7 +18663,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<div class="form-group"><label>Razão social no recibo</label><input id="rc-razao" type="text"></div>' +
       '<div class="form-group"><label>CNPJ</label><input id="rc-cnpj" type="text" oninput="mCNPJ(this)"></div>' +
       '<div class="form-group form-full"><label>Nome do colaborador</label><input id="rc-nome" type="text" style="text-transform:uppercase;"></div>' +
-      '<div class="form-group"><label>Matrícula</label><input id="rc-mat" type="text"></div>' +
+      '<div class="form-group"><label>Departamento</label><input id="rc-mat" type="text" style="text-transform:uppercase;"></div>' +
       '<div class="form-group"><label>CPF</label><input id="rc-cpf" type="text" oninput="mCPF(this)"></div>' +
       '<div class="form-group form-full"><label>Cargo / Função</label><input id="rc-cargo" type="text" style="text-transform:uppercase;"></div>' +
       '<div class="form-group" id="rcg-mes"><label>Mês de referência</label><select id="rc-mes" onchange="recCalc(true)"><option value="">— em branco —</option>' + MESES.map(function (m, i) { return '<option value="' + i + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>'; }).join('') + '</select></div>' +
@@ -18885,7 +18887,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       }
       var nome = (p.n || '').toLocaleUpperCase('pt-BR');
       guardarLanc(_tipo, pk, nome, mesIdx, ano, (_tipo === 'rec_adi' && demo) ? demo.sal : v, demo);
-      return montarDados(R, { pk: pk, nome: nome, mat: p.codEpr || '', cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
+      return montarDados(R, { pk: pk, nome: nome, mat: window.rhDeptoDe(p), cargo: (p.car || '').toLocaleUpperCase('pt-BR'), cpf: p.cpf || '', razao: e.razao, cnpj: e.cnpj,
         valor: v, ext: '', mesIdx: mesIdx, ano: ano, periodo: periodo, forma: forma, cidade: cidade, dt: dt, demo: demo });
     });
     try { recHist(R, dados, mesIdx, ano, periodo); } catch (e) { console.error(e); }
@@ -19324,7 +19326,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.recFuncMudou = function () {
     var p = acharPessoa(el('rc-func').value) || {};
     el('rc-nome').value = p.n || ''; el('rc-cpf').value = p.cpf || ''; el('rc-cargo').value = p.car || '';
-    el('rc-mat').value = p.codEpr || p.mat || '';
+    el('rc-mat').value = window.rhDeptoDe(p);
     var se = el('rc-emp');
     se.value = p.emp && Array.prototype.some.call(se.options, function (o) { return o.value === p.emp; }) ? p.emp : (se.options[0] ? se.options[0].value : '__perfil');
     recEmpMudou();
@@ -21831,7 +21833,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   };
   function linhaDe(x) {
     var p = x.p, L = LIN[x.k];
-    if (!L) L = LIN[x.k] = { ck: false, nome: up(p.n), cpf: p.cpf || '', cargo: up(p.car || ''), mat: p.codEpr || p.mat || '', valor: '', ref: '', emp: p.emp || '' };
+    if (!L) L = LIN[x.k] = { ck: false, nome: up(p.n), cpf: p.cpf || '', cargo: up(p.car || ''), mat: window.rhDeptoDe ? window.rhDeptoDe(p) : '', valor: '', ref: '', emp: p.emp || '' };
     return L;
   }
   window.raLista = function () {
@@ -21849,7 +21851,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         inp('nome', L.nome, '', 1) + '<td style="font-size:11px;color:var(--gray-400);">' + esc(info) + '</td>' + inp('cpf', L.cpf) + inp('cargo', L.cargo) + inp('mat', L.mat) + inp('valor', L.valor, '0,00') + inp('ref', L.ref, refPad || 'referente a', 1) +
         (k.indexOf('n:') === 0 ? '<td><button class="btn-icon danger" title="Remover" onclick="raRemover(\'' + esc(k) + '\')">✕</button></td>' : '<td></td>') + '</tr>';
     };
-    el('ra-tab').innerHTML = '<thead><tr><th><input type="checkbox" style="width:auto;" title="Marcar/desmarcar os da lista" onchange="raTodos(this.checked)"></th><th>Nome no recibo</th><th>Grupo · depto.</th><th>CPF</th><th>Cargo / função</th><th>Matrícula</th><th>Valor (R$)</th><th>Referente a (se diferente)</th><th></th></tr></thead><tbody>' +
+    el('ra-tab').innerHTML = '<thead><tr><th><input type="checkbox" style="width:auto;" title="Marcar/desmarcar os da lista" onchange="raTodos(this.checked)"></th><th>Nome no recibo</th><th>Grupo · depto.</th><th>CPF</th><th>Cargo / função</th><th>Departamento</th><th>Valor (R$)</th><th>Referente a (se diferente)</th><th></th></tr></thead><tbody>' +
       extras.map(function (k) { return row(k, LIN[k], 'sem cadastro'); }).join('') +
       X.map(function (x) { return row(x.k, linhaDe(x), [x.g, depNome(x.p), x.deslig ? 'desligado' : ''].filter(Boolean).join(' · ')); }).join('') +
       (!X.length && !extras.length ? '<tr><td colspan="9" style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum colaborador com estes filtros.</td></tr>' : '') + '</tbody>';
@@ -21888,7 +21890,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">' + esc(G.titulo) + '</p>' +
       '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
       '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup>' +
-      '<tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('MATRÍCULA', x.mat) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('CPF', x.cpf) + '</tr>' +
+      '<tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('DEPARTAMENTO', x.mat) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('CPF', x.cpf) + '</tr>' +
       '<tr>' + cel('REFERENTE A', x.ref) + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
       '<p class="txt">' + txt + '</p>' +
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
