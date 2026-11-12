@@ -25516,6 +25516,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   if (window.RT && RT.LIST && RT.LIST.indexOf(K) === -1) { RT.LIST.push(K); if (RT.ALL && RT.ALL.indexOf(K) === -1) RT.ALL.push(K); }
   // gerentes informados pelo RH (por código da loja); podem ser alterados no próprio quadro (✏️)
   var PADRAO = { 1: 'Maisa', 2: 'Hellen', 4: 'Lenita', 5: 'Marta', 8: 'Thayna', 9: 'Hellen', 10: 'Janilly' };
+  // lojas que aparecem juntas no mesmo cartão (código da loja → loja principal): L3 junto à L1
+  var JUNTO = { 3: 1 };
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function cod(nome) { var m = /^\s*L\s*0*(\d+)\b/i.exec(nome || ''); return m ? +m[1] : null; }
@@ -25532,6 +25534,14 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     DB.g('funcionarios').forEach(function (f) { if (f._ext || f.st === 'Desligado') return; (porId[f.dep] || sem).clt++; });
     DB.g('colab-ext').forEach(function (c) { if ((c.st || 'Ativo') !== 'Ativo') return; var x = porId[c.dep] || sem; if (c.tipo === 'agencia') x.ag++; else x.sr++; });
     D.sort(function (a, b) { var ca = cod(a.d.nome), cb = cod(b.d.nome); if (ca != null && cb != null) return ca - cb; if (ca != null) return -1; if (cb != null) return 1; return String(a.d.nome || '').localeCompare(String(b.d.nome || ''), 'pt-BR'); });
+    // junta as lojas configuradas em JUNTO no cartão da loja principal (soma os funcionários e lista cada loja)
+    D.forEach(function (x) {
+      var c = cod(x.d.nome), alvo = c != null && JUNTO[c] != null ? D.find(function (y) { return cod(y.d.nome) === JUNTO[c] && !y.junto; }) : null;
+      if (!alvo) return;
+      if (!alvo.partes) alvo.partes = [{ nome: alvo.d.nome, clt: alvo.clt, sr: alvo.sr, ag: alvo.ag }];
+      alvo.partes.push({ nome: x.d.nome, clt: x.clt, sr: x.sr, ag: x.ag }); alvo.clt += x.clt; alvo.sr += x.sr; alvo.ag += x.ag; x.junto = true;
+    });
+    D = D.filter(function (x) { return !x.junto; });
     if (sem.clt + sem.sr + sem.ag) D.push(sem);
     return D;
   }
@@ -25551,10 +25561,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;">' + D.map(function (x) {
         var n = x.clt + x.sr + x.ag, ge = x.d.id ? gerente(x.d) : { n: '' };
         return '<div style="border:1.5px solid var(--gray-200,#e5e5e5);border-radius:10px;padding:10px 12px;background:#fff;' + (x.d.id ? '' : 'opacity:.75;') + '">' +
-          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;"><strong style="font-size:13.5px;color:var(--green-dark);">' + esc(x.d.nome) + '</strong>' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;"><strong style="font-size:13.5px;color:var(--green-dark);">' + (x.partes ? x.partes.map(function (q) { return esc(q.nome); }).join(' <span style="color:var(--gray-400);">+</span> ') : esc(x.d.nome)) + '</strong>' +
           '<span style="font-size:20px;font-weight:800;color:var(--green-dark);line-height:1;white-space:nowrap;">' + n + '<span style="font-size:11px;font-weight:600;color:var(--gray-500);"> func.</span></span></div>' +
           (x.d.id ? '<div style="font-size:12.5px;margin-top:3px;">👤 Gerente: <strong>' + (ge.n ? esc(ge.n) : '<span style="color:var(--gray-400);font-weight:500;">não informado</span>') + '</strong> <button class="btn-icon" title="Alterar gerente" style="font-size:11px;padding:0 4px;" onclick="dashLojasGer(\'' + x.d.id + '\')">✏️</button></div>' : '') +
-          '<div style="font-size:11.5px;color:var(--gray-500);margin-top:3px;">CLT ' + x.clt + (x.sr ? ' · Sem registro ' + x.sr : '') + (x.ag ? ' · Agência ' + x.ag : '') + '</div></div>';
+          '<div style="font-size:11.5px;color:var(--gray-500);margin-top:3px;">CLT ' + x.clt + (x.sr ? ' · Sem registro ' + x.sr : '') + (x.ag ? ' · Agência ' + x.ag : '') + '</div>' +
+          (x.partes ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:4px;border-top:1px dashed var(--gray-200,#e5e5e5);padding-top:3px;">' + x.partes.map(function (q) { return esc(String(q.nome).split(/\s*-\s*/)[0]) + ': <strong>' + (q.clt + q.sr + q.ag) + '</strong>'; }).join(' · ') + '</div>' : '') + '</div>';
       }).join('') + '</div>';
   };
   if (typeof window.updDash === 'function') { var _u = window.updDash; window.updDash = function () { var r = _u.apply(this, arguments); try { dashLojas(); } catch (e) { console.warn(e); } return r; }; }
