@@ -18481,7 +18481,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     return '<div class="via">' +
       '<p class="logo"><img src="' + LOGO + '" alt=""></p>' +
       '<p class="tit">' + R.titulo + '</p>' +
-      '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
+      '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : n === 2 ? '2ª via – Colaborador' : '') + '</p>' +
       '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup>' +
       '<tr>' + cel('NOME DO COLABORADOR', d.nome) + cel('DEPARTAMENTO', d.mat) + '</tr>' +
       '<tr>' + cel('CARGO / FUNÇÃO', d.cargo) + cel('CPF', d.cpf) + '</tr>' +
@@ -18600,7 +18600,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var lista = Array.isArray(d) ? d : [d];
     var titulo = R.card + (lista.length > 1 ? ' - ' + lista.length + ' colaboradores' : ((lista[0] || {}).nome ? ' - ' + lista[0].nome : ''));
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body' + (lista.some(function (x) { return x.demo; }) ? ' class="cp"' : '') + '>' +
-      lista.map(function (x) { return '<div class="pg">' + via(R, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(R, x, 2) + '</div>'; }).join('') + ((Array.isArray(d) && lista.length) ? '<div class="pg">' + relacaoEmpDep(R, lista) + '</div>' : '') + '</body></html>';
+      lista.map(function (x) { return '<div class="pg">' + via(R, x, 0) + '</div>'; }).join('') + ((Array.isArray(d) && lista.length) ? '<div class="pg">' + relacaoEmpDep(R, lista) + '</div>' : '') + '</body></html>';
   }
   // monta os dados de um recibo a partir dos valores informados
   function montarDados(R, x) {
@@ -21888,7 +21888,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       .replace(/\{empresa\}/g, esc(up(x.razao) || 'BIN EMBALAGENS')).replace(/\{cnpj\}/g, u(x.cnpj, 20)).replace(/\{valor\}/g, u(ok ? brl(x.v) : '', 14))
       .replace(/\{extenso\}/g, u(ok ? ext(x.v) : '', 48)).replace(/\{referente\}/g, u(x.ref, 40));
     return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">' + esc(G.titulo) + '</p>' +
-      '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
+      '<p class="sub">' + (n === 1 ? '1ª via – Empresa' : n === 2 ? '2ª via – Colaborador' : '') + '</p>' +
       '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup>' +
       '<tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('DEPARTAMENTO', x.mat) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel('CPF', x.cpf) + '</tr>' +
       '<tr>' + cel('REFERENTE A', x.ref) + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
@@ -21908,7 +21908,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   }
   function documento(G, L) {
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(G.titulo + (L.length === 1 ? ' - ' + (L[0].nome || '') : ' - ' + L.length + ' colaboradores')) + '</title><style>' + CSS + '</style></head><body>' +
-      L.map(function (x) { return '<div class="pg">' + via(G, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(G, x, 2) + '</div>'; }).join('') +
+      L.map(function (x) { return '<div class="pg">' + via(G, x, 0) + '</div>'; }).join('') +
       (L.length > 1 ? '<div class="pg">' + relacao(G, L) + '</div>' : '') + '</body></html>';
   }
   window.raGerar = function () {
@@ -23005,7 +23005,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var cel = function (r, v) { return '<td><div class="rot">' + r + '</div><div class="val">' + (v ? esc(v) : '&nbsp;') + '</div></td>'; }, u = function (v, l) { return v ? '<span class="pre">' + esc(v) + '</span>' : linha(l); };
     var ok = x.v > 0, dp = G.data ? G.data.split('-') : null, ref = perTxt(G);
     var det = x.dias && x.vdia ? ', correspondente a ' + u(String(x.dias), 4) + ' dia(s) × R$ ' + u(brl(x.vdia), 8) + ' por dia' : '';
-    return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">RECIBO DE VALE-TRANSPORTE</p><p class="sub">' + (n === 1 ? '1ª via – Empresa' : '2ª via – Colaborador') + '</p>' +
+    return '<div class="via"><p class="logo">' + (window.rhLogo ? '<img src="' + window.rhLogo + '" alt="">' : '') + '</p><p class="tit">RECIBO DE VALE-TRANSPORTE</p><p class="sub">' + (n === 1 ? '1ª via – Empresa' : n === 2 ? '2ª via – Colaborador' : '') + '</p>' +
       '<table class="dados"><colgroup><col style="width:68.87%"><col style="width:31.13%"></colgroup><tr>' + cel('NOME DO COLABORADOR', x.nome) + cel('CPF', x.cpf) + '</tr><tr>' + cel('CARGO / FUNÇÃO', x.cargo) + cel(G.de ? 'PERÍODO DE REFERÊNCIA' : 'MÊS DE REFERÊNCIA', ref.toUpperCase()) + '</tr>' +
       '<tr>' + cel('DIAS × VALOR POR DIA', x.dias && x.vdia ? x.dias + ' × R$ ' + brl(x.vdia) : '') + '<td class="vl"><div class="rot">VALOR</div><div class="rs">R$ ' + (ok ? brl(x.v) : '') + '</div></td></tr></table>' +
       '<p class="txt">Recebi da empresa <b>' + esc(up(x.razao) || 'BIN EMBALAGENS') + '</b>, inscrita no CNPJ nº ' + u(x.cnpj, 20) + ', a importância de R$ ' + u(ok ? brl(x.v) : '', 14) + ' (' + u(ok ? (window.recPorExtenso ? recPorExtenso(x.v) : '') : '', 48) + '), referente ao <b>vale-transporte</b> ' + (G.de ? 'do período de ' : 'do mês de ') + ref + det + ', destinado ao meu deslocamento residência–trabalho–residência, dando plena quitação do valor aqui recebido.</p>' +
@@ -23018,7 +23018,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var rel = L.length > 1 ? '<div class="pg"><div class="tit">RELAÇÃO · VALE-TRANSPORTE SEM REGISTRO</div><div class="sub">' + perTxt(G) + ' · ' + L.length + ' recibo(s) · total R$ ' + brl(t) + '</div><table class="rel"><tr><th>Colaborador</th><th>CPF</th><th class="n">Dias</th><th class="n">Valor/dia</th><th class="n">Total</th></tr>' +
       L.map(function (x) { return '<tr><td>' + esc(x.nome) + '</td><td>' + esc(x.cpf) + '</td><td class="n">' + (x.dias || '') + '</td><td class="n">' + (x.vdia ? 'R$ ' + brl(x.vdia) : '') + '</td><td class="n">R$ ' + brl(x.v) + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="4">TOTAL</td><td class="n">R$ ' + brl(t) + '</td></tr></table></div>' : '';
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc('Recibo de Vale-Transporte ' + perTxt(G).replace(/\//g, '-') + (L.length === 1 ? ' - ' + L[0].nome : '')) + '</title><style>' + CSS + '</style></head><body>' +
-      L.map(function (x) { return '<div class="pg">' + via(G, x, 1) + '<p class="corte">✂&nbsp; recortar aqui</p>' + via(G, x, 2) + '</div>'; }).join('') + rel + '</body></html>';
+      L.map(function (x) { return '<div class="pg">' + via(G, x, 0) + '</div>'; }).join('') + rel + '</body></html>';
   }
   window.rvtGerar = function () {
     var ids = Object.keys(LIN).filter(function (k) { return LIN[k].ck; }); if (!ids.length) { alert('Marque pelo menos um colaborador.'); return; }
