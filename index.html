@@ -25572,5 +25572,181 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(dashLojas, 300); }); else setTimeout(dashLojas, 300);
 })();
 </script>
+<script>
+/* ═══════ MENU 🗄️ ARQUIVO MORTO — caixas de arquivo com capa para imprimir e lista (nome + data de desligamento) em ordem alfabética ═══════ */
+(function () {
+  var KC = 'arq-caixas', KI = 'arq-itens', SEC = 'arqmorto', CUR = null;
+  [KC, KI].forEach(function (k) { if (window.RT && RT.LIST && RT.LIST.indexOf(k) === -1) { RT.LIST.push(k); if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); } });
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  // planilha ARQUIVO_MORTO.xlsx (caixa 01 – Documentos demissionais 2025/2026); ids fixos para não duplicar entre computadores
+  var SEED = [['YASMIN SANTOS BATISTA', '2026-05'], ['SABRINA FEITOZA', '2026-03'], ['ANTONIA EMILY GOMES', '2026-03'], ['CAUA RABELO DE CARVALHO', '2026-03'], ['LISSON LINHARES', '2026-03'], ['ANDERSON JR SOUZA', '2026-05'], ['DANIEL BEZARRA', '2026-01'], ['IANDRO AP DOS SANTOS', '2026-05'], ['CRISTIANE BANDEIRA', '2026-04'], ['CRISTIANO DE MOURA BARBOSA', '2026-08'], ['CRISTIANE QUEIROZ FEITOSA', '2026-08'], ['JOAO MIGUEL SILVA', '2025-11'], ['MIKAELA LARISSA MOREIRA', '2026-05'], ['WESLEY MARQUES', '2026-03'], ['MAYARA SILVA DOS SANTOS', '2025-11'], ['ARTUR MULLHER', '2025-11'], ['MIKAELA MARQUES SANTOS', '2026-02'], ['RYCHARD MARTINS', '2025-11'], ['SIMONE DE OLIVEIRA SOUZA', '2026-02'], ['JULIANE NEGREIROS SANTOS', '2026-10'], ['GUILHERME SOUZA DE MORAES', '2026-01'], ['RAISSA BRESSAN', '2026-01'], ['ITALO COSTA', '2026-04'], ['EVERTON APARECIDO', '2026-04'], ['EMILLU FERRREIRA', '2025-12']];
+  function el(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function up(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('pt-BR'); }
+  function nid() { return (typeof uid === 'function') ? uid() : Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function sem(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); }
+  function cmp(a, b) { return sem(a.nome).localeCompare(sem(b.nome), 'pt-BR'); }
+  function dt(d) { d = String(d || ''); if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4); if (/^\d{4}-\d{2}$/.test(d)) return d.slice(5, 7) + '/' + d.slice(0, 4); return d; }
+  function n2(n) { return String(n || 0).padStart(2, '0'); }
+  function caixas() { return DB.g(KC).slice().sort(function (a, b) { return (+a.num || 0) - (+b.num || 0) || String(a.criada || '').localeCompare(String(b.criada || '')); }); }
+  function itens(cx) { return DB.g(KI).filter(function (x) { return x.cx === cx; }).sort(cmp); }
+  function semear() {
+    if (DB.g(KC).length || DB.g(KI).length) return;
+    var cx = { id: 'am-seed-cx1', titulo: 'DOCUMENTOS DEMISSIONAIS', periodo: '2025/2026', num: 1, status: 'aberta', criada: new Date().toISOString() };
+    DB.s(KC, [cx]); DB.s(KI, SEED.map(function (s, i) { return { id: 'am-seed-' + (i + 1), cx: cx.id, nome: s[0], data: s[1], criado: cx.criada }; }));
+  }
+  // ── tela ──
+  function injetar() {
+    if (el('sec-' + SEC)) return;
+    var antes = document.querySelector('.nav-item[data-obrig]') || Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\('empresas'/.test(n.getAttribute('onclick') || ''); });
+    var nv = '<div class="nav-item" data-arqmorto="1" onclick="nav(\'' + SEC + '\',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="5" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><span>Arquivo Morto</span></div>';
+    if (antes) antes.insertAdjacentHTML('afterend', nv);
+    var ref = el('sec-obrigacoes') || el('sec-empresas') || el('sec-dashboard');
+    ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-' + SEC + '"><div class="card">' +
+      '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">🗄️ Arquivo Morto</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Cadastre o nome e a data de desligamento — a lista fica sempre em <strong>ordem alfabética</strong>. Imprima a <strong>capa</strong> e a <strong>lista</strong> da caixa. Caixa cheia? <strong>Nova caixa</strong> começa uma nova capa e uma nova lista.</div></div>' +
+      '<button class="btn btn-primary" onclick="amNovaCaixa()">📦 Nova caixa</button></div>' +
+      '<div id="am-caixas" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>' +
+      '<div id="am-corpo"></div></div></div>');
+    document.body.insertAdjacentHTML('beforeend', '<div class="modal-bg" id="modal-am"><div class="modal" style="max-width:560px;"><div class="modal-header"><span class="modal-title" id="am-mtit">Caixa</span><button class="modal-close" onclick="closeModal(\'modal-am\')">×</button></div>' +
+      '<div class="form-grid"><div class="form-group form-full"><label>Título da capa</label><input id="am-tit" type="text" style="text-transform:uppercase;" placeholder="DOCUMENTOS DEMISSIONAIS"></div>' +
+      '<div class="form-group"><label>Ano / período</label><input id="am-per" type="text" placeholder="2025/2026"></div>' +
+      '<div class="form-group"><label>Caixa nº</label><input id="am-num" type="number" min="1" step="1"></div>' +
+      '<div class="form-group form-full"><label>Observação (opcional — sai na capa)</label><input id="am-obs" type="text" placeholder="ex.: L1 a L10 · Empresa X"></div></div>' +
+      '<div id="am-mnota" style="font-size:12.5px;color:var(--gray-600);"></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-am\')">Cancelar</button><button class="btn btn-primary" onclick="amSalvarCaixa()">💾 Salvar</button></div></div></div>');
+  }
+  window.amRender = function () {
+    injetar(); semear();
+    var C = caixas();
+    if (!CUR || !C.some(function (c) { return c.id === CUR; })) { var ab = C.filter(function (c) { return c.status !== 'fechada'; }); CUR = (ab[ab.length - 1] || C[C.length - 1] || {}).id || null; }
+    el('am-caixas').innerHTML = C.map(function (c) {
+      var n = itens(c.id).length, at = c.id === CUR, fe = c.status === 'fechada';
+      return '<button class="btn ' + (at ? 'btn-primary' : 'btn-outline') + ' btn-sm" onclick="amSel(\'' + c.id + '\')" title="' + esc(c.titulo + ' ' + (c.periodo || '')) + '">' + (fe ? '🔒' : '📦') + ' Caixa ' + n2(c.num) + ' <span style="font-weight:400;">· ' + esc(c.periodo || '') + ' · ' + n + '</span></button>';
+    }).join('') || '<span style="color:var(--gray-400);">Nenhuma caixa. Clique em 📦 Nova caixa.</span>';
+    var c = C.find(function (x) { return x.id === CUR; }); if (!c) { el('am-corpo').innerHTML = ''; return; }
+    var L = itens(c.id), fe = c.status === 'fechada', q = sem((el('am-busca') || {}).value || '');
+    var D = DB.g('funcionarios').filter(function (f) { return f.st === 'Desligado'; });
+    el('am-corpo').innerHTML =
+      '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--green-pale);border-radius:10px;padding:10px 14px;margin-bottom:12px;">' +
+      '<div style="flex:1;min-width:220px;"><div style="font-size:11px;color:var(--gray-500);letter-spacing:.5px;">CAIXA ' + n2(c.num) + (fe ? ' · 🔒 FECHADA (caixa cheia)' : ' · EM USO') + '</div><div style="font-size:18px;font-weight:800;color:var(--green-dark);">' + esc(c.titulo) + '</div><div style="font-size:13px;color:var(--gray-600);">ANO ' + esc(c.periodo || '') + (c.obs ? ' · ' + esc(c.obs) : '') + ' · <strong>' + L.length + '</strong> pessoa(s)</div></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="amImprimir(\'capa\')">🖨️ Capa</button><button class="btn btn-outline btn-sm" onclick="amImprimir(\'lista\')">🖨️ Lista</button><button class="btn btn-primary btn-sm" onclick="amImprimir(\'ambos\')">🖨️ Capa + lista</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="amEditarCaixa(\'' + c.id + '\')">✏️ Editar caixa</button>' +
+      (fe ? '<button class="btn btn-outline btn-sm" onclick="amReabrir(\'' + c.id + '\')">🔓 Reabrir</button>' : '<button class="btn btn-outline btn-sm" style="border-color:#b45309;color:#b45309;" onclick="amFechar(\'' + c.id + '\')">✅ Caixa cheia → nova caixa</button>') +
+      (L.length ? '' : '<button class="btn-icon danger" title="Excluir caixa vazia" onclick="amExcluirCaixa(\'' + c.id + '\')">&#128465;</button>') + '</div></div>' +
+      (fe ? '<div style="font-size:12.5px;color:#b45309;margin-bottom:8px;">Esta caixa está fechada. Para lançar nela, clique em 🔓 Reabrir.</div>' :
+        '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">' +
+        '<div class="form-group" style="margin:0;flex:2;min-width:240px;"><label>Nome</label><input id="am-nome" list="am-dl" type="text" style="text-transform:uppercase;" placeholder="Digite o nome (sugere os desligados do cadastro)" oninput="amSug()" onkeydown="if(event.key===\'Enter\')amAdd()"><datalist id="am-dl">' + D.map(function (f) { return '<option value="' + esc(up(f.n)) + '">'; }).join('') + '</datalist></div>' +
+        '<div class="form-group" style="margin:0;width:170px;"><label>Data de desligamento</label><input id="am-data" type="date" onkeydown="if(event.key===\'Enter\')amAdd()"></div>' +
+        '<button class="btn btn-primary" style="height:40px;" onclick="amAdd()">+ Adicionar</button></div>') +
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><strong style="font-size:13.5px;color:var(--green-dark);">Lista da caixa (ordem alfabética)</strong><input id="am-busca" type="search" placeholder="🔍 Buscar em todas as caixas" oninput="amRender()" value="' + esc((el('am-busca') || {}).value || '') + '" style="margin-left:auto;padding:6px 10px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;"></div>' +
+      (q ? amBuscaTodas(q) : '') +
+      '<div class="table-wrap"><table><thead><tr><th style="width:50px;">Nº</th><th>Nome</th><th style="width:170px;">Data de desligamento</th><th style="width:90px;"></th></tr></thead><tbody>' +
+      (L.length ? L.map(function (x, i) { var hit = q && sem(x.nome).indexOf(q) !== -1; return '<tr' + (hit ? ' style="background:#fff7e6;"' : '') + '><td>' + (i + 1) + '</td><td><strong>' + esc(x.nome) + '</strong></td><td>' + esc(dt(x.data)) + '</td><td style="white-space:nowrap;"><button class="btn-icon" title="Editar" onclick="amEditar(\'' + x.id + '\')">✏️</button><button class="btn-icon danger" title="Excluir" onclick="amExcluir(\'' + x.id + '\')">&#128465;</button></td></tr>'; }).join('')
+        : '<tr><td colspan="4" style="padding:18px;text-align:center;color:var(--gray-400);">Caixa vazia — adicione o primeiro nome.</td></tr>') + '</tbody></table></div>';
+    var b = el('am-busca'); if (b && q) { b.focus(); var v = b.value; b.value = ''; b.value = v; }
+  };
+  function amBuscaTodas(q) {
+    var C = caixas(), r = DB.g(KI).filter(function (x) { return sem(x.nome).indexOf(q) !== -1 && x.cx !== CUR; });
+    if (!r.length) return '';
+    return '<div style="font-size:12.5px;background:#f3f6ff;border-radius:8px;padding:6px 10px;margin-bottom:8px;">Encontrado em outras caixas: ' + r.map(function (x) { var c = C.find(function (k) { return k.id === x.cx; }) || {}; return '<a href="javascript:void(0)" onclick="amSel(\'' + x.cx + '\')"><strong>' + esc(x.nome) + '</strong> → Caixa ' + n2(c.num) + ' (' + esc(c.periodo || '') + ')</a>'; }).join(' · ') + '</div>';
+  }
+  window.amSel = function (id) { CUR = id; amRender(); };
+  window.amSug = function () { var n = up(el('am-nome').value), f = DB.g('funcionarios').find(function (x) { return x.st === 'Desligado' && up(x.n) === n; }); if (f && f.dtDesl && !el('am-data').value) el('am-data').value = String(f.dtDesl).slice(0, 10); };
+  window.amAdd = function () {
+    var nome = up(el('am-nome').value), data = el('am-data').value;
+    if (!nome) { alert('Digite o nome.'); el('am-nome').focus(); return; }
+    var dup = DB.g(KI).find(function (x) { return sem(x.nome) === sem(nome); });
+    if (dup) { var c = DB.g(KC).find(function (k) { return k.id === dup.cx; }) || {}; if (!confirm(nome + ' já está na Caixa ' + n2(c.num) + ' (' + (c.periodo || '') + '). Adicionar mesmo assim?')) return; }
+    var L = DB.g(KI); L.push({ id: nid(), cx: CUR, nome: nome, data: data, criado: new Date().toISOString() }); DB.s(KI, L);
+    amRender(); setTimeout(function () { var i = el('am-nome'); if (i) i.focus(); }, 30);
+    if (typeof toast === 'function') toast('✅ ' + nome + ' adicionado(a) em ordem alfabética.');
+  };
+  window.amEditar = function (id) {
+    var L = DB.g(KI), x = L.find(function (y) { return y.id === id; }); if (!x) return;
+    var n = prompt('Nome:', x.nome); if (n === null) return; n = up(n); if (!n) return;
+    var d = prompt('Data de desligamento (dd/mm/aaaa ou mm/aaaa):', dt(x.data)); if (d === null) return; d = d.trim();
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(d), m2 = /^(\d{1,2})\/(\d{4})$/.exec(d);
+    x.nome = n; x.data = m ? m[3] + '-' + n2(m[2]) + '-' + n2(m[1]) : m2 ? m2[2] + '-' + n2(m2[1]) : (d ? x.data : '');
+    DB.s(KI, L); amRender();
+  };
+  window.amExcluir = function (id) { var x = DB.g(KI).find(function (y) { return y.id === id; }); if (!x || !confirm('Excluir ' + x.nome + ' da lista?')) return; DB.s(KI, DB.g(KI).filter(function (y) { return y.id !== id; })); amRender(); };
+  // ── caixas ──
+  var EDIT = null;
+  function abrirCaixa(c, nova) {
+    EDIT = c ? c.id : null;
+    el('am-mtit').textContent = c ? 'Editar caixa ' + n2(c.num) : 'Nova caixa';
+    var base = c || nova || {};
+    el('am-tit').value = base.titulo || 'DOCUMENTOS DEMISSIONAIS'; el('am-per').value = base.periodo || ''; el('am-num').value = base.num || 1; el('am-obs').value = base.obs || '';
+    el('am-mnota').innerHTML = nova && nova._de ? 'A Caixa ' + n2(nova._de) + ' foi marcada como <strong>cheia</strong>. Confira os dados da nova capa:' : '';
+    openModal('modal-am');
+  }
+  function proxNum() { return caixas().reduce(function (m, c) { return Math.max(m, +c.num || 0); }, 0) + 1; }
+  window.amNovaCaixa = function () { injetar(); var u = caixas().slice(-1)[0] || {}; abrirCaixa(null, { titulo: u.titulo, periodo: u.periodo || String(new Date().getFullYear()), num: proxNum(), obs: u.obs }); };
+  window.amEditarCaixa = function (id) { var c = DB.g(KC).find(function (x) { return x.id === id; }); if (c) abrirCaixa(c); };
+  window.amSalvarCaixa = function () {
+    var t = up(el('am-tit').value), p = el('am-per').value.trim(), n = parseInt(el('am-num').value, 10) || proxNum();
+    if (!t) { alert('Informe o título da capa.'); return; }
+    var C = DB.g(KC);
+    if (EDIT) { var c = C.find(function (x) { return x.id === EDIT; }); c.titulo = t; c.periodo = p; c.num = n; c.obs = el('am-obs').value.trim(); }
+    else { var nc = { id: nid(), titulo: t, periodo: p, num: n, obs: el('am-obs').value.trim(), status: 'aberta', criada: new Date().toISOString() }; C.push(nc); CUR = nc.id; }
+    DB.s(KC, C); closeModal('modal-am'); amRender();
+  };
+  window.amFechar = function (id) {
+    var C = DB.g(KC), c = C.find(function (x) { return x.id === id; }); if (!c) return;
+    if (!confirm('Marcar a Caixa ' + n2(c.num) + ' como CHEIA e começar uma nova caixa (nova capa e nova lista)?')) return;
+    c.status = 'fechada'; c.fechada = new Date().toISOString(); DB.s(KC, C);
+    abrirCaixa(null, { titulo: c.titulo, periodo: c.periodo, num: proxNum(), obs: c.obs, _de: c.num });
+  };
+  window.amReabrir = function (id) { var C = DB.g(KC), c = C.find(function (x) { return x.id === id; }); if (!c) return; c.status = 'aberta'; delete c.fechada; DB.s(KC, C); amRender(); };
+  window.amExcluirCaixa = function (id) { if (itens(id).length) { alert('A caixa tem nomes. Exclua os nomes antes.'); return; } if (!confirm('Excluir esta caixa vazia?')) return; DB.s(KC, DB.g(KC).filter(function (x) { return x.id !== id; })); CUR = null; amRender(); };
+  // ── impressão ──
+  function logo() { try { return typeof LOGO_MODELO_DOC_B64 !== 'undefined' ? LOGO_MODELO_DOC_B64 : ''; } catch (e) { return ''; } }
+  function capa(c, n) {
+    var lg = logo();
+    return '<div class="capa">' + (lg ? '<img class="lg" src="' + lg + '">' : '') +
+      '<div class="am">ARQUIVO MORTO</div><div class="tt">' + esc(c.titulo) + '</div><div class="pe">ANO ' + esc(c.periodo || '') + '</div>' +
+      '<div class="cx">CAIXA ' + n2(c.num) + '</div>' + (c.obs ? '<div class="ob">' + esc(c.obs) + '</div>' : '') + '<div class="qt">' + n + ' colaborador(es) · ver lista dentro da caixa</div></div>';
+  }
+  function lista(c, L) {
+    var lg = logo();
+    return '<div class="lista"><div class="lh">' + (lg ? '<img src="' + lg + '">' : '') + '<div><div class="l1">ARQUIVO MORTO · CAIXA ' + n2(c.num) + '</div><div class="l2">' + esc(c.titulo) + ' — ANO ' + esc(c.periodo || '') + '</div></div></div>' +
+      '<table><thead><tr><th style="width:9%">Nº</th><th>NOME</th><th style="width:28%">DATA DE DESLIGAMENTO</th></tr></thead><tbody>' +
+      L.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.nome) + '</td><td>' + esc(dt(x.data)) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<div class="rod">Total: ' + L.length + ' colaborador(es) · emitido em ' + new Date().toLocaleDateString('pt-BR') + '</div></div>';
+  }
+  window.amImprimir = function (o) {
+    var c = DB.g(KC).find(function (x) { return x.id === CUR; }); if (!c) return; var L = itens(c.id);
+    var pais = o === 'capa';   // só a capa: folha deitada; capa + lista: tudo em pé (o navegador imprime numa orientação só)
+    var css = '@page{size:A4 ' + (pais ? 'landscape' : 'portrait') + ';margin:' + (pais ? '10mm' : '12mm') + '}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '.capa{height:' + (pais ? '188mm' : '268mm') + ';border:3px solid #111;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:10mm;page-break-after:always}.capa:last-child{page-break-after:auto}' +
+      '.capa .lg{height:34mm;margin-bottom:6mm;object-fit:contain}.capa .am{font-size:20pt;letter-spacing:6px;color:#555;margin-bottom:4mm}.capa .tt{font-size:44pt;font-weight:900;line-height:1.08;letter-spacing:1px}.capa .pe{font-size:34pt;font-weight:800;margin-top:6mm}' +
+      '.capa .cx{font-size:30pt;font-weight:800;margin-top:8mm;border:3px solid #111;border-radius:8px;padding:2mm 10mm}.capa .ob{font-size:15pt;margin-top:5mm}.capa .qt{font-size:11pt;color:#555;margin-top:6mm}' +
+      '.lista{page-break-after:always}.lista:last-child{page-break-after:auto}.lh{display:flex;align-items:center;gap:12px;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:8px}.lh img{height:16mm}.l1{font-size:10pt;letter-spacing:2px;color:#555}.l2{font-size:14pt;font-weight:800}' +
+      'table{width:100%;border-collapse:collapse;font-size:10.5pt}th,td{border:1px solid #888;padding:4px 7px;text-align:left}th{background:#eee;font-size:9.5pt}tr{page-break-inside:avoid}.rod{margin-top:6px;font-size:9pt;color:#555;text-align:right}';
+    var b = (o === 'capa' || o === 'ambos' ? capa(c, L.length) : '') + (o === 'lista' || o === 'ambos' ? lista(c, L) : '');
+    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Arquivo Morto - Caixa ' + n2(c.num) + '</title><style>' + css + '</style></head><body>' + b + '</body></html>';
+    var nome = 'Arquivo_Morto_Caixa_' + n2(c.num) + '_' + (o === 'capa' ? 'capa' : o === 'lista' ? 'lista' : 'capa_e_lista');
+    if (typeof _abrirDocSimples === 'function') _abrirDocSimples(html, nome); else { var w = window.open('', '_blank'); w.document.write(html); w.document.close(); }
+  };
+  // ── menu ──
+  var _nav = window.nav;
+  window.nav = function (id, elx) {
+    if (id === SEC) {
+      injetar();
+      document.querySelectorAll('.section-page').forEach(function (s) { s.classList.remove('active'); });
+      el('sec-' + SEC).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+      (elx && elx.classList ? elx : document.querySelector('.nav-item[data-arqmorto]')).classList.add('active');
+      if (el('topbar-title')) el('topbar-title').textContent = 'Arquivo Morto';
+      try { if (history.replaceState) history.replaceState(null, '', '#' + SEC); document.title = 'Arquivo Morto · ' + document.title.replace(/^.*? · /, ''); } catch (e) {}
+      amRender(); return;
+    }
+    return _nav.apply(this, arguments);
+  };
+  window.addEventListener('storage', function (e) { if ((e.key === 'eq_' + KC || e.key === 'eq_' + KI) && el('sec-' + SEC) && el('sec-' + SEC).classList.contains('active') && !document.querySelector('.modal-bg.open')) setTimeout(amRender, 300); });
+  function boot() { injetar(); if ((location.hash || '') === '#' + SEC) nav(SEC, document.querySelector('.nav-item[data-arqmorto]')); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 50); }); else setTimeout(boot, 50);
+})();
+</script>
 </body>
 </html>
