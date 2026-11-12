@@ -8725,7 +8725,9 @@ function renderFlashTable() {
     inpDias.type = 'number'; inpDias.min = '1'; inpDias.max = '31';
     inpDias.id = 'dias-'+f.id; // Use escala do cadastro para determinar dias: "55"=Seg-Sex, "56"=Seg-Sab
     var diasCalc = (typeof window.escDiasPeriodo === 'function' && flashDe && flashAte) ? window.escDiasPeriodo(f.escala, flashDe, flashAte) : ((escBase(f.escala) === '56') ? diasUteisComSab : diasUteisPeriodo);
-    inpDias.value = diasCalc || '22';
+    var paAdm = (typeof window.rhPropAdm === 'function') ? window.rhPropAdm(f.adm, flashDe, flashAte, f.escala) : null;
+    if (paAdm) { diasCalc = paAdm.dias; inpDias.dataset.prop = String(paAdm.frac); }
+    inpDias.value = paAdm ? String(paAdm.dias) : (diasCalc || '22');
     inpDias.style.cssText = 'width:52px;border:1.5px solid #7a1215;border-radius:5px;padding:4px 5px;font-size:13px;font-weight:700;color:#7a1215;font-family:inherit;text-align:center;';
     inpDias.title = 'Dias trabalhados no período';
     // Show escala tag next to dias
@@ -8746,7 +8748,7 @@ function renderFlashTable() {
 
     // ORDER: Funcionário | CPF | Departamento | Dias Escala | VT/dia | VT Mensal | VR/dia | VR Mensal | VA | Comb | Assim | Bônus | Odonto | A.Méd
     [
-      td('<strong style="font-size:12.5px;">'+f.n+'</strong>'),
+      td('<strong style="font-size:12.5px;">'+f.n+'</strong>' + (paAdm && window.rhPropTag ? window.rhPropTag(paAdm) : '')),
       td('<span style="font-size:11px;color:#555;">'+( f.cpf||'')+'</span>'),
       td('<span style="font-size:11px;color:#333;">'+depNome+'</span>'),
       td(inpDias),
@@ -8767,6 +8769,16 @@ function renderFlashTable() {
   });
 }
 
+// Admissão dentro do período do benefício: dias de escala e fração do período contados a partir da admissão
+window.rhPropAdm = function (adm, de, ate, escala) {
+  adm = String(adm || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(adm) || !de || !ate || adm <= de) return null;
+  if (adm > ate) return { dias: 0, frac: 0, adm: adm };
+  var dias = (typeof window.escDiasPeriodo === 'function') ? window.escDiasPeriodo(escala, adm, ate) : ((typeof calcDiasUteisGlobal === 'function') ? calcDiasUteisGlobal(adm, ate) : 0);
+  var dd = function (a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5) + 1; };
+  return { dias: dias || 0, frac: dd(adm, ate) / dd(de, ate), adm: adm };
+};
+window.rhPropTag = function (pa) { return pa ? '<span class="rh-prop-adm" title="Admitido(a) dentro do período: dias e valores mensais proporcionais a partir da admissão" style="display:inline-block;font-size:10px;background:#fff3e0;color:#b45309;border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:600;">📅 adm. ' + pa.adm.slice(8, 10) + '/' + pa.adm.slice(5, 7) + (pa.frac < 1 ? ' · ' + Math.round(pa.frac * 100) + '%' : '') + '</span>' : ''; };
 function updateCalcCell(fid) {
   // Ler dias do campo editável
   var diasEl = document.getElementById('dias-'+fid);
@@ -19269,8 +19281,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
     var dias = Math.max(1, 30 - (+m[3]) + 1);
     return { dias: dias, adm: a };
   }
-  // admitido a partir do dia 15 do mês de referência: não recebe adiantamento nesse mês
-  var DIA_CORTE_ADI = 15;
+  // adiantamento só para quem foi admitido até o dia 15 do mês de referência (admitido a partir do dia 16 não recebe nesse mês)
+  var DIA_CORTE_ADI = 16;
   function semAdi(p, mesIdx, ano) {
     var m = admDe(p).match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m || mesIdx === '' || mesIdx === null || mesIdx === undefined || !ano) return false;
     return +m[1] === +ano && +m[2] - 1 === +mesIdx && +m[3] >= DIA_CORTE_ADI;
@@ -22279,9 +22291,11 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   // sugestão pelos benefícios do cadastro (VT/VR por dia × dias) conforme o seletor de colunas
   function sugestao(fid) {
     var m = window.benefModeloMap ? benefModeloMap() : {}, d = n('dias-' + fid), t = { mob: 0, livre: 0, alim: 0, bonus: 0, comp: 0, dep: 0 };
-    var v = { vt: n('vt-' + fid) * d, vr: n('vr-' + fid) * d, va: n('va-' + fid), comb: n('comb-' + fid), assim: n('assim-' + fid), bonus: n('bonus-' + fid), odonto: n('odonto-' + fid), med: n('med-' + fid) };
+    // admitido(a) dentro do período: valores mensais proporcionais a partir da admissão (o bônus não)
+    var fr = (el('dias-' + fid) && el('dias-' + fid).dataset.prop) ? parseFloat(el('dias-' + fid).dataset.prop) : 1; if (!(fr >= 0)) fr = 1;
+    var v = { vt: n('vt-' + fid) * d, vr: n('vr-' + fid) * d, va: n('va-' + fid) * fr, comb: n('comb-' + fid) * fr, assim: n('assim-' + fid) * fr, bonus: n('bonus-' + fid), odonto: n('odonto-' + fid) * fr, med: n('med-' + fid) * fr };
     var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(fid) : null;
-    if (nv) { ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v) : 0; }); }
+    if (nv) { ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; t[k] = q ? (q.dia ? q.v * d : q.v * (k === 'bonus' ? 1 : fr)) : 0; }); }
     else {
     Object.keys(v).forEach(function (k) { if (k === 'bonus') return; if (m[k] && t[m[k]] != null) t[m[k]] += v[k]; });
     t.bonus = v.bonus;
@@ -22346,11 +22360,12 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
         if (el('mob-' + x.fid)) return;
         var c = x.p, dep = (DB.g('departamentos').find(function (d) { return d.id === c.dep; }) || {}).nome || '';
         var dd = (typeof window.escDiasPeriodo === 'function' && de && ate) ? window.escDiasPeriodo(c.escala, de, ate) : ((typeof escBase === 'function' && escBase(c.escala) === '56') ? 26 : ((typeof calcDiasUteisGlobal === 'function' ? calcDiasUteisGlobal(de, ate) : 0) || 22));
+        var paX = typeof window.rhPropAdm === 'function' ? window.rhPropAdm(c.adm || c.ini, de, ate, c.escala) : null, frX = paX ? paX.frac : 1; if (paX) dd = paX.dias;
         var nv = typeof window.benefNovosDoFunc === 'function' ? window.benefNovosDoFunc(x.fid) : null, s = { mob: 0, livre: 0, alim: 0, bonus: 0, comp: 0, dep: 0 };
-        if (nv) ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v) * 100) / 100 : 0; });
+        if (nv) ['mob', 'livre', 'alim', 'bonus', 'comp', 'dep'].forEach(function (k) { var q = nv[k]; s[k] = q ? Math.round((q.dia ? q.v * dd : q.v * (k === 'bonus' ? 1 : frX)) * 100) / 100 : 0; });
         var bBase = s.bonus; try { if (typeof window.benefBonusRecibo === 'function') s.bonus = Math.round((s.bonus + benefBonusRecibo(x.fid).v) * 100) / 100; } catch (e) {}
         var tr = document.createElement('tr'); tr.dataset.ext = x.fid;
-        tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
+        tr.innerHTML = '<td style="padding:5px 7px;"><strong style="font-size:12.5px;">' + String(c.n || '').replace(/</g, '&lt;') + '</strong> <span class="badge badge-blue" style="font-size:9.5px;">' + x.g + '</span>' + (paX && window.rhPropTag ? window.rhPropTag(paX) : '') + '</td><td style="padding:5px 7px;"><span style="font-size:11px;color:#555;">' + (c.cpf || '') + '</span></td><td style="padding:5px 7px;"><span style="font-size:11px;color:#333;">' + dep + '</span></td>' + new Array(12).join('<td></td>');
         CAT.forEach(function (k) {
           var td = document.createElement('td'); td.style.cssText = 'padding:5px 7px;vertical-align:middle;';
           var i = document.createElement('input'); i.type = 'number'; i.step = '0.01'; i.min = '0'; i.id = idDe(k[0], x.fid); i.dataset.c = k[0]; i.dataset.f = x.fid;
@@ -22919,7 +22934,8 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
   window.rvtLista = function (recalc) {
     var de = el('rvt-de').value, ate = el('rvt-ate').value, P = pessoas();
     P.forEach(function (c) {
-      var L = LIN[c.id], b = vtDe(c), d = diasPer(de, ate, c.escala);
+      var a0 = String(c.adm || c.ini || '').slice(0, 10), deP = /^\d{4}-\d{2}-\d{2}$/.test(a0) && a0 > de ? a0 : de;   // admitido no período: conta a partir da admissão
+      var L = LIN[c.id], b = vtDe(c), d = diasPer(deP, ate, c.escala);
       if (!L) L = LIN[c.id] = { ck: b.tem, nome: up(c.n), cpf: c.cpf || '', cargo: up(c.car || ''), dias: '', vdia: '', total: '', man: false };
       if (recalc && !L.man) { if (b.dia) { L.dias = b.v ? String(d) : ''; L.vdia = b.v ? brl(b.v) : ''; L.total = b.v ? brl(b.v * d) : ''; } else { L.dias = ''; L.vdia = ''; L.total = b.v ? brl(b.v) : ''; } }
     });
