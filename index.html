@@ -25629,7 +25629,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     el('am-corpo').innerHTML =
       '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--green-pale);border-radius:10px;padding:10px 14px;margin-bottom:12px;">' +
       '<div style="flex:1;min-width:220px;"><div style="font-size:11px;color:var(--gray-500);letter-spacing:.5px;">CAIXA ' + n2(c.num) + (fe ? ' · 🔒 FECHADA (caixa cheia)' : ' · EM USO') + '</div><div style="font-size:18px;font-weight:800;color:var(--green-dark);">' + esc(c.titulo) + '</div><div style="font-size:13px;color:var(--gray-600);">ANO ' + esc(c.periodo || '') + (c.obs ? ' · ' + esc(c.obs) : '') + ' · <strong>' + L.length + '</strong> pessoa(s)</div></div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="amImprimir(\'capa\')">🖨️ Capa</button><button class="btn btn-outline btn-sm" onclick="amImprimir(\'lista\')">🖨️ Lista</button><button class="btn btn-primary btn-sm" onclick="amImprimir(\'ambos\')">🖨️ Capa + lista</button>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline btn-sm" onclick="amImprimir(\'capa\')" title="Etiqueta 15 cm × 10 cm">🖨️ Capa (15×10)</button><button class="btn btn-outline btn-sm" onclick="amImprimir(\'lista\')">🖨️ Lista</button><button class="btn btn-primary btn-sm" onclick="amImprimir(\'ambos\')">🖨️ Capa + lista</button>' +
       '<button class="btn btn-outline btn-sm" onclick="amEditarCaixa(\'' + c.id + '\')">✏️ Editar caixa</button>' +
       (fe ? '<button class="btn btn-outline btn-sm" onclick="amReabrir(\'' + c.id + '\')">🔓 Reabrir</button>' : '<button class="btn btn-outline btn-sm" style="border-color:#b45309;color:#b45309;" onclick="amFechar(\'' + c.id + '\')">✅ Caixa cheia → nova caixa</button>') +
       (L.length ? '' : '<button class="btn-icon danger" title="Excluir caixa vazia" onclick="amExcluirCaixa(\'' + c.id + '\')">&#128465;</button>') + '</div></div>' +
@@ -25714,19 +25714,22 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       L.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.nome) + '</td><td>' + esc(dt(x.data)) + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<div class="rod">Total: ' + L.length + ' colaborador(es) · emitido em ' + new Date().toLocaleDateString('pt-BR') + '</div></div>';
   }
-  window.amImprimir = function (o) {
-    var c = DB.g(KC).find(function (x) { return x.id === CUR; }); if (!c) return; var L = itens(c.id);
-    var pais = o === 'capa';   // só a capa: folha deitada; capa + lista: tudo em pé (o navegador imprime numa orientação só)
-    var css = '@page{size:A4 ' + (pais ? 'landscape' : 'portrait') + ';margin:' + (pais ? '10mm' : '12mm') + '}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-      '.capa{height:' + (pais ? '188mm' : '268mm') + ';border:3px solid #111;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:10mm;page-break-after:always}.capa:last-child{page-break-after:auto}' +
-      '.capa .lg{height:34mm;margin-bottom:6mm;object-fit:contain}.capa .am{font-size:20pt;letter-spacing:6px;color:#555;margin-bottom:4mm}.capa .tt{font-size:44pt;font-weight:900;line-height:1.08;letter-spacing:1px}.capa .pe{font-size:34pt;font-weight:800;margin-top:6mm}' +
-      '.capa .cx{font-size:30pt;font-weight:800;margin-top:8mm;border:3px solid #111;border-radius:8px;padding:2mm 10mm}.capa .ob{font-size:15pt;margin-top:5mm}.capa .qt{font-size:11pt;color:#555;margin-top:6mm}' +
-      '.lista{page-break-after:always}.lista:last-child{page-break-after:auto}.lh{display:flex;align-items:center;gap:12px;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:8px}.lh img{height:16mm}.l1{font-size:10pt;letter-spacing:2px;color:#555}.l2{font-size:14pt;font-weight:800}' +
-      'table{width:100%;border-collapse:collapse;font-size:10.5pt}th,td{border:1px solid #888;padding:4px 7px;text-align:left}th{background:#eee;font-size:9.5pt}tr{page-break-inside:avoid}.rod{margin-top:6px;font-size:9pt;color:#555;text-align:right}';
-    var b = (o === 'capa' || o === 'ambos' ? capa(c, L.length) : '') + (o === 'lista' || o === 'ambos' ? lista(c, L) : '');
-    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Arquivo Morto - Caixa ' + n2(c.num) + '</title><style>' + css + '</style></head><body>' + b + '</body></html>';
-    var nome = 'Arquivo_Morto_Caixa_' + n2(c.num) + '_' + (o === 'capa' ? 'capa' : o === 'lista' ? 'lista' : 'capa_e_lista');
+  // capa: etiqueta 15 cm (largura) × 10 cm (altura); lista: folha A4 em pé. "Capa + lista" abre os dois (cada um no seu tamanho de papel)
+  var CSS_CAPA = '@page{size:150mm 100mm;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.capa{width:150mm;height:100mm;padding:4mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;page-break-after:always;border:1.6mm solid #fff;outline:0.7mm solid #111;outline-offset:-2.5mm}.capa:last-child{page-break-after:auto}' +
+    '.capa .lg{height:17mm;margin-bottom:1.5mm;object-fit:contain}.capa .am{font-size:9pt;letter-spacing:4px;color:#555;margin-bottom:1mm}.capa .tt{font-size:21pt;font-weight:900;line-height:1.05;letter-spacing:.5px}.capa .pe{font-size:17pt;font-weight:800;margin-top:1.5mm}' +
+    '.capa .cx{font-size:15pt;font-weight:800;margin-top:2.5mm;border:0.6mm solid #111;border-radius:2mm;padding:0.6mm 6mm}.capa .ob{font-size:9pt;margin-top:1.5mm}.capa .qt{font-size:7.5pt;color:#555;margin-top:1.5mm}';
+  var CSS_LISTA = '@page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.lista{page-break-after:always}.lista:last-child{page-break-after:auto}.lh{display:flex;align-items:center;gap:12px;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:8px}.lh img{height:16mm}.l1{font-size:10pt;letter-spacing:2px;color:#555}.l2{font-size:14pt;font-weight:800}' +
+    'table{width:100%;border-collapse:collapse;font-size:10.5pt}th,td{border:1px solid #888;padding:4px 7px;text-align:left}th{background:#eee;font-size:9.5pt}tr{page-break-inside:avoid}.rod{margin-top:6px;font-size:9pt;color:#555;text-align:right}';
+  function abrir(css, corpo, tit, nome) {
+    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + tit + '</title><style>' + css + '</style></head><body>' + corpo + '</body></html>';
     if (typeof _abrirDocSimples === 'function') _abrirDocSimples(html, nome); else { var w = window.open('', '_blank'); w.document.write(html); w.document.close(); }
+  }
+  window.amImprimir = function (o) {
+    var c = DB.g(KC).find(function (x) { return x.id === CUR; }); if (!c) return; var L = itens(c.id), base = 'Arquivo_Morto_Caixa_' + n2(c.num);
+    if (o === 'capa' || o === 'ambos') abrir(CSS_CAPA, capa(c, L.length), 'Arquivo Morto - Caixa ' + n2(c.num) + ' - capa 15x10', base + '_capa_15x10');
+    if (o === 'lista' || o === 'ambos') abrir(CSS_LISTA, lista(c, L), 'Arquivo Morto - Caixa ' + n2(c.num) + ' - lista', base + '_lista');
   };
   // ── menu ──
   var _nav = window.nav;
