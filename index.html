@@ -25010,7 +25010,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   function empDados(id) { var e = id ? DB.g('empresas').find(function (x) { return x.id === id; }) : null; if (e) return { razao: e.razao || '', cnpj: e.cnpj || '' }; var p = window.rhPerfil ? rhPerfil() : {}; return { razao: p.razao || 'BIN EMBALAGENS', cnpj: p.cnpj || '' }; }
   function min(h) { var m = /^(\d{1,2}):(\d{2})/.exec(h || ''); return m ? +m[1] * 60 + +m[2] : null; }
   function dur(a, b) { var x = min(a), y = min(b); if (x == null || y == null || y <= x) return ''; var d = y - x; return (d >= 60 ? Math.floor(d / 60) + 'h' : '') + String(d % 60).padStart(d >= 60 ? 2 : 1, '0') + (d >= 60 ? '' : ' min'); }
-  function func(id) { return DB.g('funcionarios').find(function (f) { return f.id === id; }); }
+  // aceita CLT (id) e Sem registro / Agência ("x:ID", cadastro colab-ext)
+  function func(id) {
+    if (String(id || '').indexOf('x:') === 0) { var c = DB.g('colab-ext').find(function (x) { return 'x:' + x.id === id; }); return c ? Object.assign({}, c, { id: id, _tipo: c.tipo }) : null; }
+    return DB.g('funcionarios').find(function (f) { return f.id === id; });
+  }
   function anteriores(fid) { return DB.g(K_HIST).filter(function (h) { return h.fid === fid; }).sort(function (a, b) { return (a.data || '').localeCompare(b.data || ''); }); }
 
   // ── janela ──
@@ -25087,8 +25091,15 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.advAbrir = function (fid) {
     injetar();
-    var F = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado'; }).sort(function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); });
-    el('ad-func').innerHTML = '<option value="">— selecione —</option>' + F.map(function (f) { return '<option value="' + f.id + '">' + esc(up(f.n)) + (f.dep ? ' · ' + esc(depNome(f.dep)) : '') + '</option>'; }).join('');
+    var srt = function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); };
+    var F = DB.g('funcionarios').filter(function (f) { return !f._ext && f.st !== 'Desligado'; }).sort(srt);
+    var X = DB.g('colab-ext').filter(function (c) { return (c.st || 'Ativo') === 'Ativo'; }).sort(srt);
+    var op = function (id, f, extra) { return '<option value="' + esc(id) + '">' + esc(up(f.n)) + (f.dep ? ' · ' + esc(depNome(f.dep)) : '') + (extra ? ' · ' + esc(extra) : '') + '</option>'; };
+    var SR = X.filter(function (c) { return c.tipo !== 'agencia'; }), AG = X.filter(function (c) { return c.tipo === 'agencia'; });
+    el('ad-func').innerHTML = '<option value="">— selecione —</option>' +
+      '<optgroup label="👔 CLT (' + F.length + ')">' + F.map(function (f) { return op(f.id, f); }).join('') + '</optgroup>' +
+      (SR.length ? '<optgroup label="📝 Sem registro (' + SR.length + ')">' + SR.map(function (c) { return op('x:' + c.id, c); }).join('') + '</optgroup>' : '') +
+      (AG.length ? '<optgroup label="🏢 Agência (' + AG.length + ')">' + AG.map(function (c) { return op('x:' + c.id, c, c.agencia ? 'Agência ' + c.agencia : ''); }).join('') + '</optgroup>' : '');
     var E = DB.g('empresas'); el('ad-emp').innerHTML = (E.length ? '' : '<option value="">BIN EMBALAGENS</option>') + E.map(function (e) { return '<option value="' + e.id + '">' + esc(e.razao) + '</option>'; }).join('');
     ['ad-loja', 'ad-cpf', 'ad-mat', 'ad-car', 'ad-fatos', 'ad-des-ant', 'ad-des-ot', 'ad-ab-d', 'ad-ab-s', 'ad-ab-r', 'ad-ab-t', 'ad-ab-p', 'ad-ab-q', 'ad-o-m', 'ad-o-n'].forEach(function (i) { el(i).value = ''; });
     document.querySelectorAll('.ad-mot-chk,.ad-des,#ad-des-o').forEach(function (c) { c.checked = false; });
