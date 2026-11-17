@@ -7743,7 +7743,7 @@ function gerarTermoResponsabilidade() {
     '<p>São Paulo, '+fmtDataExtenso(hoje)+'.</p>' +
     '<div style="display:flex;justify-content:space-between;">' +
     '<div class="assin"><strong>'+f.n+'</strong><br>COLABORADOR(A)<br>RG: '+(f.rg||'')+'</div>' +
-    '<div class="assin">RH – Responsável</div>' +
+    '<div class="assin">'+(window.rhAssImg?rhAssImg():'')+'RH – Responsável</div>' +
     '</div>' +
     '<hr style="margin:24px 0;">' +
     '<p><strong>DEVOLUÇÃO:</strong></p>' +
@@ -12775,7 +12775,7 @@ function gerarTermoAditivo() {
       '</div>' +
       // Empregador — will be filled by signature system
       '<div class="ass-box" id="sig-empresa-box">' +
-        '<div class="ass-img" id="sig-empresa-img"></div>' +
+        '<div class="ass-img" id="sig-empresa-img">'+(window.rhAssEmpImg?rhAssEmpImg():'')+'</div>' +
         '<div class="ass-linha"></div>' +
         '<strong>'+razao+'</strong><br>' +
         '<span style="font-size:10pt;">CNPJ: '+cnpj+'</span>' +
@@ -13208,7 +13208,7 @@ function gerarUsoImagem() {
         '<span style="font-size:9pt;">Funcionário(a)</span>' +
       '</div>' +
       '<div class="ass-box" id="sig-empresa-box2">' +
-        '<div class="ass-img" id="sig-empresa-img2"></div>' +
+        '<div class="ass-img" id="sig-empresa-img2">'+(window.rhAssEmpImg?rhAssEmpImg():'')+'</div>' +
         '<div class="ass-linha"></div>' +
         '<strong>'+razao+'</strong><br>' +
         '<span style="font-size:9pt;">CNPJ: '+cnpj+'</span><br>' +
@@ -15529,7 +15529,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
   }
 
   function montarPagina(m, f) {
-    var corpo = preencher(m.html, f);
+    var corpo = preencher(window.rhAssEmpModelo ? rhAssEmpModelo(m.html) : m.html, f);
     var titulo = m.nome + (f && f.n ? ' - ' + f.n : '');
     var css = 'h1,h2{font-size:14pt;text-align:center;margin:0 0 16pt;}h3{font-size:12pt;margin:14pt 0 6pt;}' +
               'p{margin:0 0 10pt;}ul,ol{margin:0 0 10pt;padding-left:22pt;}table{border-collapse:collapse;}img{max-width:100%;}' +
@@ -18491,7 +18491,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + ['Dinheiro', 'PIX', 'Transferência bancária', 'Cheque'].map(function (f) {
         return '(' + (d.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
       '<p class="local">' + esc(d.cidade) + ', ' + d.dia + ' de ' + d.mesData + ' de ' + d.anoData + '.</p>' +
-      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table>' +
+      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>' + (window.rhAssImg?rhAssImg():'') + 'BIN Embalagens – Responsável RH</div></td></tr></table>' +
       '</div>';
   }
   function demonstrativo(D) {
@@ -21933,7 +21933,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<p class="txt">' + txt + '</p>' +
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
       '<p class="local">' + esc(G.cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : linha(6)) + ' de ' + (dp ? MES[+dp[1] - 1] : linha(22)) + ' de ' + (dp ? dp[0] : linha(8)) + '.</p>' +
-      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table></div>';
+      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>' + (window.rhAssImg?rhAssImg():'') + 'BIN Embalagens – Responsável RH</div></td></tr></table></div>';
   }
   function relacao(G, L) {
     var E = {}, t = 0; L.forEach(function (x) { var k = up(x.razao) || 'SEM EMPRESA'; E[k] = E[k] || { c: x.cnpj, q: 0, t: 0, p: [] }; E[k].q++; E[k].t += x.v; E[k].p.push(x); t += x.v; });
@@ -23049,7 +23049,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<p class="txt">Recebi da empresa <b>' + esc(up(x.razao) || 'BIN EMBALAGENS') + '</b>, inscrita no CNPJ nº ' + u(x.cnpj, 20) + ', a importância de R$ ' + u(ok ? brl(x.v) : '', 14) + ' (' + u(ok ? (window.recPorExtenso ? recPorExtenso(x.v) : '') : '', 48) + '), referente ao <b>vale-transporte</b> ' + (G.de ? 'do período de ' : 'do mês de ') + ref + det + ', destinado ao meu deslocamento residência–trabalho–residência, dando plena quitação do valor aqui recebido.</p>' +
       '<p class="forma">Forma de pagamento:&nbsp;&nbsp; ' + FORMAS.map(function (f) { return '(' + (G.forma === f ? '<b>&nbsp;X&nbsp;</b>' : '&nbsp;&nbsp;&nbsp;') + ') ' + f; }).join('&nbsp;&nbsp;&nbsp;&nbsp; ') + '</p>' +
       '<p class="local">' + esc(G.cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : linha(6)) + ' de ' + (dp ? MES[+dp[1] - 1] : linha(22)) + ' de ' + (dp ? dp[0] : linha(8)) + '.</p>' +
-      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>BIN Embalagens – Responsável RH</div></td></tr></table></div>';
+      '<table class="ass"><tr><td><div>Assinatura do Colaborador</div></td><td class="gap"></td><td><div>' + (window.rhAssImg?rhAssImg():'') + 'BIN Embalagens – Responsável RH</div></td></tr></table></div>';
   }
   function documento(G, L) {
     var t = L.reduce(function (s, x) { return s + x.v; }, 0);
@@ -23777,7 +23777,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       D.map(function (x) { return '<h3>' + esc(x.e.razao) + (x.e.cnpj ? ' · CNPJ ' + esc(x.e.cnpj) : '') + '</h3><table><tr><th>Colaborador</th><th>CPF</th><th>Vínculo</th><th>Departamento</th><th>Conta / PIX</th><th class="n">Valor</th></tr>' +
         x.L.map(function (l) { return '<tr><td>' + esc(l.n) + '</td><td>' + esc(l.cpf) + '</td><td>' + l.g + '</td><td>' + esc(l.dep) + '</td><td>' + esc(l.conta) + '</td><td class="n">R$ ' + brl(l.v) + '</td></tr>'; }).join('') +
         '<tr class="t"><td colspan="5">TOTAL DA EMPRESA (' + x.L.length + ')</td><td class="n">R$ ' + brl(x.t) + '</td></tr></table>'; }).join('') +
-      (D.length > 1 ? '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' : '') + '<div class="ass"><div>Responsável RH</div><div>Financeiro</div></div></body></html>';
+      (D.length > 1 ? '<h3>TOTAL GERAL: R$ ' + brl(G) + '</h3>' : '') + '<div class="ass"><div>' + (window.rhAssImg?rhAssImg():'') + 'Responsável RH</div><div>Financeiro</div></div></body></html>';
     _abrirDocSimples(h, 'Relatorio_Deposito_' + periodo().replace(/\//g, '-').replace(/\s+/g, '_'));
   };
   // Depósito (Excel) no mesmo modelo da Planilha da folha — uma aba por empresa
@@ -26064,13 +26064,15 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
      o.h altura · o.al 'l' alinha à esquerda · o.b distância da base · o.emp só se marcado "também como empresa" */
   window.rhAssImg = function (o) {
     o = o || {}; var a = get(); if (!a) return '';
-    if (o.emp && !cfg().emp) return '';
+    if (o.emp && cfg().emp === false) return '';
     var h = o.h || 50, b = (o.b == null ? 0 : o.b);
     var pos = o.al === 'l' ? 'left:0;' : 'left:50%;transform:translateX(-50%);';
     return '<span class="rh-ass" style="display:block;height:0;position:relative;overflow:visible;margin:0;padding:0;border:0;">' +
       '<img src="' + a + '" alt="" style="position:absolute;bottom:' + b + 'px;' + pos + 'height:' + h + 'px;max-width:230px;width:auto;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>';
   };
   window.rhAssEmp = function (o) { o = o || {}; o.emp = true; return rhAssImg(o); };
+  window.rhAssEmpImg = function () { var a = get(); if (!a || cfg().emp === false) return ''; return '<img src="' + a + '" alt="" style="max-height:48px;max-width:180px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'; };
+  window.rhAssEmpModelo = function (html) { if (!html || !get() || cfg().emp === false) return html; return String(html).replace(/(<div class="l"[^>]*>)(\s*\{\{EMPRESA\}\})/g, function (m0, a, b) { return a + rhAssEmp() + b; }); };
   window.rhAssNome = function (pad) { var n = (cfg().nome || '').trim(); return n ? esc(n) : pad; };
 
   /* Limpa o fundo da foto: mantém só a tinta, recorta e deixa transparente */
@@ -26131,7 +26133,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
       '<label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0;">📤 <span id="rhass-lbl">Enviar assinatura</span><input type="file" accept="image/*" style="display:none;" onchange="rhAssUpload(this)"></label>' +
       '<button class="btn btn-outline btn-sm" id="rhass-del" onclick="rhAssExcluir()">🗑️ Excluir assinatura</button></div>' +
-      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="rhass-emp" onchange="rhAssCfg()" style="margin-top:2px;"> <span>Assinar também os campos <strong>EMPREGADOR / Empresa</strong> (contratos, acordos e termos de ciência das políticas)</span></label>' +
+      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="rhass-emp" onchange="rhAssCfg()" style="margin-top:2px;"> <span>Assinar também os campos <strong>EMPREGADOR / Empresa</strong> (contratos, acordos, termos, recibos e modelos com assinatura da empresa)</span></label>' +
       '<div class="form-group" style="margin:0;"><label style="font-size:12.5px;">Nome do responsável do RH <small style="color:var(--gray-500);">(opcional — substitui “[Responsável RH]” nos documentos)</small></label><input id="rhass-nome" onchange="rhAssCfg()" placeholder="Ex.: Mônica Silva"></div>' +
       '</div></div>');
     return document.getElementById('rhass-bg');
@@ -26142,7 +26144,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var d = document.getElementById('rhass-del'); if (d) d.style.display = a ? '' : 'none';
     var l = document.getElementById('rhass-lbl'); if (l) l.textContent = a ? 'Trocar assinatura' : 'Enviar assinatura';
     var c = cfg(), e = document.getElementById('rhass-emp'), n = document.getElementById('rhass-nome');
-    if (e) e.checked = !!c.emp; if (n && document.activeElement !== n) n.value = c.nome || '';
+    if (e) e.checked = c.emp !== false; if (n && document.activeElement !== n) n.value = c.nome || '';
     document.querySelectorAll('.rhass-st').forEach(function (s) { s.textContent = a ? '✅' : ''; });
   }
   window.rhAssAbrir = function () { var bg = modal(); render(); bg.style.display = 'flex'; };
