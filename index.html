@@ -25278,7 +25278,10 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var mods = '<div style="grid-column:1/-1;font-size:12px;font-weight:700;color:var(--gray-500);">CONTRATOS DE EXPERIÊNCIA</div>' + modL(ehCtr) + '<div style="grid-column:1/-1;font-size:12px;font-weight:700;color:var(--gray-500);margin-top:4px;">DOCUMENTOS ADMISSIONAIS</div>' + modL(function (k) { return !ehCtr(k); });
     var h = '<style>' + css + '</style><div class="modal-bg" id="modal-ctr"><div class="modal" style="max-width:900px;">' +
       '<div class="modal-header"><h3>📁 Documentos admissionais</h3><button class="modal-close" onclick="closeModal(\'modal-ctr\')">&#10005;</button></div>' +
-      '<div class="ct-sec" style="margin-top:0;">1. Qual documento?</div><div class="ct-mods">' + mods + '</div>' +
+      '<div class="ct-sec" style="margin-top:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">1. Qual documento?<label style="margin-left:auto;font-weight:600;font-size:12.5px;color:var(--green-dark);display:flex;gap:6px;align-items:center;text-transform:none;cursor:pointer;"><input type="checkbox" id="ct-multi-on" onchange="ctrMulti()" style="width:auto;"> Vários documentos do mesmo funcionário</label></div>' +
+      '<div class="ct-mods" id="ct-um">' + mods + '</div>' +
+      '<div id="ct-varios" style="display:none;"><div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;"><button type="button" class="btn btn-outline btn-sm" onclick="ctrMultiTodos(\'doc\')">✔ Todos os formulários</button><button type="button" class="btn btn-outline btn-sm" onclick="ctrMultiTodos(\'\')">✖ Limpar</button><span id="ct-multi-n" style="font-size:12.5px;color:var(--gray-600);align-self:center;"></span></div><div class="ct-mods">' +
+      Object.keys(MODELOS).map(function (k) { var m = MODELOS[k]; return '<label class="ct-mod"><input type="checkbox" class="ct-mchk" value="' + k + '" onchange="ctrModelo()"><span><strong style="font-size:13px;">' + (m.ic ? m.ic + ' ' : '') + esc(m.n) + '</strong><br><span style="font-size:11.5px;color:var(--gray-500);">' + esc(m.d) + '</span></span></label>'; }).join('') + '</div></div>' +
       '<div class="ct-sec">2. Empresa, departamento e funcionário</div><div class="form-grid">' +
       campo('ct-f-emp', 'Empresa', '<select id="ct-f-emp" onchange="ctrFiltro(\'emp\')"></select>') +
       campo('ct-f-dep', 'Departamento / Loja', '<select id="ct-f-dep" onchange="ctrFiltro(\'dep\')"></select>') +
@@ -25332,19 +25335,29 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="modal-bg" id="modal-ctr-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Documentos admissionais gerados</h3><button class="modal-close" onclick="closeModal(\'modal-ctr-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ct-htab"></table></div></div></div>';
     document.body.insertAdjacentHTML('beforeend', h);
   }
-  function mod() { var r = document.querySelector('input[name="ct-mod"]:checked'); return r ? r.value : 'padrao'; }
+  function multi() { var c = el('ct-multi-on'); return !!(c && c.checked); }
+  function mods() { if (!multi()) return [mod1()]; return Array.prototype.filter.call(document.querySelectorAll('.ct-mchk'), function (c) { return c.checked; }).map(function (c) { return c.value; }); }
+  function mod1() { var r = document.querySelector('input[name="ct-mod"]:checked'); return r ? r.value : 'padrao'; }
+  function mod() { if (multi()) { var L = mods(); return L[0] || 'padrao'; } return mod1(); }
+  window.ctrMulti = function (lista) {
+    var on = multi(); el('ct-um').style.display = on ? 'none' : ''; el('ct-varios').style.display = on ? '' : 'none';
+    if (on) { var L = lista || [mod1()]; document.querySelectorAll('.ct-mchk').forEach(function (c) { c.checked = L.indexOf(c.value) !== -1; }); }
+    ctrModelo();
+  };
+  window.ctrMultiTodos = function (g) { document.querySelectorAll('.ct-mchk').forEach(function (c) { c.checked = g === 'doc' ? !!MODELOS[c.value].g : false; }); ctrModelo(); };
   var VIS = { ctr: ['padrao', 'hibrido', 'motorista'], local: ['padrao', 'hibrido', 'motorista'], jor: ['padrao', 'hibrido', 'motorista', 'comp', 'prorhe', 'ficha'], sal: ['padrao', 'hibrido', 'motorista', 'prorhe', 'ficha', 'cargo'],
     hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'] };
   window.ctrModelo = function () {
-    var m = mod();
-    Object.keys(VIS).forEach(function (k) { document.querySelectorAll('#modal-ctr .ct-v-' + k).forEach(function (x) { x.style.display = VIS[k].indexOf(m) !== -1 ? '' : 'none'; }); });
-    if (el('ct-ini-lbl')) el('ct-ini-lbl').textContent = ehCtr(m) ? 'Início do contrato (admissão)' : m === 'prorhe' ? 'Vigora a partir de' : 'Data de admissão';
-    if (m === 'cargo' && el('ct-f-func').value) { var ck = cargoDe(v('ct-cargo')); if (ck) el('ct-cargok').value = ck; }
-    document.querySelectorAll('#modal-ctr .ct-mot').forEach(function (x) { x.style.display = m === 'motorista' || m === 'ficha' ? '' : 'none'; });
-    document.querySelectorAll('#modal-ctr .ct-hib').forEach(function (x) { x.style.display = m === 'hibrido' ? '' : 'none'; });
-    if (m === 'motorista') sv('ct-cargo', 'MOTORISTA');
-    el('ct-menor').checked = m !== 'motorista';
-    var b = document.querySelector('#modal-ctr .modal-footer .btn-primary'); if (b) b.textContent = ehCtr(m) ? '🖨️ Gerar contrato' : '🖨️ Gerar documento';
+    var m = mod(), MS = mods(), tem = function (L) { return MS.some(function (x) { return L.indexOf(x) !== -1; }); };
+    Object.keys(VIS).forEach(function (k) { document.querySelectorAll('#modal-ctr .ct-v-' + k).forEach(function (x) { x.style.display = tem(VIS[k]) ? '' : 'none'; }); });
+    if (el('ct-multi-n')) el('ct-multi-n').textContent = multi() ? MS.length + ' documento(s) selecionado(s) — saem juntos, um após o outro' : '';
+    if (el('ct-ini-lbl')) el('ct-ini-lbl').textContent = tem(['padrao', 'hibrido', 'motorista']) ? 'Início do contrato (admissão)' : (MS.length === 1 && m === 'prorhe') ? 'Vigora a partir de' : 'Data de admissão';
+    if (tem(['cargo']) && el('ct-f-func').value) { var ck = cargoDe(v('ct-cargo')); if (ck) el('ct-cargok').value = ck; }
+    document.querySelectorAll('#modal-ctr .ct-mot').forEach(function (x) { x.style.display = tem(['motorista', 'ficha']) ? '' : 'none'; });
+    document.querySelectorAll('#modal-ctr .ct-hib').forEach(function (x) { x.style.display = tem(['hibrido']) ? '' : 'none'; });
+    if (m === 'motorista' && !multi()) sv('ct-cargo', 'MOTORISTA');
+    el('ct-menor').checked = !tem(['motorista']) || tem(['padrao', 'hibrido']);
+    var b = document.querySelector('#modal-ctr .modal-footer .btn-primary'); if (b) b.textContent = multi() ? '🖨️ Gerar ' + MS.length + ' documento(s)' : ehCtr(m) ? '🖨️ Gerar contrato' : '🖨️ Gerar documento';
   };
   function emps() { return DB.g('empresas').slice().sort(function (a, b) { return String(a.razao || '').localeCompare(String(b.razao || ''), 'pt-BR'); }); }
   window.ctrFiltro = function (de) {
@@ -25402,6 +25415,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.ctrAbrir = function (m) {
     injetar();
+    var LISTA = Array.isArray(m) ? m : null; if (LISTA) m = LISTA[0];
+    el('ct-multi-on').checked = !!LISTA; ctrMulti(LISTA || undefined);
     var E = emps(), eo = E.map(function (e) { return [e.id, e.razao]; });
     el('ct-f-emp').innerHTML = ops(eo, '', 'Todas as empresas'); el('ct-r-emp').innerHTML = ops(eo, '', '—'); el('ct-l-grp').innerHTML = ops(eo, '', '—');
     ['ct-nome', 'ct-cpf', 'ct-ctps', 'ct-end', 'ct-cargo', 'ct-cnh', 'ct-cnhcat', 'ct-cnhval', 'ct-e-razao', 'ct-e-cnpj', 'ct-e-cid', 'ct-e-end', 'ct-r-cnpj', 'ct-r-razao', 'ct-l-end', 'ct-l-cid', 'ct-l-loja', 'ct-sal', 'ct-salext', 'ct-ini', 'ct-data', 'ct-cid', 'ct-h-ajv'].forEach(function (i) { sv(i, ''); });
@@ -25656,7 +25671,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     }
     return s;
   }
-  function pagina(d) {
+  function pagina(d, corpoPronto, titulo) {
     var css = '.sub{text-align:center;font-weight:bold;font-size:11pt;margin:-8pt 0 12pt;color:#444;}.sec{font-weight:bold;font-size:10pt;color:#8b1a1a;border-bottom:1px solid #d9b3b3;margin:9pt 0 4pt;padding-bottom:1pt;}.box{border:1px solid #999;padding:5pt 7pt;margin:0 0 8pt;font-size:10.5pt;line-height:1.6;}' +
       'table.fx{width:100%;border-collapse:collapse;margin:0 0 6pt;font-size:10pt;}table.fx td{border:1px solid #888;padding:2pt 5pt;vertical-align:top;}table.fx .lb{display:block;font-size:7.5pt;color:#666;text-transform:uppercase;}table.fx .vl{display:block;font-weight:bold;min-height:12pt;}' +
       'table.ass2{width:100%;margin-top:8pt;border-collapse:collapse;}table.ass2 td{width:50%;padding:26pt 18pt 0;text-align:center;font-size:10pt;vertical-align:top;}table.ass2 .l{border-top:1px solid #000;margin-bottom:3pt;}.ln{display:inline-block;border-bottom:1px solid #000;}.op{font-size:11pt;margin:8pt 0;}' +
@@ -25667,7 +25682,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '.pg{break-before:page;page-break-before:always;}.nb{break-inside:avoid;page-break-inside:avoid;}ul{margin:0 0 8pt;padding-left:22pt;}li{margin:0 0 3pt;text-align:justify;}' +
       '@page{margin-top:1.6cm;}@page :first{margin-top:0;}';
     var tit = MODELOS[d.mod].n + (d.mod === 'cargo' ? ' - ' + ((CARGOS.find(function (x) { return x.k === d.cargoK; }) || {}).t || '') : '') + (d.nome ? ' - ' + d.nome : '');
-    if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css, body: corpo(d) });
+    if (titulo) tit = titulo;
+    if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css + '.novo{position:relative;break-before:page;page-break-before:always;}.novo .lg2{position:absolute;top:13pt;left:189.3pt;width:103.25pt;height:72.3pt;object-fit:contain;}.novo .tp2{height:93pt;}', body: corpoPronto || corpo(d) });
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(tit) + '</title><style>@page{size:A4;margin:2cm}body{font-family:Arial,sans-serif;font-size:11pt}' + css + '</style></head><body>' + corpo(d) + '</body></html>';
   }
   function coletar() {
@@ -25683,7 +25699,27 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || ''
     };
   }
+  // vários documentos do mesmo funcionário num só arquivo (cada um começa em página nova, com a logo)
+  function juntar(L) { var lg = typeof LOGO_MODELO_DOC_B64 !== 'undefined' ? LOGO_MODELO_DOC_B64 : ''; return L.map(function (d, i) { var b = corpo(comFoto(d)); return i ? '<div class="novo"><img class="lg2" src="' + lg + '" alt=""><div class="tp2"></div>' + b + '</div>' : b; }).join(''); }
+  function ctrGerarVarios(branco) {
+    var MS = mods(); if (!MS.length) { alert('Marque pelo menos um documento.'); return; }
+    var base;
+    if (branco) { base = { jor: {}, prorr: el('ct-prorr').checked, menor: el('ct-menor').checked, cargoK: v('ct-cargok') }; }
+    else {
+      base = coletar();
+      if (!base.nome) { alert('Selecione o funcionário ou informe o nome do empregado.'); return; }
+      if (!base.eRazao) { alert('Informe a empresa EMPREGADORA.'); return; }
+      if (MS.some(ehCtr) && !base.ini) { alert('Informe a data de início do contrato.'); el('ct-ini').focus(); return; }
+      if (base.rep) ls('rh_ctr_rep', base.rep); if (MS.indexOf('oposicao') !== -1 && base.sind) ls('rh_ctr_sind', base.sind); if (MS.indexOf('lgpd') !== -1) { ls('rh_ctr_etel', base.eTel); ls('rh_ctr_email', base.eMail); } if (MS.indexOf('comp') !== -1 || MS.indexOf('prorhe') !== -1) ls('rh_ctr_prazo', base.prazo);
+      ls('rh_ctr_jor', JSON.stringify(base.jor)); if (MS.indexOf('hibrido') !== -1) { ls('rh_ctr_hdias', base.hDias); ls('rh_ctr_heq', base.hEq); }
+    }
+    var L = MS.map(function (k) { return Object.assign({}, base, { mod: k }); });
+    if (!branco) { var H = DB.g(K_HIST), em = new Date().toISOString(); L.forEach(function (d) { H.push(Object.assign({ id: nid(), em: em }, d)); }); DB.s(K_HIST, H); closeModal('modal-ctr'); }
+    var tit = 'Documentos admissionais' + (base.nome ? ' - ' + base.nome : ' (em branco)');
+    _abrirDocSimples(pagina(L[0], juntar(L), tit), tit.replace(/[\s\/–()]+/g, '_'));
+  }
   window.ctrGerar = function (branco) {
+    if (multi()) return ctrGerarVarios(branco);
     var d;
     if (branco) { d = { mod: mod(), jor: {}, prorr: el('ct-prorr').checked, menor: el('ct-menor').checked, cargoK: v('ct-cargok') }; if (d.mod === 'hibrido') { d.hAj = ''; } _abrirDocSimples(pagina(d), MODELOS[d.mod].n.replace(/\s+/g, '_') + '_em_branco'); return; }
     d = coletar();
@@ -25712,9 +25748,17 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   // ── menu próprio: Cadastros › 📁 Documentos Admissionais (saiu de Gerar Documentos) ──
   var SEC = 'docadm';
   function tirarDeGerarDocs() { var c = document.querySelector('#doc-grid [data-docbase="contratos"]'); if (c) c.remove(); }
-  window.ctrBranco = function (k) { injetar(); var r = document.querySelector('input[name="ct-mod"][value="' + k + '"]'); if (r) r.checked = true; ctrModelo(); ctrGerar(true); };
+  window.ctrBranco = function (k) { injetar(); if (el('ct-multi-on')) { el('ct-multi-on').checked = false; ctrMulti(); } var r = document.querySelector('input[name="ct-mod"][value="' + k + '"]'); if (r) r.checked = true; ctrModelo(); ctrGerar(true); };
+  window.daSel = function () {
+    var L = Array.prototype.filter.call(document.querySelectorAll('.da-chk'), function (c) { return c.checked; }).map(function (c) { return c.value; });
+    var b = el('da-gerar'); if (b) { b.disabled = !L.length; b.textContent = '🖨️ Gerar selecionados (' + L.length + ')'; }
+    document.querySelectorAll('.da-chk').forEach(function (c) { var t = c.closest('.trein-card'); if (t) t.style.background = c.checked ? '#f3f8ff' : ''; });
+    return L;
+  };
+  window.daTodos = function (on) { document.querySelectorAll('.da-chk').forEach(function (c) { c.checked = on; }); daSel(); };
+  window.daGerar = function () { var L = daSel(); if (L.length) ctrAbrir(L); };
   function cardDoc(k, m, cor) {
-    return '<div class="trein-card" style="border-left:4px solid ' + cor + ';display:flex;flex-direction:column;"><div class="tc-header"><div><div class="tc-title">' + (m.ic || '📝') + ' ' + esc(m.n) + '</div><div class="tc-meta">' + esc(m.d) + '</div></div></div>' +
+    return '<div class="trein-card" style="border-left:4px solid ' + cor + ';display:flex;flex-direction:column;"><div class="tc-header"><div><div class="tc-title">' + (m.ic || '📝') + ' ' + esc(m.n) + '</div><div class="tc-meta">' + esc(m.d) + '</div></div><label title="Selecionar para gerar junto" style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--gray-500);cursor:pointer;white-space:nowrap;"><input type="checkbox" class="da-chk" value="' + k + '" onchange="daSel()" style="width:16px;height:16px;"> juntar</label></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px;"><button class="btn btn-primary btn-sm" style="background:' + cor + ';border-color:' + cor + ';" onclick="ctrAbrir(\'' + k + '\')">🖨️ Gerar</button><button class="btn btn-outline btn-sm" onclick="ctrBranco(\'' + k + '\')">📄 Em branco</button></div></div>';
   }
   function injetarMenu() {
@@ -25728,7 +25772,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px;"><button class="btn btn-primary btn-sm" style="background:#6d4c41;border-color:#6d4c41;" onclick="if(window.tuAbrir)tuAbrir()">🖨️ Gerar</button></div></div>';
       ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-' + SEC + '"><div class="card">' +
         '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">📁 Documentos Admissionais</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Escolha o documento → filtre por <strong>empresa</strong>, <strong>departamento</strong> e <strong>funcionário</strong> → confira os dados (puxados do cadastro e editáveis) → imprima no papel timbrado BIN, com os campos de assinatura.</div></div>' +
-        '<button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button></div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="daTodos(true)">✔ Selecionar todos</button><button class="btn btn-outline" onclick="daTodos(false)">✖ Limpar</button><button class="btn btn-primary" id="da-gerar" disabled onclick="daGerar()">🖨️ Gerar selecionados (0)</button><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button></div></div>' +
+        '<div style="font-size:12.5px;color:var(--gray-600);background:#f3f8ff;border-radius:8px;padding:7px 10px;margin-bottom:12px;">💡 Para vários documentos do <strong>mesmo funcionário</strong>: marque <strong>juntar</strong> nos cartões e clique em <strong>Gerar selecionados</strong> — preenche uma vez e sai tudo num arquivo só, cada documento em página nova.</div>' +
         '<div style="font-weight:700;font-size:13px;color:' + COR + ';margin:4px 0 8px;">📝 Contratos de experiência</div><div class="trein-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:18px;">' + ctr + '</div>' +
         '<div style="font-weight:700;font-size:13px;color:#1565c0;margin:4px 0 8px;">📁 Formulários admissionais</div><div class="trein-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">' + docs + '</div>' +
         '</div></div>');
