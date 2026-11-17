@@ -5571,7 +5571,7 @@ function openAvd(fid, dias) {
         (f.ges||'Gestor Responsável') + '<br><small style="color:#666;">Gestor / Supervisor</small>' +
       '</div>' +
       '<div style="flex:1;border-top:1.5px solid #333;text-align:center;padding-top:6px;font-size:11pt;">' +
-        '[Responsável RH]<br><small style="color:#666;">Coordenadora RH</small>' +
+        (window.rhAssImg?rhAssImg():'') + (window.rhAssNome?rhAssNome('[Responsável RH]'):'[Responsável RH]') + '<br><small style="color:#666;">Coordenadora RH</small>' +
       '</div>' +
     '</div>' +
     '<p style="text-align:center;margin-top:14px;font-size:10px;color:#aaa;">Gerado em ' +
@@ -7193,7 +7193,7 @@ function gerarGuiaExame(empresa) {
     '</table>' +
     '<p style="margin-top:16px;">O funcionário acima está autorizado a realizar o exame médico indicado para a emissão do Atestado de Saúde Ocupacional (ASO).</p>' +
     '<p style="margin-top:20px;">Data: '+fmtDataExtenso(hoje)+'</p>' +
-    '<p style="margin-top:30px;">__________________________</p>' +
+    '<p style="margin-top:30px;">'+(window.rhAssImg?rhAssImg({al:'l',b:-14}):'')+'__________________________</p>' +
     '<p><strong>'+assinante+'</strong></p>' +
     (cargo_assinante?'<p>'+cargo_assinante+'</p>':'') +
     '<div class="info-block">' +
@@ -7251,7 +7251,7 @@ function gerarContaSalario(empresa) {
     '<p><em><strong>Salário:</strong> R$ '+salario+'</em></p>' +
     '<p><em>Favor providenciar para o mesmo a abertura da conta salário, desde que ele esteja de posse de todos os documentos necessários descritos abaixo. Na ausência de um dos documentos favor solicitar ao funcionário que providencie e retorne posteriormente para abertura, não fornecendo neste momento o número da conta salário.</em></p>' +
     '<p><em><strong>Obs.:</strong> O fornecimento do número da conta ao funcionário poderá ocorrer se a conta estiver liberada para recebimento dos créditos relativos ao salário ou demais pertinentes à função exercida na empresa.</em></p>' +
-    '<p style="margin-top:30px;" class="assinatura">[Responsável RH]<br>'+nomeEmp+'<br>CNPJ N.° '+cnpjEmp+'</p>' +
+    '<p style="margin-top:30px;" class="assinatura">'+(window.rhAssImg?rhAssImg():'')+(window.rhAssNome?rhAssNome('[Responsável RH]'):'[Responsável RH]')+'<br>'+nomeEmp+'<br>CNPJ N.° '+cnpjEmp+'</p>' +
     '<hr style="margin:24px 0;">' +
     '<p><strong>Observações para o funcionário:</strong></p>' +
     '<p><em>Para efetuar a abertura da conta salário, o funcionário deverá <strong>comparecer pessoalmente</strong> na agência e apresentar juntamente com esta carta o seu CPF, um documento de identificação e comprovante de endereço.</em></p>' +
@@ -7672,7 +7672,7 @@ function gerarReciboEquipamentos() {
     '<p style="border:1px solid #ccc;padding:12px;min-height:80px;white-space:pre-line;">'+equipamentos+'</p>' +
     '<p>São Paulo, '+fmtDataExtenso(hoje)+'.</p>' +
     '<div style="display:flex;justify-content:space-between;margin-top:40px;">' +
-    '<div class="assin">RH – Recursos Humanos</div>' +
+    '<div class="assin">'+(window.rhAssImg?rhAssImg():'')+'RH – Recursos Humanos</div>' +
     '<div class="assin">'+f.n+'<br>Colaborador</div>' +
     '</div>' +
     '<hr style="margin:30px 0;">' +
@@ -11516,7 +11516,7 @@ function _gerarListaPresencaObj(t) {
     '</table>' +
     '<div class="footer">' +
       '<div class="sig-box"><div style="height:42px;"></div><div class="sig-name">RH - BIN EMBALAGENS</div></div>' +
-      '<div class="sig-box"><div style="height:42px;"></div><div class="sig-name">[Responsável RH]</div><div style="font-size:9.5pt;color:#555;">Analista de RH</div></div>' +
+      '<div class="sig-box"><div style="height:42px;position:relative;">'+(window.rhAssImg?rhAssImg({h:44,b:-42}):'')+'</div><div class="sig-name">'+(window.rhAssNome?rhAssNome('[Responsável RH]'):'[Responsável RH]')+'</div><div style="font-size:9.5pt;color:#555;">Analista de RH</div></div>' +
       '<div class="sig-box"><div style="height:42px;"></div><div class="sig-name">' + (t.inst||'INSTRUTOR') + '</div><div style="font-size:9.5pt;color:#555;">Instrutor / Responsavel</div></div>' +
     '</div>' +
     '<div style="margin-top:20px;text-align:center;font-size:8.5pt;color:#aaa;">Sistema de RH - ' + new Date().toLocaleDateString('pt-BR') + '</div>' +
@@ -17756,7 +17756,7 @@ async function anmGerarBytes(modeloBytes, d, padrao) {
       '<p>{{DATA_EXTENSO}}.</p>' +
       '<table class="dmx-ass" style="width:100%;margin-top:40px;"><tr>' +
       '<td style="width:50%;text-align:center;padding:0 16px;"><div class="l" style="border-top:1px solid #000;padding-top:4px;">{{NOME}}<br>CPF: {{CPF}}</div></td>' +
-      '<td style="width:50%;text-align:center;padding:0 16px;"><div class="l" style="border-top:1px solid #000;padding-top:4px;">{{EMPRESA}}<br>CNPJ: {{EMPRESA_CNPJ}}</div></td>' +
+      '<td style="width:50%;text-align:center;padding:0 16px;"><div class="l" style="border-top:1px solid #000;padding-top:4px;">' + (window.rhAssEmp?rhAssEmp():'') + '{{EMPRESA}}<br>CNPJ: {{EMPRESA_CNPJ}}</div></td>' +
       '</tr></table>';
   }
   window.polGerarConfirmar = function () {
@@ -19618,7 +19618,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<li>Em caso de dano causado por culpa ou dolo, ou de extravio, autorizo o desconto do valor unitário indicado acima, mediante comunicação prévia por escrito (art. 462, § 1º, da CLT).</li>' +
       '<li><b>No desligamento</b>, por qualquer motivo, devolverei todas as peças até o meu último dia de trabalho. As peças não devolvidas, ou danificadas por culpa ou dolo, terão seu valor descontado das verbas rescisórias, o que desde já autorizo, limitado a um mês de remuneração (art. 477, § 5º, da CLT).</li></ol>' +
       '<p class="local">' + esc(cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : L(6)) + ' de ' + (dp ? MESES[+dp[1] - 1] : L(22)) + ' de ' + (dp ? dp[0] : L(8)) + '.</p>' +
-      '<table class="ass"><tr><td><div class="l">' + (nome ? esc(nome) + '<br>' : '') + 'Colaborador(a)</div></td><td class="gap"></td><td><div class="l">' + (resp ? esc(resp) + '<br>' : '') + 'Empregador (nome e cargo)</div></td></tr></table>' +
+      '<table class="ass"><tr><td><div class="l">' + (nome ? esc(nome) + '<br>' : '') + 'Colaborador(a)</div></td><td class="gap"></td><td><div class="l">' + (window.rhAssImg?rhAssImg():'') + (resp ? esc(resp) + '<br>' : '') + 'Empregador (nome e cargo)</div></td></tr></table>' +
       '<div class="end">' + esc(TU_END) + '</div></body></html>';
     closeModal('modal-termo-uni');
     _abrirDocSimples(html, ('Termo_Uniforme_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
@@ -25163,7 +25163,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     h += '<div class="sec"><h3>Descrição dos fatos / observações do gestor</h3>' + (A.fatos ? '<p>' + nl(A.fatos) + '</p>' : linhas(3)) + '</div>' +
       '<p>Fica V.Sa. ciente de que a repetição desta conduta, ou de outra falta disciplinar, poderá resultar na aplicação de suspensão disciplinar e, persistindo a conduta, na rescisão do contrato de trabalho por justa causa, nos termos do art. 482 da Consolidação das Leis do Trabalho (CLT).</p>' +
       '<div class="sec"><h3>Ciência do(a) colaborador(a)</h3><p class="peq">Declaro que recebi a 2ª via desta advertência e que tomei ciência do seu conteúdo. A assinatura indica apenas o recebimento, não necessariamente a concordância com os fatos descritos.</p></div>' +
-      '<div class="ass"><div><div class="l">' + esc(up(A.nome) || 'Colaborador(a)') + '</div>Colaborador(a) · Data: ____/____/______</div><div><div class="l">' + (A.resp ? esc(A.resp) : 'Responsável pela empresa (gerente / RH)') + '</div>Responsável pela empresa (nome e cargo)</div></div>' +
+      '<div class="ass"><div><div class="l">' + esc(up(A.nome) || 'Colaborador(a)') + '</div>Colaborador(a) · Data: ____/____/______</div><div><div class="l">' + (window.rhAssImg?rhAssImg():'') + (A.resp ? esc(A.resp) : 'Responsável pela empresa (gerente / RH)') + '</div>Responsável pela empresa (nome e cargo)</div></div>' +
       '<p class="peq" style="margin-top:12px;"><b>Recusa de assinatura:</b> caso o(a) colaborador(a) se recuse a assinar, as testemunhas abaixo declaram que a advertência foi lida e entregue a ele(a) na data indicada.</p>' +
       '<div class="ass" style="margin-top:4px;"><div><div class="l">Testemunha 1 – Nome:</div>CPF:</div><div><div class="l">Testemunha 2 – Nome:</div>CPF:</div></div>' +
       '<div class="rod">Emitir em 2 vias: 1ª via – pasta do colaborador (RH) | 2ª via – colaborador</div>';
@@ -25505,11 +25505,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     s += P(cl('PROTEÇÃO DE DADOS') + (MO ? 'O(A) EMPREGADO(A) declara ciência de que seus dados pessoais, inclusive os dados da CNH e os gerados pelo rastreamento do veículo durante a jornada, serão tratados pela EMPREGADORA para a execução deste contrato e o cumprimento de obrigações legais, nos termos da Lei nº 13.709/2018 (LGPD).' : 'O(A) EMPREGADO(A) declara ciência de que seus dados pessoais serão tratados pela EMPREGADORA para a execução deste contrato e o cumprimento de obrigações legais e regulatórias, nos termos da Lei nº 13.709/2018 (LGPD), comprometendo-se a manter sigilo sobre informações da EMPREGADORA e dados pessoais de clientes e colegas a que tiver acesso.'));
     s += P('E, por estarem assim justos e contratados, as partes assinam o presente instrumento em 2 (duas) vias de igual teor, na presença das testemunhas abaixo.');
     var local = (d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(d.data) + '.';
-    var A = [d.eRazao ? esc(d.eRazao) : 'EMPREGADORA', d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha 1 – Nome e CPF', 'Testemunha 2 – Nome e CPF'];
+    var A = [(window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) : 'EMPREGADORA'), d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha 1 – Nome e CPF', 'Testemunha 2 – Nome e CPF'];
     if (d.menor) A.push('Responsável legal (quando menor de idade)');
     s += '<div class="nb">' + P(local, 'c dt') + ass(A) + '</div>';
     if (d.prorr) {
-      var B = [d.eRazao ? esc(d.eRazao) : 'EMPREGADORA', d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha']; if (d.menor) B.push('Responsável legal (quando menor de idade)');
+      var B = [(window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) : 'EMPREGADORA'), d.nome ? esc(d.nome) : 'EMPREGADO(A)', 'Testemunha']; if (d.menor) B.push('Responsável legal (quando menor de idade)');
       s += '<div class="pg nb">' + P('TERMO DE PRORROGAÇÃO DO CONTRATO DE EXPERIÊNCIA', 'tit') + P('Por mútuo acordo, e conforme a cláusula ' + nPrazo + ' do contrato acima, o presente contrato de experiência fica prorrogado por mais 45 (quarenta e cinco) dias, de ' + dd(b1) + ' até ' + dd(b2) + '.') + P((d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(a2) + '.', 'c dt') + ass(B) + '</div>';
     }
     if (H) {
@@ -25584,14 +25584,14 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       s += P('O horário de trabalho durante a vigência deste acordo será:');
       s += '<table class="jor"><tr><th>Dia</th><th>Expediente</th><th>Intervalo</th></tr><tr><td>Segunda a sexta-feira</td><td>' + hh(J.e1, J.e2) + '</td><td>' + hh(J.i1, J.i2) + '</td></tr><tr><td>Sábado</td><td>' + esc(J.sab || '') + '&nbsp;</td><td>' + esc(J.sabi || '') + '&nbsp;</td></tr><tr><td>Domingo</td><td>' + esc(J.dom || 'Folga') + '</td><td>' + esc(J.domi || '—') + '</td></tr></table>';
       s += P('Este acordo, em 2 (duas) vias, vigorará pelo prazo de ' + c(d.prazo, 'prazo ______________________') + '.');
-      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR', '1ª Testemunha – nome e CPF', '2ª Testemunha – nome e CPF']) + '</div>';
+      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR', '1ª Testemunha – nome e CPF', '2ª Testemunha – nome e CPF']) + '</div>';
     } else if (M === 'prorhe') {
       var ext = d.prorExt || prorExtra(J);
       s += P('Pelo presente acordo de prorrogação de horas trabalhadas, firmado entre ' + empTxt + ', neste ato representada pelo(a) Sr.(a) ' + c(d.rep) + ', e seu(sua) empregado(a) ' + c(d.nome) + ', portador(a) da Carteira de Trabalho e Previdência Social nº ' + c(ctps) + ', fica convencionado, de acordo com o disposto no art. 59 e seu § 1º da Consolidação das Leis do Trabalho, o seguinte:');
       s += P('– A duração do trabalho diário será prorrogada por mais ' + c(ext, '____ hora(s) e ____ minutos') + '.', 'c it');
       s += P('– O horário de trabalho durante a vigência deste acordo será das ' + (J.e1 && J.i1 ? '<b>' + J.e1 + '</b> até <b>' + J.i1 + '</b>' : '____:____ até ____:____') + ' e das ' + (J.i2 && J.e2 ? '<b>' + J.i2 + '</b> até <b>' + J.e2 + '</b>' : '____:____ até ____:____') + '.', 'c it');
       s += P('E, por estarem de pleno acordo, as partes contratantes assinam o presente acordo, em 2 (duas) vias, o qual vigorará a partir de ' + (d.ini ? '<b>' + br(d.ini) + '</b>' : '___/___/______') + ' e pelo prazo de ' + c(d.prazo, '______________________') + '.');
-      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
+      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
     } else if (M === 'oposicao') {
       s = P('DECLARAÇÃO', 'tit') + P('CARTA DE OPOSIÇÃO À CONTRIBUIÇÃO SINDICAL', 'sub') + P(local, 'c dt') + P('<b>Sindicato:</b> ' + c(d.sind, '__________________________________________________'));
       s += P('Eu, ' + c(d.nome) + ', portador(a) da CTPS nº ' + c(ctps) + ', CPF ' + c(d.cpf) + ', regularmente registrado(a) na empresa ' + c(d.eRazao) + ', CNPJ nº ' + c(d.eCnpj) + ', com sede à ' + c(d.eEnd) + (d.eCid ? ' – ' + c(d.eCid) : '') + ', não sindicalizado(a), manifesto <b>oposição ao desconto em folha de pagamento</b> a título de Contribuição Assistencial, Confederativa ou outras contribuições.');
@@ -25638,7 +25638,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       s += '<div class="sec">FÉRIAS</div><table class="jor fb"><tr><th>Período aquisitivo</th><th>Período de gozo</th><th>Abono pecuniário</th></tr><tr><td>&nbsp;</td><td></td><td></td></tr><tr><td>&nbsp;</td><td></td><td></td></tr></table>';
       s += '<div class="sec">OBSERVAÇÕES (advertências, suspensões, transferências, acidentes de trabalho etc.)</div><table class="jor fb"><tr><td>&nbsp;</td></tr><tr><td>&nbsp;</td></tr></table>';
       s += '<div class="sec">RESCISÃO DO CONTRATO DE TRABALHO</div>' + linhaDados([[['Data da saída', ''], ['Data do aviso', ''], ['Tipo de desligamento', '']]]);
-      s += '<div class="nb">' + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
+      s += '<div class="nb">' + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
     } else if (M === 'imagem') {
       s = P('AUTORIZAÇÃO PARA USO DA IMAGEM', 'tit');
       s += P('Eu, ' + c(d.nome) + ', nascido(a) em ' + (d.nas ? '<b>' + br(d.nas) + '</b>' : '___/___/______') + ', na função de ' + c(d.cargo) + ', portador(a) da Cédula de Identidade RG nº ' + c(d.rg) + ', inscrito(a) no CPF/MF sob nº ' + c(d.cpf) + ', CTPS nº ' + c(ctps) + ', residente à ' + c(d.rua) + ', nº ' + c(d.num, '______') + ', bairro ' + c(d.bairro) + ', cidade ' + c(d.cidade) + '/' + c(d.uf, 'SP') + ', <b>AUTORIZO</b> o uso de minha imagem e voz, em todo e qualquer material entre fotos, sites, documentos e outros meios de comunicação, para interesse desta empresa ' + c(d.eRazao) + ', com sede na ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : '') + ', inscrita no CNPJ/MF sob o nº ' + c(d.eCnpj) + ', sejam essas destinadas à divulgação ao público em geral e/ou apenas para uso próprio da empresa, e desde que não haja desvirtuamento da sua finalidade.');
@@ -25667,7 +25667,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       s += '<div class="sec">ATIVIDADES CORRELATAS</div><ul>' + C.c.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
       s += '<div class="sec">REQUISITOS</div>' + P(C.req.charAt(0).toUpperCase() + C.req.slice(1));
       s += '<div class="nb"><div class="sec">CIÊNCIA DO(A) COLABORADOR(A)</div>' + P('Declaro que recebi, li e compreendi a descrição do cargo acima, comprometendo-me a desempenhar as atividades nela previstas, bem como as atividades correlatas e compatíveis com a minha condição pessoal, conforme orientação da liderança (art. 456, parágrafo único, da CLT).');
-      s += P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>Colaborador(a)' : 'Colaborador(a)', (d.gestor ? esc(d.gestor) + '<br>' : '') + 'Gestor(a) imediato(a)', (d.rep ? esc(d.rep) + '<br>' : '') + 'Recursos Humanos / Empresa', null]) + '</div>';
+      s += P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>Colaborador(a)' : 'Colaborador(a)', (d.gestor ? esc(d.gestor) + '<br>' : '') + 'Gestor(a) imediato(a)', (window.rhAssImg?rhAssImg({b:2}):'') + (d.rep ? esc(d.rep) + '<br>' : '') + 'Recursos Humanos / Empresa', null]) + '</div>';
     }
     return s;
   }
@@ -26045,5 +26045,169 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 50); }); else setTimeout(boot, 50);
 })();
 </script>
+<script>
+/* ════════════════════════════════════════════════════════════
+   ASSINATURA DO RH (imagem) — enviar, trocar e excluir
+   - Usa o mesmo lugar da assinatura "RH - BIN EMBALAGENS" já existente
+     (eq_monica_assinatura), que já sincroniza entre computadores.
+   - Ao enviar uma foto, o fundo é removido e a imagem é recortada.
+   - Aplicada nos campos de assinatura do RH dos documentos.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+  var KEY = 'eq_monica_assinatura', K_CFG = 'rh-ass-cfg';
+  if (window.RT && RT.OBJ && RT.OBJ.indexOf(K_CFG) === -1) { RT.OBJ.push(K_CFG); if (RT.ALL && RT.ALL.indexOf(K_CFG) === -1) RT.ALL.push(K_CFG); }
+  function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+  function cfg() { try { var o = DB.go(K_CFG); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch (e) { return {}; } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  window.rhAssGet = get;
+  /* Imagem posicionada sobre a linha de assinatura (não altera o layout do documento).
+     o.h altura · o.al 'l' alinha à esquerda · o.b distância da base · o.emp só se marcado "também como empresa" */
+  window.rhAssImg = function (o) {
+    o = o || {}; var a = get(); if (!a) return '';
+    if (o.emp && !cfg().emp) return '';
+    var h = o.h || 50, b = (o.b == null ? 0 : o.b);
+    var pos = o.al === 'l' ? 'left:0;' : 'left:50%;transform:translateX(-50%);';
+    return '<span class="rh-ass" style="display:block;height:0;position:relative;overflow:visible;margin:0;padding:0;border:0;">' +
+      '<img src="' + a + '" alt="" style="position:absolute;bottom:' + b + 'px;' + pos + 'height:' + h + 'px;max-width:230px;width:auto;object-fit:contain;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span>';
+  };
+  window.rhAssEmp = function (o) { o = o || {}; o.emp = true; return rhAssImg(o); };
+  window.rhAssNome = function (pad) { var n = (cfg().nome || '').trim(); return n ? esc(n) : pad; };
+
+  /* Limpa o fundo da foto: mantém só a tinta, recorta e deixa transparente */
+  function limpar(img) {
+    var W = img.naturalWidth || img.width, H = img.naturalHeight || img.height, k = Math.min(1, 1600 / Math.max(W, H));
+    W = Math.round(W * k); H = Math.round(H * k);
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.drawImage(img, 0, 0, W, H);
+    var d = x.getImageData(0, 0, W, H), p = d.data, n = W * H, i, r, g, bl;
+    var lum = new Uint8Array(n), azul = new Int16Array(n), nAzul = 0, hist = new Uint32Array(256);
+    for (i = 0; i < n; i++) {
+      r = p[i * 4]; g = p[i * 4 + 1]; bl = p[i * 4 + 2];
+      lum[i] = Math.round(.299 * r + .587 * g + .114 * bl); hist[lum[i]]++;
+      azul[i] = bl - Math.max(r, g);
+      if (azul[i] > 40) nAzul++;
+    }
+    var acc = 0, fundo = 255; for (i = 255; i >= 0; i--) { acc += hist[i]; if (acc > n * .5) { fundo = i; break; } }
+    var usaAzul = nAzul > n * .0008;           // caneta azul: usa a cor (ignora sombras e mesa)
+    var sc = new Float32Array(n);
+    for (i = 0; i < n; i++) {
+      var s = usaAzul ? (azul[i] - 22) / 45 : ((fundo - lum[i]) - 55) / 70;
+      sc[i] = s < 0 ? 0 : (s > 1 ? 1 : s);
+    }
+    // recorte: ignora pontinhos soltos (usa as bordas onde há tinta de verdade)
+    var xs = [], ys = [];
+    for (var yy = 0; yy < H; yy++) for (var xx = 0; xx < W; xx++) if (sc[yy * W + xx] > .5) { xs.push(xx); ys.push(yy); }
+    if (xs.length < 30) return null;
+    xs.sort(function (a, b) { return a - b; }); ys.sort(function (a, b) { return a - b; });
+    var q = function (A, f) { return A[Math.min(A.length - 1, Math.max(0, Math.round((A.length - 1) * f)))]; };
+    var pad = 12, x0 = Math.max(0, q(xs, .002) - pad), x1 = Math.min(W - 1, q(xs, .998) + pad), y0 = Math.max(0, q(ys, .002) - pad), y1 = Math.min(H - 1, q(ys, .998) + pad);
+    var cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    var o = document.createElement('canvas'); o.width = cw; o.height = ch;
+    var ox = o.getContext('2d'), od = ox.createImageData(cw, ch), q2 = od.data;
+    for (var y = 0; y < ch; y++) for (var xq = 0; xq < cw; xq++) {
+      var j = (y + y0) * W + (xq + x0), t = (y * cw + xq) * 4, a = sc[j];
+      if (a <= 0) continue;
+      if (usaAzul) { q2[t] = Math.round(p[j * 4] * .55); q2[t + 1] = Math.round(p[j * 4 + 1] * .55); q2[t + 2] = Math.min(255, Math.round(p[j * 4 + 2] * .8 + 30)); }
+      else { q2[t] = q2[t + 1] = q2[t + 2] = 20; }
+      q2[t + 3] = Math.round(255 * Math.min(1, a * 1.25));
+    }
+    ox.putImageData(od, 0, 0);
+    // tamanho final (altura máx. 220 px)
+    var f = Math.min(1, 220 / ch), fw = Math.max(1, Math.round(cw * f)), fh = Math.max(1, Math.round(ch * f));
+    var z = document.createElement('canvas'); z.width = fw; z.height = fh;
+    var zx = z.getContext('2d'); zx.imageSmoothingQuality = 'high'; zx.drawImage(o, 0, 0, fw, fh);
+    return z.toDataURL('image/png');
+  }
+  window.rhAssLimparImagem = limpar;
+
+  function modal() {
+    var bg = document.getElementById('rhass-bg'); if (bg) return bg;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="rhass-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10050;display:none;align-items:center;justify-content:center;padding:16px;">' +
+      '<div style="background:#fff;border-radius:12px;max-width:520px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.25);max-height:92vh;overflow:auto;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><h3 style="margin:0;font-size:17px;">✍️ Assinatura do RH</h3><button class="btn btn-outline btn-sm" onclick="rhAssFechar()">✕</button></div>' +
+      '<p style="font-size:12.5px;color:var(--gray-600);margin:0 0 12px;">A assinatura entra automaticamente nos campos de assinatura do RH dos documentos. Envie uma foto da assinatura em papel branco — o fundo é removido sozinho.</p>' +
+      '<div id="rhass-prev" style="border:1.5px dashed #c9c9c9;border-radius:8px;min-height:120px;display:flex;align-items:center;justify-content:center;background:#fff repeating-conic-gradient(#f3f3f3 0 25%,#fff 0 50%) 0 0/16px 16px;margin-bottom:12px;padding:10px;"></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+      '<label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0;">📤 <span id="rhass-lbl">Enviar assinatura</span><input type="file" accept="image/*" style="display:none;" onchange="rhAssUpload(this)"></label>' +
+      '<button class="btn btn-outline btn-sm" id="rhass-del" onclick="rhAssExcluir()">🗑️ Excluir assinatura</button></div>' +
+      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;margin-bottom:10px;cursor:pointer;"><input type="checkbox" id="rhass-emp" onchange="rhAssCfg()" style="margin-top:2px;"> <span>Assinar também os campos <strong>EMPREGADOR / Empresa</strong> (contratos, acordos e termos de ciência das políticas)</span></label>' +
+      '<div class="form-group" style="margin:0;"><label style="font-size:12.5px;">Nome do responsável do RH <small style="color:var(--gray-500);">(opcional — substitui “[Responsável RH]” nos documentos)</small></label><input id="rhass-nome" onchange="rhAssCfg()" placeholder="Ex.: Mônica Silva"></div>' +
+      '</div></div>');
+    return document.getElementById('rhass-bg');
+  }
+  function render() {
+    var a = get(), pv = document.getElementById('rhass-prev'); if (!pv) return;
+    pv.innerHTML = a ? '<img src="' + a + '" style="max-height:110px;max-width:100%;">' : '<span style="color:#999;font-size:13px;">Nenhuma assinatura cadastrada</span>';
+    var d = document.getElementById('rhass-del'); if (d) d.style.display = a ? '' : 'none';
+    var l = document.getElementById('rhass-lbl'); if (l) l.textContent = a ? 'Trocar assinatura' : 'Enviar assinatura';
+    var c = cfg(), e = document.getElementById('rhass-emp'), n = document.getElementById('rhass-nome');
+    if (e) e.checked = !!c.emp; if (n && document.activeElement !== n) n.value = c.nome || '';
+    document.querySelectorAll('.rhass-st').forEach(function (s) { s.textContent = a ? '✅' : ''; });
+  }
+  window.rhAssAbrir = function () { var bg = modal(); render(); bg.style.display = 'flex'; };
+  window.rhAssFechar = function () { var bg = document.getElementById('rhass-bg'); if (bg) bg.style.display = 'none'; };
+  window.rhAssCfg = function () {
+    var c = cfg(); c.emp = !!(document.getElementById('rhass-emp') || {}).checked; c.nome = ((document.getElementById('rhass-nome') || {}).value || '').trim();
+    DB.so(K_CFG, c); if (typeof toast === 'function') toast('Preferência da assinatura salva.');
+  };
+  function salvar(url) {
+    try { localStorage.setItem(KEY, url); } catch (e) { if (typeof toast === 'function') toast('Não foi possível salvar a assinatura (imagem muito grande).', 'warn'); return; }
+    try { if (typeof _savedSignature !== 'undefined') _savedSignature = url; } catch (e) {}
+    render(); refreshCanvas();
+    if (typeof toast === 'function') toast('Assinatura do RH salva ✅');
+  }
+  window.rhAssSalvarURL = salvar;
+  window.rhAssUpload = function (inp) {
+    var f = inp && inp.files && inp.files[0]; if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var url = null; try { url = limpar(im); } catch (e) { url = null; }
+        if (!url) { if (typeof toast === 'function') toast('Não encontrei a assinatura na imagem. Tente uma foto mais nítida, em papel branco.', 'warn'); return; }
+        salvar(url);
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(f); inp.value = '';
+  };
+  window.rhAssExcluir = function () {
+    if (!get()) return;
+    if (!confirm('Excluir a assinatura do RH? Os próximos documentos sairão sem a assinatura.')) return;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    try { if (typeof _savedSignature !== 'undefined') _savedSignature = null; } catch (e) {}
+    var c = document.getElementById('sig-canvas-monica'); if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    var st = document.getElementById('sig-monica-status'); if (st) st.style.display = 'none';
+    render(); if (typeof toast === 'function') toast('Assinatura do RH excluída.');
+  };
+  function refreshCanvas() {
+    var c = document.getElementById('sig-canvas-monica'), a = get(); if (!c || !a) return;
+    var im = new Image(); im.onload = function () {
+      var x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+      var f = Math.min(c.width / im.width, c.height / im.height), w = im.width * f, h = im.height * f;
+      x.drawImage(im, (c.width - w) / 2, (c.height - h) / 2, w, h);
+    }; im.src = a;
+    var st = document.getElementById('sig-monica-status'); if (st) st.style.display = 'inline-block';
+  }
+  window.addEventListener('storage', function (e) { if (e.key === KEY || e.key === 'eq_' + K_CFG) render(); });
+
+  function botao() { return '<button class="btn btn-outline btn-sm rhass-btn" onclick="rhAssAbrir()">✍️ Assinatura do RH <span class="rhass-st"></span></button>'; }
+  function injetar() {
+    var r = document.getElementById('dmx-btn-restaurar');
+    if (r && r.parentNode && !r.parentNode.querySelector('.rhass-btn')) r.insertAdjacentHTML('beforebegin', botao());
+    var da = document.getElementById('sec-docadm');
+    if (da) { var hd = da.querySelector('.card-header'); if (hd && !hd.querySelector('.rhass-btn')) { var box = hd.querySelector('div[style*="display:flex"]') || hd; box.insertAdjacentHTML('afterbegin', botao()); } }
+    var sm = document.getElementById('sig-monica-status');
+    if (sm && sm.parentNode && !sm.parentNode.querySelector('.rhass-btn2')) sm.insertAdjacentHTML('afterend', '<label class="btn btn-outline btn-sm rhass-btn2" style="font-size:11px;cursor:pointer;margin:0;">📤 Enviar imagem<input type="file" accept="image/*" style="display:none;" onchange="rhAssUpload(this)"></label>');
+    document.querySelectorAll('.rhass-st').forEach(function (s) { s.textContent = get() ? '✅' : ''; });
+  }
+  window.rhAssInjetar = injetar;
+  var _navA = window.nav;
+  if (typeof _navA === 'function') window.nav = function () { var r = _navA.apply(this, arguments); try { injetar(); } catch (e) {} return r; };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(injetar, 50); }); else setTimeout(injetar, 50);
+})();
+</script>
+
 </body>
 </html>
