@@ -25709,20 +25709,53 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   window.ctrReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(pagina(comFoto(h)), (MODELOS[h.mod].n + '_' + (h.nome || '')).replace(/[\s\/–]+/g, '_')); };
   window.ctrHistExcluir = function (id) { if (!confirm('Excluir este contrato do histórico?')) return; DB.s(K_HIST, DB.g(K_HIST).filter(function (x) { return x.id !== id; })); ctrHistorico(); };
 
-  // ── cartão em Gerar Documentos ──
-  function card() {
-    var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="contratos"]')) return;
-    var h = '<div class="trein-card" data-docbase="contratos" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">📁 Documentos admissionais</div><div class="tc-meta">Contratos de experiência · acordos de horas · VT · IR · ficha de registro · imagem · LGPD · descrição de cargo</div></div>' +
-      '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'contratos\')">🗑️</button></div>' +
-      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Escolha o documento, filtre por empresa e departamento, selecione o funcionário e confira os dados (puxados do cadastro e editáveis). Sai no papel timbrado BIN com a logo e os campos de assinatura.</p>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + Object.keys(MODELOS).filter(ehCtr).map(function (k, i) { return '<button class="btn ' + (i ? 'btn-outline' : 'btn-primary') + ' btn-sm"' + (i ? '' : ' style="background:' + COR + ';border-color:' + COR + ';"') + ' onclick="ctrAbrir(\'' + k + '\')">' + (k === 'padrao' ? '📝 Experiência' : k === 'hibrido' ? '🏠 Híbrido' : '🚚 Motorista') + '</button>'; }).join('') +
-      '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + Object.keys(MODELOS).filter(function (k) { return !ehCtr(k); }).map(function (k) { var m = MODELOS[k]; return '<button class="btn btn-outline btn-sm" title="' + esc(m.n) + '" onclick="ctrAbrir(\'' + k + '\')">' + m.ic + ' ' + esc(m.n.replace(/^Declaração de |^Termo de |^Acordo de /, '').replace(' – Vale-Transporte', ' (VT)')) + '</button>'; }).join('') +
-      '<button class="btn btn-outline btn-sm" onclick="ctrHistorico()">🗂️ Histórico</button></div></div>';
-    grid.insertAdjacentHTML('afterbegin', h);
-    try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
+  // ── menu próprio: Cadastros › 📁 Documentos Admissionais (saiu de Gerar Documentos) ──
+  var SEC = 'docadm';
+  function tirarDeGerarDocs() { var c = document.querySelector('#doc-grid [data-docbase="contratos"]'); if (c) c.remove(); }
+  window.ctrBranco = function (k) { injetar(); var r = document.querySelector('input[name="ct-mod"][value="' + k + '"]'); if (r) r.checked = true; ctrModelo(); ctrGerar(true); };
+  function cardDoc(k, m, cor) {
+    return '<div class="trein-card" style="border-left:4px solid ' + cor + ';display:flex;flex-direction:column;"><div class="tc-header"><div><div class="tc-title">' + (m.ic || '📝') + ' ' + esc(m.n) + '</div><div class="tc-meta">' + esc(m.d) + '</div></div></div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px;"><button class="btn btn-primary btn-sm" style="background:' + cor + ';border-color:' + cor + ';" onclick="ctrAbrir(\'' + k + '\')">🖨️ Gerar</button><button class="btn btn-outline btn-sm" onclick="ctrBranco(\'' + k + '\')">📄 Em branco</button></div></div>';
   }
-  card();
-  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); card(); return r; }; }
+  function injetarMenu() {
+    if (!el('sec-' + SEC)) {
+      var ref = el('sec-arqmorto') || el('sec-obrigacoes') || el('sec-empresas') || el('sec-dashboard');
+      var IC = { padrao: '📝', hibrido: '🏠', motorista: '🚚' };
+      Object.keys(IC).forEach(function (k) { if (!MODELOS[k].ic) MODELOS[k].ic = IC[k]; });
+      var ctr = Object.keys(MODELOS).filter(ehCtr).map(function (k) { return cardDoc(k, MODELOS[k], COR); }).join('');
+      var docs = Object.keys(MODELOS).filter(function (k) { return !ehCtr(k); }).map(function (k) { return cardDoc(k, MODELOS[k], '#1565c0'); }).join('') +
+        '<div class="trein-card" style="border-left:4px solid #6d4c41;display:flex;flex-direction:column;"><div class="tc-header"><div><div class="tc-title">👕 Termo de Recebimento de Uniforme</div><div class="tc-meta">Itens, tamanhos e quantidades das entregas do Estoque de Uniformes · 1 página</div></div></div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px;"><button class="btn btn-primary btn-sm" style="background:#6d4c41;border-color:#6d4c41;" onclick="if(window.tuAbrir)tuAbrir()">🖨️ Gerar</button></div></div>';
+      ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-' + SEC + '"><div class="card">' +
+        '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">📁 Documentos Admissionais</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Escolha o documento → filtre por <strong>empresa</strong>, <strong>departamento</strong> e <strong>funcionário</strong> → confira os dados (puxados do cadastro e editáveis) → imprima no papel timbrado BIN, com os campos de assinatura.</div></div>' +
+        '<button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button></div>' +
+        '<div style="font-weight:700;font-size:13px;color:' + COR + ';margin:4px 0 8px;">📝 Contratos de experiência</div><div class="trein-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:18px;">' + ctr + '</div>' +
+        '<div style="font-weight:700;font-size:13px;color:#1565c0;margin:4px 0 8px;">📁 Formulários admissionais</div><div class="trein-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">' + docs + '</div>' +
+        '</div></div>');
+    }
+    if (!document.querySelector('.nav-item[data-docadm]')) {
+      var antes = document.querySelector('.nav-item[data-arqmorto]') || document.querySelector('.nav-item[data-obrig]') || Array.prototype.find.call(document.querySelectorAll('.nav-item'), function (n) { return /nav\('empresas'/.test(n.getAttribute('onclick') || ''); });
+      var nv = '<div class="nav-item" data-docadm="1" onclick="nav(\'' + SEC + '\',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M9 14h6"></path></svg><span>Documentos Admissionais</span></div>';
+      if (antes) antes.insertAdjacentHTML('afterend', nv);
+    }
+  }
+  var _navD = window.nav;
+  window.nav = function (id, elx) {
+    if (id === SEC) {
+      injetarMenu();
+      document.querySelectorAll('.section-page').forEach(function (s) { s.classList.remove('active'); });
+      el('sec-' + SEC).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('active'); });
+      var it = (elx && elx.classList) ? elx : document.querySelector('.nav-item[data-docadm]'); if (it) it.classList.add('active');
+      if (el('topbar-title')) el('topbar-title').textContent = 'Documentos Admissionais';
+      try { if (history.replaceState) history.replaceState(null, '', '#' + SEC); } catch (e) {}
+      return;
+    }
+    return _navD.apply(this, arguments);
+  };
+  function bootMenu() { injetarMenu(); tirarDeGerarDocs(); if ((location.hash || '') === '#' + SEC) nav(SEC, document.querySelector('.nav-item[data-docadm]')); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(bootMenu, 120); }); else setTimeout(bootMenu, 120);
+  if (typeof window.rdDocs === 'function') { var _rd = window.rdDocs; window.rdDocs = function () { var r = _rd.apply(this, arguments); tirarDeGerarDocs(); return r; }; }
 })();
 </script>
 <script>
