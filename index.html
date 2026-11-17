@@ -25237,8 +25237,18 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   var MODELOS = {
     padrao: { t: 'CONTRATO DE EXPERIÊNCIA', n: 'Contrato de Experiência', d: '90 dias (45 + 45) com empresa registradora e local de trabalho' },
     hibrido: { t: 'CONTRATO DE EXPERIÊNCIA – REGIME HÍBRIDO', n: 'Contrato de Experiência – Regime Híbrido', d: '90 dias (45 + 45), 2 dias remotos por semana + Termo de teletrabalho' },
-    motorista: { t: 'CONTRATO DE EXPERIÊNCIA – MOTORISTA', n: 'Contrato de Experiência – Motorista', d: '90 dias (45 + 45), uso do veículo, CNH, multas e danos' }
+    motorista: { t: 'CONTRATO DE EXPERIÊNCIA – MOTORISTA', n: 'Contrato de Experiência – Motorista', d: '90 dias (45 + 45), uso do veículo, CNH, multas e danos' },
+    comp: { g: 'doc', ic: '🕑', t: 'ACORDO DE COMPENSAÇÃO DE HORAS TRABALHADAS', n: 'Acordo de Compensação de Horas', d: 'Art. 59 § 2º da CLT · jornada semanal e vigência' },
+    prorhe: { g: 'doc', ic: '⏱️', t: 'ACORDO DE PRORROGAÇÃO DE HORAS TRABALHADAS', n: 'Acordo de Prorrogação de Horas', d: 'Art. 59 § 1º da CLT · horas prorrogadas por dia' },
+    oposicao: { g: 'doc', ic: '✋', t: 'DECLARAÇÃO', n: 'Carta de Oposição – Sindicato', d: 'Oposição ao desconto de contribuição assistencial/confederativa' },
+    vt: { g: 'doc', ic: '🚌', t: 'SOLICITAÇÃO DE VALE-TRANSPORTE', n: 'Declaração de Deslocamento – Vale-Transporte', d: 'Opção pelo VT, residência e meios de transporte' },
+    ir: { g: 'doc', ic: '👨‍👩‍👧', t: 'DECLARAÇÃO DE ENCARGOS DE FAMÍLIA PARA FINS DE IMPOSTO DE RENDA', n: 'Declaração de Encargos de Família (IR)', d: 'Dependentes para o Imposto de Renda' },
+    ficha: { g: 'doc', ic: '🗂️', t: 'REGISTRO DE EMPREGADO', n: 'Ficha de Registro de Empregado', d: 'Dados pessoais, documentos, contrato e quadros de anotação' },
+    imagem: { g: 'doc', ic: '📸', t: 'AUTORIZAÇÃO PARA USO DA IMAGEM', n: 'Termo de Autorização de Uso da Imagem', d: 'Uso de imagem e voz, a título gratuito' },
+    lgpd: { g: 'doc', ic: '🔒', t: 'TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS', n: 'Termo de Consentimento – LGPD', d: 'Lei nº 13.709/2018 · dados, finalidades e direitos' },
+    cargo: { g: 'doc', ic: '📋', t: 'DESCRIÇÃO DE CARGO', n: 'Descrição de Cargo', d: '11 cargos BIN · missão, atividades, requisitos e ciência' }
   };
+  function ehCtr(m) { return !MODELOS[m].g; }
   var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   var L_ = '____________________';
   function el(id) { return document.getElementById(id); }
@@ -25264,10 +25274,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var css = '#modal-ctr .ct-sec{font-weight:700;font-size:13px;color:' + COR + ';margin:14px 0 4px;border-bottom:1px solid #f0d6d6;padding-bottom:3px;}#modal-ctr .ct-mods{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}' +
       '#modal-ctr .ct-mod{display:flex;gap:8px;padding:9px 11px;border:1.5px solid var(--gray-200,#e5e5e5);border-radius:10px;cursor:pointer;background:#fff;}#modal-ctr .ct-mod:has(input:checked){border-color:' + COR + ';background:#fff4f4;}#modal-ctr .ct-mod input{accent-color:' + COR + ';margin-top:3px;}' +
       '#modal-ctr .ct-jor{width:100%;border-collapse:collapse;font-size:12.5px}#modal-ctr .ct-jor td{padding:3px 4px}#modal-ctr .ct-jor input{padding:5px 7px;width:100%}';
-    var mods = Object.keys(MODELOS).map(function (k, i) { var m = MODELOS[k]; return '<label class="ct-mod"><input type="radio" name="ct-mod" value="' + k + '"' + (i ? '' : ' checked') + ' onchange="ctrModelo()"><span><strong style="font-size:13px;">' + esc(m.n) + '</strong><br><span style="font-size:11.5px;color:var(--gray-500);">' + esc(m.d) + '</span></span></label>'; }).join('');
+    var modL = function (f) { return Object.keys(MODELOS).filter(f).map(function (k) { var m = MODELOS[k]; return '<label class="ct-mod"><input type="radio" name="ct-mod" value="' + k + '"' + (k === 'padrao' ? ' checked' : '') + ' onchange="ctrModelo()"><span><strong style="font-size:13px;">' + (m.ic ? m.ic + ' ' : '') + esc(m.n) + '</strong><br><span style="font-size:11.5px;color:var(--gray-500);">' + esc(m.d) + '</span></span></label>'; }).join(''); };
+    var mods = '<div style="grid-column:1/-1;font-size:12px;font-weight:700;color:var(--gray-500);">CONTRATOS DE EXPERIÊNCIA</div>' + modL(ehCtr) + '<div style="grid-column:1/-1;font-size:12px;font-weight:700;color:var(--gray-500);margin-top:4px;">DOCUMENTOS ADMISSIONAIS</div>' + modL(function (k) { return !ehCtr(k); });
     var h = '<style>' + css + '</style><div class="modal-bg" id="modal-ctr"><div class="modal" style="max-width:900px;">' +
-      '<div class="modal-header"><h3>📝 Contratos</h3><button class="modal-close" onclick="closeModal(\'modal-ctr\')">&#10005;</button></div>' +
-      '<div class="ct-sec" style="margin-top:0;">1. Qual contrato?</div><div class="ct-mods">' + mods + '</div>' +
+      '<div class="modal-header"><h3>📁 Documentos admissionais</h3><button class="modal-close" onclick="closeModal(\'modal-ctr\')">&#10005;</button></div>' +
+      '<div class="ct-sec" style="margin-top:0;">1. Qual documento?</div><div class="ct-mods">' + mods + '</div>' +
       '<div class="ct-sec">2. Empresa, departamento e funcionário</div><div class="form-grid">' +
       campo('ct-f-emp', 'Empresa', '<select id="ct-f-emp" onchange="ctrFiltro(\'emp\')"></select>') +
       campo('ct-f-dep', 'Departamento / Loja', '<select id="ct-f-dep" onchange="ctrFiltro(\'dep\')"></select>') +
@@ -25278,21 +25289,35 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="form-group ct-mot"><label>CNH nº</label><input id="ct-cnh"></div><div class="form-group ct-mot"><label>Categoria</label><input id="ct-cnhcat" placeholder="Ex.: D"></div><div class="form-group ct-mot"><label>CNH válida até</label><input id="ct-cnhval" type="date"></div>' + '</div>' +
       '<div class="ct-sec">4. Empregadora e empresa registradora</div><div class="form-grid">' +
       campo('ct-e-razao', 'Razão social da EMPREGADORA', null, 'form-full') + campo('ct-e-cnpj', 'CNPJ') + campo('ct-e-cid', 'Cidade/UF da sede') + campo('ct-e-end', 'Endereço completo da sede', null, 'form-full') +
-      campo('ct-r-emp', 'Empresa REGISTRADORA', '<select id="ct-r-emp" onchange="ctrReg()"></select>') + campo('ct-r-cnpj', 'CNPJ da registradora') + '<input type="hidden" id="ct-r-razao">' + '</div>' +
-      '<div class="ct-sec">5. Local de trabalho' + '<span class="ct-hib" style="font-weight:400;color:var(--gray-500);"> (dias presenciais)</span><span class="ct-mot" style="font-weight:400;color:var(--gray-500);"> (base de onde parte para as rotas)</span></div><div class="form-grid">' +
+      campo('ct-r-emp', 'Empresa REGISTRADORA', '<select id="ct-r-emp" onchange="ctrReg()"></select>', 'ct-v-ctr') + campo('ct-r-cnpj', 'CNPJ da registradora', null, 'ct-v-ctr') + '<input type="hidden" id="ct-r-razao">' +
+      campo('ct-rep', 'Representante da empresa (nome)', null, 'ct-v-rep') + campo('ct-e-tel', 'Telefone da empresa', null, 'ct-v-lgpd') + campo('ct-e-mail', 'E-mail da empresa', null, 'ct-v-lgpd') + '</div>' +
+      '<div class="ct-v-comp"><div class="ct-sec">Dados complementares do empregado</div><div class="form-grid">' +
+      campo('ct-rg', 'RG / órgão emissor') + campo('ct-rgem', 'Data de emissão do RG', '<input id="ct-rgem" type="date">', 'ct-v-ficha') + campo('ct-nas', 'Data de nascimento', '<input id="ct-nas" type="date">') + campo('ct-ec', 'Estado civil') +
+      campo('ct-rua', 'Endereço (rua)') + campo('ct-num', 'Nº') + campo('ct-compl', 'Complemento') + campo('ct-bairro', 'Bairro') + campo('ct-cidade', 'Cidade') + campo('ct-uf', 'UF') + campo('ct-cep', 'CEP') +
+      campo('ct-sexo', 'Sexo', null, 'ct-v-ficha') + campo('ct-cor', 'Cor / raça', null, 'ct-v-ficha') + campo('ct-escol', 'Grau de instrução', null, 'ct-v-ficha') + campo('ct-defic', 'Deficiência', '<input id="ct-defic" placeholder="Não">', 'ct-v-ficha') +
+      campo('ct-natural', 'Local de nascimento', null, 'ct-v-ficha') + campo('ct-nacion', 'Nacionalidade', '<input id="ct-nacion" placeholder="BRASILEIRA">', 'ct-v-ficha') + campo('ct-pai', 'Nome do pai', null, 'ct-v-ficha') + campo('ct-mae', 'Nome da mãe', null, 'ct-v-ficha') +
+      campo('ct-titulo', 'Título eleitoral / zona / seção', null, 'ct-v-ficha') + campo('ct-pis', 'PIS', null, 'ct-v-ficha') + campo('ct-tel', 'Celular', null, 'ct-v-ficha') + campo('ct-telres', 'Telefone residencial', null, 'ct-v-ficha') +
+      campo('ct-mat', 'Matrícula / eSocial', null, 'ct-v-ficha') + campo('ct-cbo', 'CBO', null, 'ct-v-ficha') + campo('ct-banco', 'Banco / agência / conta', null, 'ct-v-ficha') +
+      '<div class="form-group form-full ct-v-deps"><label>Dependentes (um por linha: nome ; relação ; nascimento)</label><textarea id="ct-deps" rows="3" placeholder="NOME DO DEPENDENTE ; Filho(a) ou enteado(a) até 21 anos ; 18/09/2012"></textarea></div>' +
+      '</div></div>' +
+      '<div class="ct-v-sind"><div class="ct-sec">Sindicato</div><div class="form-grid">' + campo('ct-sind', 'Nome do sindicato', null, 'form-full') + '</div></div>' +
+      '<div class="ct-v-cargo"><div class="ct-sec">Descrição de cargo</div><div class="form-grid">' +
+      campo('ct-cargok', 'Cargo', '<select id="ct-cargok">' + CARGOS.map(function (x) { return '<option value="' + x.k + '">' + esc(x.t) + '</option>'; }).join('') + '</select>') + campo('ct-gestor', 'Gestor(a) imediato(a) (nome)') + '</div></div>' +
+      '<div class="ct-v-local"><div class="ct-sec">5. Local de trabalho' + '<span class="ct-hib" style="font-weight:400;color:var(--gray-500);"> (dias presenciais)</span><span class="ct-mot" style="font-weight:400;color:var(--gray-500);"> (base de onde parte para as rotas)</span></div><div class="form-grid">' +
       campo('ct-l-end', 'Endereço completo do local de trabalho', null, 'form-full') + campo('ct-l-cid', 'Cidade/UF') +
       campo('ct-l-tipo', 'O local é', '<select id="ct-l-tipo" onchange="ctrLocal()"><option value="proprio">Estabelecimento da própria EMPREGADORA</option><option value="grupo">Empresa do mesmo grupo econômico</option></select>') +
       '<div class="form-group" id="ct-l-loja-g"><label>Nome da loja / unidade</label><input id="ct-l-loja"></div>' +
-      '<div class="form-group" id="ct-l-grp-g" style="display:none;"><label>Empresa do grupo</label><select id="ct-l-grp" onchange="ctrLocal()"></select></div>' + '<input type="hidden" id="ct-l-grazao"><input type="hidden" id="ct-l-gcnpj">' + '</div>' +
-      '<div class="ct-sec">6. Jornada, remuneração e prazo</div>' +
+      '<div class="form-group" id="ct-l-grp-g" style="display:none;"><label>Empresa do grupo</label><select id="ct-l-grp" onchange="ctrLocal()"></select></div>' + '<input type="hidden" id="ct-l-grazao"><input type="hidden" id="ct-l-gcnpj">' + '</div></div>' +
+      '<div class="ct-v-jor"><div class="ct-sec">6. Jornada<span class="ct-v-sal">, remuneração e prazo</span></div>' +
       '<table class="ct-jor"><tr><td style="width:24%;"></td><td><b>Expediente</b></td><td></td><td><b>Intervalo</b></td><td></td></tr>' +
       '<tr><td>Segunda a sexta-feira</td><td><input id="ct-j-e1" type="time"></td><td><input id="ct-j-e2" type="time"></td><td><input id="ct-j-i1" type="time"></td><td><input id="ct-j-i2" type="time"></td></tr>' +
       '<tr><td>Sábado</td><td colspan="2"><input id="ct-j-sab" placeholder="Compensado / ou horário, ex.: 08:00 às 12:00"></td><td colspan="2"><input id="ct-j-sabi" placeholder="—"></td></tr>' +
-      '<tr><td>Domingo</td><td colspan="2"><input id="ct-j-dom"></td><td colspan="2"><input id="ct-j-domi"></td></tr></table>' +
-      '<div class="form-grid" style="margin-top:6px;">' +
+      '<tr><td>Domingo</td><td colspan="2"><input id="ct-j-dom"></td><td colspan="2"><input id="ct-j-domi"></td></tr></table></div>' +
+      '<div class="form-grid ct-v-hor" style="margin-top:6px;">' + campo('ct-prazo', 'Vigência (prazo do acordo)', '<input id="ct-prazo" placeholder="Ex.: prazo indeterminado / 12 meses">') + '<div class="form-group ct-v-prorhe"><label>Prorrogação diária</label><input id="ct-prorext" placeholder="calculada pela jornada (ex.: 1 hora e 12 minutos)"></div></div>' +
+      '<div class="form-grid ct-v-sal" style="margin-top:6px;">' +
       campo('ct-sal', 'Remuneração mensal (R$)', '<input id="ct-sal" oninput="ctrExt()">') + campo('ct-salext', 'Por extenso') +
-      campo('ct-ini', 'Início do contrato (admissão)', '<input id="ct-ini" type="date" onchange="ctrDatas()">') +
-      '<div class="form-group"><label>Períodos</label><div id="ct-per" style="font-size:12.5px;padding-top:6px;"></div></div>' + '</div>' +
+      campo('ct-ini', '<span id="ct-ini-lbl">Início do contrato (admissão)</span>', '<input id="ct-ini" type="date" onchange="ctrDatas()">') +
+      '<div class="form-group ct-v-ctr"><label>Períodos</label><div id="ct-per" style="font-size:12.5px;padding-top:6px;"></div></div>' + '</div>' +
       '<div class="ct-hib"><div class="ct-sec">7. Regime híbrido</div><div class="form-grid">' +
       campo('ct-h-dias', 'Dias de teletrabalho', '<input id="ct-h-dias" placeholder="Ex.: terça e quinta-feira">') + campo('ct-h-aviso', 'Aviso para alterar os dias', '<input id="ct-h-aviso" placeholder="48 (quarenta e oito) horas">') +
       campo('ct-h-eq', 'Equipamentos em comodato', '<input id="ct-h-eq" placeholder="Ex.: notebook, headset">', 'form-full') +
@@ -25300,20 +25325,26 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="form-group" id="ct-h-ajv-g" style="display:none;"><label>Valor da ajuda de custo (R$)</label><input id="ct-h-ajv"></div>' + '</div></div>' +
       '<div class="ct-sec">Assinatura</div><div class="form-grid">' +
       campo('ct-cid', 'Cidade da assinatura') + campo('ct-data', 'Data da assinatura', '<input id="ct-data" type="date">') +
-      '<div class="form-group form-full"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
+      '<div class="form-group form-full ct-v-ctr"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
       '<label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-menor"> Incluir linha "Responsável legal (quando menor de idade)"</label></div></div>' +
-      '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar contrato</button></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar documento</button></div>' +
       '</div></div>' +
-      '<div class="modal-bg" id="modal-ctr-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Contratos gerados</h3><button class="modal-close" onclick="closeModal(\'modal-ctr-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ct-htab"></table></div></div></div>';
+      '<div class="modal-bg" id="modal-ctr-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Documentos admissionais gerados</h3><button class="modal-close" onclick="closeModal(\'modal-ctr-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ct-htab"></table></div></div></div>';
     document.body.insertAdjacentHTML('beforeend', h);
   }
   function mod() { var r = document.querySelector('input[name="ct-mod"]:checked'); return r ? r.value : 'padrao'; }
+  var VIS = { ctr: ['padrao', 'hibrido', 'motorista'], local: ['padrao', 'hibrido', 'motorista'], jor: ['padrao', 'hibrido', 'motorista', 'comp', 'prorhe', 'ficha'], sal: ['padrao', 'hibrido', 'motorista', 'prorhe', 'ficha', 'cargo'],
+    hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'] };
   window.ctrModelo = function () {
     var m = mod();
-    document.querySelectorAll('#modal-ctr .ct-mot').forEach(function (x) { x.style.display = m === 'motorista' ? '' : 'none'; });
+    Object.keys(VIS).forEach(function (k) { document.querySelectorAll('#modal-ctr .ct-v-' + k).forEach(function (x) { x.style.display = VIS[k].indexOf(m) !== -1 ? '' : 'none'; }); });
+    if (el('ct-ini-lbl')) el('ct-ini-lbl').textContent = ehCtr(m) ? 'Início do contrato (admissão)' : m === 'prorhe' ? 'Vigora a partir de' : 'Data de admissão';
+    if (m === 'cargo' && el('ct-f-func').value) { var ck = cargoDe(v('ct-cargo')); if (ck) el('ct-cargok').value = ck; }
+    document.querySelectorAll('#modal-ctr .ct-mot').forEach(function (x) { x.style.display = m === 'motorista' || m === 'ficha' ? '' : 'none'; });
     document.querySelectorAll('#modal-ctr .ct-hib').forEach(function (x) { x.style.display = m === 'hibrido' ? '' : 'none'; });
     if (m === 'motorista') sv('ct-cargo', 'MOTORISTA');
     el('ct-menor').checked = m !== 'motorista';
+    var b = document.querySelector('#modal-ctr .modal-footer .btn-primary'); if (b) b.textContent = ehCtr(m) ? '🖨️ Gerar contrato' : '🖨️ Gerar documento';
   };
   function emps() { return DB.g('empresas').slice().sort(function (a, b) { return String(a.razao || '').localeCompare(String(b.razao || ''), 'pt-BR'); }); }
   window.ctrFiltro = function (de) {
@@ -25359,6 +25390,15 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     sv('ct-ini', f.adm || ''); el('ct-data').dataset.auto = '1'; sv('ct-data', ''); ctrDatas();
     if (f.emp && v('ct-f-emp') !== f.emp) { el('ct-f-emp').value = f.emp; sv('ct-l-end', ''); empresaPara(f.emp); } else if (f.emp) empresaPara(f.emp);
     var dp = DB.g('departamentos').find(function (x) { return x.id === f.dep; }); if (dp) sv('ct-l-loja', dp.nome);
+    // dados complementares (documentos admissionais)
+    sv('ct-rg', f.rg || ''); sv('ct-nas', /^\d{4}-\d{2}-\d{2}/.test(f.nas || '') ? f.nas.slice(0, 10) : ''); sv('ct-ec', f.ec || ''); sv('ct-sexo', f.sex || ''); sv('ct-tel', f.tel || ''); sv('ct-pis', f.pis || ''); sv('ct-mat', f.codEpr || '');
+    var pe = String(f.end || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean), cu = '';
+    if (pe.length > 1 && /[\/-]\s*[A-Z]{2}$/.test(pe[pe.length - 1])) cu = pe.pop();
+    var tn = pe[1] && /\d/.test(pe[1]) && pe[1].length < 10;
+    sv('ct-rua', pe[0] || ''); sv('ct-num', tn ? pe[1] : ''); sv('ct-bairro', pe.slice(tn ? 2 : 1).join(', '));
+    var m2 = /^(.*?)\s*[\/-]\s*([A-Z]{2})$/.exec(cu); sv('ct-cidade', m2 ? m2[1] : cu); sv('ct-uf', m2 ? m2[2] : ''); sv('ct-cep', f.cep || ''); sv('ct-compl', '');
+    var ck = cargoDe(f.car); if (ck) el('ct-cargok').value = ck;
+    var fe = DB.g('empresas').find(function (x) { return x.id === f.emp; }) || {}; if (fe.tel && !v('ct-e-tel')) sv('ct-e-tel', fe.tel); if (fe.email && !v('ct-e-mail')) sv('ct-e-mail', fe.email);
   };
   window.ctrAbrir = function (m) {
     injetar();
@@ -25369,6 +25409,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     sv('ct-j-e1', J.e1 || '08:00'); sv('ct-j-e2', J.e2 || '18:00'); sv('ct-j-i1', J.i1 || '12:00'); sv('ct-j-i2', J.i2 || '13:00'); sv('ct-j-sab', J.sab || 'Compensado'); sv('ct-j-sabi', J.sabi || '—'); sv('ct-j-dom', J.dom || 'Folga'); sv('ct-j-domi', J.domi || '—');
     sv('ct-h-dias', ls('rh_ctr_hdias') || 'terça e quinta-feira'); sv('ct-h-aviso', '48 (quarenta e oito) horas'); sv('ct-h-eq', ls('rh_ctr_heq') || 'notebook, headset'); el('ct-h-aj').value = 'nao';
     el('ct-l-tipo').value = 'proprio'; el('ct-data').dataset.auto = '1'; el('ct-prorr').checked = true;
+    ['ct-rg', 'ct-rgem', 'ct-nas', 'ct-ec', 'ct-rua', 'ct-num', 'ct-compl', 'ct-bairro', 'ct-cidade', 'ct-uf', 'ct-cep', 'ct-sexo', 'ct-cor', 'ct-escol', 'ct-defic', 'ct-natural', 'ct-nacion', 'ct-pai', 'ct-mae', 'ct-titulo', 'ct-pis', 'ct-tel', 'ct-telres', 'ct-mat', 'ct-cbo', 'ct-banco', 'ct-deps', 'ct-prorext', 'ct-gestor'].forEach(function (i) { sv(i, ''); });
+    sv('ct-rep', ls('rh_ctr_rep')); sv('ct-sind', ls('rh_ctr_sind') || 'SINDICATO DOS EMPREGADOS NO COMÉRCIO DE GUARULHOS'); sv('ct-e-tel', ls('rh_ctr_etel')); sv('ct-e-mail', ls('rh_ctr_email')); sv('ct-prazo', ls('rh_ctr_prazo') || 'prazo indeterminado');
     if (m) { var r = document.querySelector('input[name="ct-mod"][value="' + m + '"]'); if (r) r.checked = true; }
     el('ct-f-func').innerHTML = ''; ctrFiltro('ini'); ctrModelo(); ctrLocal(); ctrDatas();
     if (E.length === 1) { el('ct-f-emp').value = E[0].id; ctrFiltro('emp'); }
@@ -25381,6 +25423,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   function dataExt(i) { if (!i) return '____ de ______________ de ______'; var p = i.split('-'); return +p[2] + ' de ' + MESES[+p[1] - 1] + ' de ' + p[0]; }
   function ass(L) { return '<table class="ass">' + L.map(function (x) { return '<tr><td><div class="l"></div>' + x + '</td></tr>'; }).join('') + '</table>'; }
   function corpo(d) {
+    if (MODELOS[d.mod] && MODELOS[d.mod].g) return corpoDoc(d);
     var M = d.mod, H = M === 'hibrido', MO = M === 'motorista', P = function (t, cl) { return '<p class="' + (cl || 'c') + '">' + t + '</p>'; }, n = 0, cl = function (tit) { n++; return '<b>' + n + ' – ' + tit + '.</b> '; };
     var a2 = d.ini ? soma(d.ini, 44) : '', b1 = d.ini ? soma(d.ini, 45) : '', b2 = d.ini ? soma(d.ini, 89) : '';
     var dd = function (x) { return x ? '<b>' + br(x) + '</b>' : '___/___/______'; };
@@ -25462,13 +25505,168 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     }
     return s;
   }
+  // ═══ DOCUMENTOS ADMISSIONAIS (modelos BIN): acordos de horas, oposição sindical, VT, IR, ficha de registro, imagem, LGPD e descrição de cargo ═══
+  var CARGOS = [
+    { k: 'gerente', t: 'Gerente de Loja', re: /^(gerente|gerente de loja)$|^gerente\b(?!.*sub)/i, missao: 'responder pelo resultado, pela equipe e pelo funcionamento diário de uma loja da BIN Embalagens.', rep: 'diretoria', cbo: '1414-15 (gerente de loja e supermercado)',
+      p: ['Abrir e fechar a loja, conferir alarme, chaves e condições do ambiente.', 'Organizar escalas, folgas e distribuição de tarefas da equipe; acompanhar pontualidade e registro de ponto.', 'Acompanhar vendas, metas, preços e promoções; conferir fechamento e sangria dos caixas.', 'Fazer pedidos de reposição, receber e conferir mercadorias junto ao estoque.', 'Atender clientes, resolver reclamações, trocas e negociações de maior valor.', 'Treinar novos colaboradores e repassar ao RH ocorrências, advertências e necessidades de contratação.'],
+      c: ['Atender no balcão e operar o caixa quando necessário.', 'Preparar e servir café para equipe e clientes e zelar pela organização da copa.', 'Apoiar reposição de prateleiras e organização do estoque.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza da loja (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo; experiência em varejo com liderança de equipe.' },
+    { k: 'subgerente', t: 'Subgerente de Loja', re: /sub\s*-?\s*gerente/i, missao: 'apoiar o gerente na gestão da loja e substituí-lo em folgas, férias e ausências.', rep: 'gerente de loja', cbo: '',
+      p: ['Coordenar a equipe no turno, distribuir tarefas e acompanhar o atendimento.', 'Abrir e fechar a loja na ausência do gerente; conferir fechamento de caixa.', 'Acompanhar recebimento de mercadorias, reposição e ruptura de produtos.', 'Resolver dúvidas de clientes, trocas e situações que exijam autorização.'],
+      c: ['Atender clientes, operar o caixa, repor mercadorias e apoiar o estoque.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza do salão e da área de trabalho (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo; experiência em varejo.' },
+    { k: 'caixa', t: 'Operador(a) de Caixa', re: /caixa/i, missao: 'registrar as vendas e receber os pagamentos com precisão e bom atendimento.', rep: 'gerente de loja', cbo: '4211-25 (operador de caixa)',
+      p: ['Abrir e fechar o caixa, conferir troco inicial, sangrias e fechamento.', 'Registrar vendas, receber em dinheiro, cartão e PIX; emitir nota/cupom fiscal.', 'Conferir preços e quantidades, tirar dúvidas do cliente no momento da compra.', 'Embalar ou orientar o empacotamento das compras.'],
+      c: ['Atender clientes no salão e no balcão quando o caixa estiver sem movimento.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza do posto de caixa e da loja (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo; facilidade com números e atendimento.' },
+    { k: 'atendente', t: 'Atendente de Loja', re: /atendente|vendedor/i, missao: 'atender e orientar clientes na escolha dos produtos e manter a loja abastecida e organizada.', rep: 'gerente de loja', cbo: '5211-40 (atendente de lojas e mercados)',
+      p: ['Recepcionar clientes, apresentar produtos, informar preços e medidas e fazer orçamentos.', 'Separar pedidos e encaminhar o cliente ao caixa.', 'Repor prateleiras, conferir validade, etiquetas e preços.'],
+      c: ['Apoiar o estoque no recebimento, conferência e organização de mercadorias.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza do salão, prateleiras, balcão e vitrine (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino fundamental completo (ensino médio desejável); gosto por atendimento.' },
+    { k: 'auxloja', t: 'Auxiliar de Loja e Estoque', re: /ajudante|auxiliar de loja|estoquista|repositor/i, missao: 'manter o estoque organizado e as prateleiras abastecidas, apoiando o atendimento.', rep: 'encarregado de estoque ou gerente de loja', cbo: '5211-25 (repositor de mercadorias)',
+      p: ['Receber, conferir, descarregar e armazenar mercadorias.', 'Repor prateleiras e manter o estoque organizado por tipo e giro.', 'Separar pedidos e auxiliar no carregamento das entregas.'],
+      c: ['Atender clientes na loja, informar preços e ajudar a localizar produtos.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza do estoque, corredores e salão (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino fundamental; disposição para atividade física (respeitados os limites legais de peso).' },
+    { k: 'encestoque', t: 'Encarregado(a) de Estoque', re: /enc(\.|arregad[oa])?\s*(de\s*)?estoque/i, missao: 'controlar entradas, saídas e organização do estoque da loja.', rep: 'gerente de loja', cbo: '4141-05 (almoxarife)',
+      p: ['Receber fornecedores, conferir notas fiscais e quantidades.', 'Controlar nível de estoque, apontar faltas e sugerir pedidos ao gerente.', 'Organizar o estoque, orientar os auxiliares e fazer inventários periódicos.'],
+      c: ['Atender clientes, repor prateleiras e apoiar o caixa quando necessário.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza e da segurança da área de estoque (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo; experiência com estoque.' },
+    { k: 'empacotador', t: 'Empacotador(a)', re: /empacotador/i, missao: 'embalar e preparar as compras e pedidos para retirada ou entrega.', rep: 'gerente de loja', cbo: '',
+      p: ['Empacotar compras no caixa e montar pedidos para entrega.', 'Fracionar e embalar produtos conforme orientação.'],
+      c: ['Ajudar o cliente a levar compras até a saída; repor mercadorias leves.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza da área de empacotamento e da loja (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino fundamental.' },
+    { k: 'motorista', t: 'Motorista', re: /motorista/i, missao: 'fazer entregas e transferir mercadorias entre lojas com segurança.', rep: 'gerente de loja', cbo: '',
+      p: ['Dirigir o veículo da empresa em entregas a clientes e transferências entre lojas.', 'Conferir, carregar e descarregar mercadorias; colher assinatura de recebimento.', 'Verificar condições do veículo, documentos e abastecimento; comunicar avarias.'],
+      c: ['Apoiar o estoque e a reposição entre uma entrega e outra.', 'Prestar assistência geral à loja, apoiando as demais funções conforme a necessidade do dia.', 'Organização e manutenção da limpeza do veículo e da área de carga e descarga (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'CNH na categoria do veículo; experiência comprovada.' },
+    { k: 'auxadm', t: 'Auxiliar Administrativo', re: /auxiliar (de )?escrit|escrit[oó]rio\s*\/?\s*financeiro|auxiliar administrativ/i, missao: 'executar rotinas administrativas e financeiras do escritório.', rep: 'encarregado administrativo', cbo: '',
+      p: ['Lançar contas a pagar e a receber, conferir boletos, notas e extratos.', 'Arquivar documentos, emitir relatórios e atender fornecedores e lojas.', 'Apoiar o RH e a contabilidade no envio de documentos.'],
+      c: ['Apoiar outras áreas administrativas.', 'Prestar assistência geral à loja quando necessário.', 'Organização e manutenção da limpeza do escritório (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo; informática básica (planilhas).' },
+    { k: 'encadm', t: 'Encarregado(a) Administrativo', re: /encarregad[oa] (de )?(escrit|administ)/i, missao: 'coordenar o escritório e as rotinas financeiras e administrativas da empresa.', rep: 'diretoria', cbo: '',
+      p: ['Coordenar os auxiliares administrativos e distribuir as rotinas.', 'Controlar fluxo de caixa, pagamentos, conciliação bancária e fechamento mensal.', 'Ser ponto de contato com contabilidade, bancos e fornecedores.'],
+      c: ['Prestar assistência geral à loja quando necessário.', 'Organização e manutenção da limpeza do escritório (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino médio completo (superior desejável); experiência em rotinas financeiras.' },
+    { k: 'rh', t: 'Analista de RH', re: /\brh\b|recursos humanos/i, missao: 'conduzir os processos de pessoas da empresa.', rep: 'diretoria', cbo: '',
+      p: ['Recrutar e selecionar, admitir e integrar novos colaboradores.', 'Controlar ponto, férias, afastamentos e documentação, em conjunto com a contabilidade.', 'Manter descrições de cargos, políticas internas e programas de reconhecimento.', 'Orientar gerentes em questões disciplinares e trabalhistas.'],
+      c: ['Prestar assistência geral à loja quando necessário.', 'Organização e manutenção da limpeza do escritório (limpeza leve).', 'Outras atividades correlatas e compatíveis com o cargo, conforme orientação da liderança.'],
+      req: 'ensino superior em andamento ou completo (RH, Administração, Psicologia ou similar).' }
+  ];
+  function cargoDe(nome) { nome = String(nome || ''); var ord = ['subgerente', 'encestoque', 'encadm', 'auxadm', 'rh', 'motorista', 'empacotador', 'caixa', 'auxloja', 'atendente', 'gerente']; for (var i = 0; i < ord.length; i++) { var c = CARGOS.find(function (x) { return x.k === ord[i]; }); if (c.re.test(nome)) return c.k; } return ''; }
+  function ass2(L) { var s = '<table class="ass2">'; for (var i = 0; i < L.length; i += 2) s += '<tr><td><div class="l"></div>' + L[i] + '</td><td>' + (L[i + 1] != null ? '<div class="l"></div>' + L[i + 1] : '') + '</td></tr>'; return s + '</table>'; }
+  function cx(x) { return '(' + (x ? 'X' : '&nbsp;&nbsp;') + ')'; }
+  function v_(x, w) { return x ? '<b>' + esc(x) + '</b>' : '<span class="ln" style="min-width:' + (w || 120) + 'px"></span>'; }
+  function hm(t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; }
+  function prorExtra(J) { var a = hm(J.e1), b = hm(J.e2), c = hm(J.i1), d = hm(J.i2); if (a == null || b == null) return ''; var t = b - a - ((c != null && d != null && d > c) ? d - c : 0) - 480; if (t <= 0) return ''; var h = Math.floor(t / 60), m = t % 60; return (h ? h + (h > 1 ? ' horas' : ' hora') : '') + (h && m ? ' e ' : '') + (m ? m + ' minutos' : ''); }
+  function linhaDados(L) { return '<table class="fx">' + L.map(function (r) { return '<tr>' + r.map(function (c) { return '<td' + (c[2] ? ' colspan="' + c[2] + '"' : '') + '><span class="lb">' + c[0] + '</span><span class="vl">' + (c[1] ? esc(c[1]) : '&nbsp;') + '</span></td>'; }).join('') + '</tr>'; }).join('') + '</table>'; }
+  function corpoDoc(d) {
+    var M = d.mod, P = function (t, cl) { return '<p class="' + (cl || 'c') + '">' + t + '</p>'; }, s = P(MODELOS[M].t, 'tit');
+    var local = (d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(d.data) + '.', J = d.jor || {}, hh = function (a, b) { return a && b ? a + ' às ' + b : '____:____ às ____:____'; };
+    var empTxt = 'a empresa ' + c(d.eRazao) + ' com estabelecimento em ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : '') + ', inscrita no CNPJ sob nº ' + c(d.eCnpj);
+    var ctps = d.ctps || (d.nome ? 'CTPS Digital' : '');
+    if (M === 'comp') {
+      s += P('Entre ' + empTxt + ', neste ato representada pelo(a) Sr.(a) ' + c(d.rep) + ', e seu(sua) empregado(a) ' + c(d.nome) + ', portador(a) da Carteira de Trabalho e Previdência Social nº/série ' + c(ctps) + ', fica convencionado, de acordo com o disposto no art. 59 e seu § 2º da Consolidação das Leis do Trabalho (Decreto-Lei nº 5.452, de 1º de maio de 1943), que o horário semanal de trabalho será o seguinte:');
+      s += P('O horário de trabalho durante a vigência deste acordo será:');
+      s += '<table class="jor"><tr><th>Dia</th><th>Expediente</th><th>Intervalo</th></tr><tr><td>Segunda a sexta-feira</td><td>' + hh(J.e1, J.e2) + '</td><td>' + hh(J.i1, J.i2) + '</td></tr><tr><td>Sábado</td><td>' + esc(J.sab || '') + '&nbsp;</td><td>' + esc(J.sabi || '') + '&nbsp;</td></tr><tr><td>Domingo</td><td>' + esc(J.dom || 'Folga') + '</td><td>' + esc(J.domi || '—') + '</td></tr></table>';
+      s += P('Este acordo, em 2 (duas) vias, vigorará pelo prazo de ' + c(d.prazo, 'prazo ______________________') + '.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR', '1ª Testemunha – nome e CPF', '2ª Testemunha – nome e CPF']) + '</div>';
+    } else if (M === 'prorhe') {
+      var ext = d.prorExt || prorExtra(J);
+      s += P('Pelo presente acordo de prorrogação de horas trabalhadas, firmado entre ' + empTxt + ', neste ato representada pelo(a) Sr.(a) ' + c(d.rep) + ', e seu(sua) empregado(a) ' + c(d.nome) + ', portador(a) da Carteira de Trabalho e Previdência Social nº ' + c(ctps) + ', fica convencionado, de acordo com o disposto no art. 59 e seu § 1º da Consolidação das Leis do Trabalho, o seguinte:');
+      s += P('– A duração do trabalho diário será prorrogada por mais ' + c(ext, '____ hora(s) e ____ minutos') + '.', 'c it');
+      s += P('– O horário de trabalho durante a vigência deste acordo será das ' + (J.e1 && J.i1 ? '<b>' + J.e1 + '</b> até <b>' + J.i1 + '</b>' : '____:____ até ____:____') + ' e das ' + (J.i2 && J.e2 ? '<b>' + J.i2 + '</b> até <b>' + J.e2 + '</b>' : '____:____ até ____:____') + '.', 'c it');
+      s += P('E, por estarem de pleno acordo, as partes contratantes assinam o presente acordo, em 2 (duas) vias, o qual vigorará a partir de ' + (d.ini ? '<b>' + br(d.ini) + '</b>' : '___/___/______') + ' e pelo prazo de ' + c(d.prazo, '______________________') + '.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
+    } else if (M === 'oposicao') {
+      s = P('DECLARAÇÃO', 'tit') + P('CARTA DE OPOSIÇÃO À CONTRIBUIÇÃO SINDICAL', 'sub') + P(local, 'c dt') + P('<b>Sindicato:</b> ' + c(d.sind, '__________________________________________________'));
+      s += P('Eu, ' + c(d.nome) + ', portador(a) da CTPS nº ' + c(ctps) + ', CPF ' + c(d.cpf) + ', regularmente registrado(a) na empresa ' + c(d.eRazao) + ', CNPJ nº ' + c(d.eCnpj) + ', com sede à ' + c(d.eEnd) + (d.eCid ? ' – ' + c(d.eCid) : '') + ', não sindicalizado(a), manifesto <b>oposição ao desconto em folha de pagamento</b> a título de Contribuição Assistencial, Confederativa ou outras contribuições.');
+      s += P('Atenciosamente,') + '<div class="nb">' + ass([(d.nome ? esc(d.nome) : 'Nome do(a) empregado(a)') + '<br>CPF: ' + (d.cpf ? esc(d.cpf) : '________________')]) + '</div>';
+    } else if (M === 'vt') {
+      s += '<div class="box"><b>À Empresa:</b> ' + v_(d.eRazao, 260) + ' · CNPJ ' + v_(d.eCnpj, 120) + '<br><b>Endereço:</b> ' + v_(d.eEnd, 300) + (d.eCid ? ' · ' + esc(d.eCid) : '') + '</div>';
+      s += linhaDados([[['Empregado(a)', d.nome, 2], ['RG', d.rg]], [['Função', d.cargo], ['CTPS', ctps], ['CPF', d.cpf]]]);
+      s += P(cx(false) + ' Opto pela utilização do Vale-Transporte &nbsp;&nbsp;&nbsp;&nbsp; ' + cx(false) + ' Não opto pela utilização do Vale-Transporte', 'c op');
+      s += P('Nos termos do art. 7º do Decreto nº 95.247, de 17 de novembro de 1987, solicito receber o Vale-Transporte e comprometo-me a:');
+      ['a) utilizá-lo exclusivamente para meu efetivo deslocamento residência–trabalho e vice-versa;', 'b) renovar anualmente, ou sempre que ocorrer alteração, a informação sobre meu endereço residencial e os serviços e meios de transporte mais adequados ao meu deslocamento residência–trabalho e vice-versa;', 'c) autorizar o desconto de até 6% (seis por cento) do meu salário básico mensal para o custeio do Vale-Transporte (art. 9º do Decreto nº 95.247/87);', 'd) declaro estar ciente de que a declaração falsa ou o uso indevido do Vale-Transporte constituem falta grave (art. 7º, § 3º, do Decreto nº 95.247/87).'].forEach(function (t) { s += P(t, 'c it'); });
+      s += '<p class="c"><b>Minha residência atual:</b></p>' + linhaDados([[['Endereço', d.rua, 2], ['Nº', d.num]], [['Complemento', d.compl], ['Bairro', d.bairro, 2]], [['Cidade', d.cidade], ['UF', d.uf], ['CEP', d.cep]]]);
+      var mt = ['INTEGRAÇÃO ÔNIBUS/METRÔ', 'INTEGRAÇÃO ÔNIBUS/TREM', 'ÔNIBUS MUNICIPAL', 'ÔNIBUS INTERMUNICIPAL', 'METRÔ OU TREM', 'OUTROS'];
+      s += '<table class="jor"><tr><th>Meio de transporte – IDA</th><th style="width:16%">Valor R$</th><th>Meio de transporte – VOLTA</th><th style="width:16%">Valor R$</th></tr>' + mt.map(function (t) { return '<tr><td>( &nbsp; ) ' + t + '</td><td></td><td>( &nbsp; ) ' + t + '</td><td></td></tr>'; }).join('') + '</table>';
+      s += P('<b>Tipo de cartão:</b> ( &nbsp; ) Bilhete Único &nbsp; ( &nbsp; ) Cartão BOM &nbsp; ( &nbsp; ) Cartão Dia Fácil &nbsp; ( &nbsp; ) Outros: ____________ &nbsp;&nbsp; Utilizando diariamente ______ conduções para locomover-me de minha residência ao trabalho e vice-versa.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'Assinatura do(a) empregado(a)']) + '</div>';
+    } else if (M === 'ir') {
+      var D = String(d.deps || '').split(/\n/).map(function (l) { return l.split(/\s*[;|]\s*/); }).filter(function (r) { return r[0] && r[0].trim(); });
+      while (D.length < 4) D.push(['', '', '']);
+      s += linhaDados([[['Empresa', d.eRazao, 2], ['CNPJ', d.eCnpj]], [['Endereço', [d.eEnd, d.eCid].filter(Boolean).join(' – '), 3]]]);
+      s += P('Em obediência à legislação do Imposto de Renda, venho pela presente informar-lhes que tenho, como encargo(s) de família, a(s) pessoa(s) abaixo relacionada(s):');
+      s += '<table class="jor"><tr><th style="width:6%">Nº</th><th>Nome do dependente</th><th style="width:30%">Relação de dependência</th><th style="width:18%">Data de nascimento</th></tr>' + D.map(function (r, i) { return '<tr><td>' + (r[0] ? i + 1 : '&nbsp;') + '</td><td>' + esc(r[0] || '') + '</td><td>' + esc(r[1] || '') + '</td><td>' + esc(r[2] || '') + '</td></tr>'; }).join('') + '</table>';
+      s += P('Declaro, sob as penas da lei, que as informações aqui prestadas são verdadeiras e de minha inteira responsabilidade, não cabendo a V.Sª(s) (fonte pagadora) qualquer responsabilidade perante a fiscalização.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'Assinatura do(a) declarante']) + '</div>';
+      s += linhaDados([[['Declarante', d.nome, 2], ['CPF', d.cpf]], [['Endereço', [d.rua, d.num, d.bairro].filter(Boolean).join(', '), 2], ['CEP', d.cep]], [['Cidade/UF', [d.cidade, d.uf].filter(Boolean).join(' - ')], ['Estado civil', d.ec], ['CTPS', ctps]]]);
+      s += P('Sempre que ocorrer alteração nesta declaração, a mesma deverá ser renovada.', 'c sub');
+    } else if (M === 'ficha') {
+      s = '<div class="fhd"><div><p class="tit" style="text-align:left;margin:0 0 4pt;">REGISTRO DE EMPREGADO</p><div style="font-size:9.5pt;">Matrícula / eSocial nº: <b>' + esc(d.mat || '') + '</b></div></div><div class="ft">' + (d.foto ? '<img src="' + d.foto + '">' : 'FOTO<br>3×4') + '</div></div>';
+      s += '<div class="sec">EMPREGADOR</div>' + linhaDados([[['Razão social', d.eRazao, 2], ['CNPJ', d.eCnpj]], [['Endereço', [d.eEnd, d.eCid].filter(Boolean).join(' – '), 3]]]);
+      s += '<div class="sec">EMPREGADO</div>' + linhaDados([
+        [['Nome', d.nome, 2], ['Beneficiários / dependentes', String(d.deps || '').split(/\n/).map(function (l) { return l.split(/\s*[;|]\s*/)[0]; }).filter(Boolean).join(', ')]],
+        [['Residência', [d.rua, d.num, d.compl, d.bairro, d.cidade, d.uf].filter(Boolean).join(', ') + (d.cep ? ' – CEP ' + d.cep : ''), 3]],
+        [['Data de nascimento', br(d.nas)], ['Local de nascimento', d.natural], ['Nacionalidade', d.nacion || 'BRASILEIRA']],
+        [['Estado civil', d.ec], ['Sexo', d.sexo], ['Cor/raça', d.cor]],
+        [['Pai', d.pai, 2], ['Grau de instrução', d.escol]], [['Mãe', d.mae, 2], ['Deficiência', d.defic]],
+        [['RG / órgão emissor', d.rg], ['Data de emissão', br(d.rgEm)], ['Título eleitoral / zona / seção', d.titulo]],
+        [['CTPS / série', ctps], ['CPF', d.cpf], ['CNH / categoria', [d.cnh, d.cnhCat].filter(Boolean).join(' – ')]],
+        [['PIS', d.pis], ['Telefone residencial', d.telRes], ['Celular', d.tel]]]);
+      s += '<div class="sec">CONTRATO</div>' + linhaDados([
+        [['Cargo / função', d.cargo, 2], ['CBO', d.cbo]],
+        [['Data de admissão', br(d.ini)], ['Salário', d.sal ? 'R$ ' + d.sal + ' por mês' : ''], ['Opção FGTS', br(d.ini)]],
+        [['Horário de trabalho', J.e1 && J.e2 ? 'das ' + J.e1 + ' às ' + J.e2 : ''], ['Intervalo', J.i1 && J.i2 ? 'das ' + J.i1 + ' às ' + J.i2 : ''], ['Sábado / domingo', [J.sab, J.dom].filter(Boolean).join(' / ')]],
+        [['Banco / agência / conta', d.banco, 3]]]);
+      s += '<div class="sec">ALTERAÇÕES DE SALÁRIO, CARGO E/OU FUNÇÃO</div><table class="jor fb"><tr><th>Data</th><th>Cargo / função</th><th>Salário</th></tr><tr><td>&nbsp;</td><td></td><td></td></tr><tr><td>&nbsp;</td><td></td><td></td></tr></table>';
+      s += '<div class="sec">FÉRIAS</div><table class="jor fb"><tr><th>Período aquisitivo</th><th>Período de gozo</th><th>Abono pecuniário</th></tr><tr><td>&nbsp;</td><td></td><td></td></tr><tr><td>&nbsp;</td><td></td><td></td></tr></table>';
+      s += '<div class="sec">OBSERVAÇÕES (advertências, suspensões, transferências, acidentes de trabalho etc.)</div><table class="jor fb"><tr><td>&nbsp;</td></tr><tr><td>&nbsp;</td></tr></table>';
+      s += '<div class="sec">RESCISÃO DO CONTRATO DE TRABALHO</div>' + linhaDados([[['Data da saída', ''], ['Data do aviso', ''], ['Tipo de desligamento', '']]]);
+      s += '<div class="nb">' + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
+    } else if (M === 'imagem') {
+      s = P('AUTORIZAÇÃO PARA USO DA IMAGEM', 'tit');
+      s += P('Eu, ' + c(d.nome) + ', nascido(a) em ' + (d.nas ? '<b>' + br(d.nas) + '</b>' : '___/___/______') + ', na função de ' + c(d.cargo) + ', portador(a) da Cédula de Identidade RG nº ' + c(d.rg) + ', inscrito(a) no CPF/MF sob nº ' + c(d.cpf) + ', CTPS nº ' + c(ctps) + ', residente à ' + c(d.rua) + ', nº ' + c(d.num, '______') + ', bairro ' + c(d.bairro) + ', cidade ' + c(d.cidade) + '/' + c(d.uf, 'SP') + ', <b>AUTORIZO</b> o uso de minha imagem e voz, em todo e qualquer material entre fotos, sites, documentos e outros meios de comunicação, para interesse desta empresa ' + c(d.eRazao) + ', com sede na ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : '') + ', inscrita no CNPJ/MF sob o nº ' + c(d.eCnpj) + ', sejam essas destinadas à divulgação ao público em geral e/ou apenas para uso próprio da empresa, e desde que não haja desvirtuamento da sua finalidade.');
+      s += P('A presente autorização é concedida a título gratuito, abrangendo o uso da imagem acima mencionada em todo território nacional e no exterior, sob qualquer forma e meios, ou sejam, em destaque: (I) outdoor; (II) busdoor; folhetos em geral (encartes, mala direta, catálogo etc.); (III) folder de apresentação; (IV) anúncios em revistas e jornais em geral; (V) home page; (VI) cartazes; (VII) back-light; (VIII) mídia eletrônica (painéis, vídeos, televisão, cinema, programa para rádio, redes sociais, entre outros).');
+      s += P('Por esta ser a expressão da minha vontade, declaro que autorizo o uso acima descrito sem que nada haja a ser reclamado a título de direitos conexos à minha imagem ou a qualquer outro, e assino a presente autorização em 2 (duas) vias de igual teor e forma.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'Assinatura do(a) empregado(a)']) + '</div>';
+    } else if (M === 'lgpd') {
+      s += P('Este documento visa registrar a manifestação livre, informada e inequívoca pela qual o Titular concorda com o tratamento de seus dados pessoais para finalidade específica, em conformidade com a Lei nº 13.709/2018 – Lei Geral de Proteção de Dados Pessoais (LGPD).');
+      s += '<div class="sec">TITULAR</div>' + linhaDados([[['Nome', d.nome, 3]], [['RG', d.rg], ['CPF', d.cpf], ['Cargo', d.cargo]]]);
+      s += P('Ao assinar o presente termo, o Titular consente e concorda que a empresa ' + c(d.eRazao) + ', CNPJ nº ' + c(d.eCnpj) + ', com sede na ' + c(d.eEnd) + (d.eCid ? ' – ' + c(d.eCid) : '') + ', telefone ' + c(d.eTel, '______________') + ', e-mail ' + c(d.eMail, '______________________') + ', doravante denominada <b>Controlador</b>, tome decisões referentes ao tratamento de seus dados pessoais, bem como realize o tratamento de seus dados pessoais, envolvendo operações como as que se referem a coleta, produção, recepção, classificação, utilização, acesso, reprodução, transmissão, distribuição, processamento, arquivamento, armazenamento, eliminação, avaliação ou controle da informação, modificação, comunicação, transferência, difusão ou extração.');
+      s += '<div class="sec">DADOS PESSOAIS</div>' + P('O Controlador fica autorizado a tomar decisões referentes ao tratamento e a realizar o tratamento dos seguintes dados pessoais do Titular:') + '<ul>' + ['Nome completo.', 'Data de nascimento.', 'Número e imagem da Carteira de Identidade (RG).', 'Número e imagem do Cadastro de Pessoas Físicas (CPF).', 'Número e imagem da Carteira Nacional de Habilitação (CNH).', 'Fotografia 3x4.', 'Estado civil.', 'Nível de instrução ou escolaridade.', 'Endereço completo.', 'Números de telefone, WhatsApp e endereços de e-mail.', 'Registros de marcação de ponto.', 'Documentos relacionados a seu contrato de trabalho.'].map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+      s += '<div class="sec">FINALIDADES DO TRATAMENTO DOS DADOS</div>' + P('O tratamento dos dados pessoais listados neste termo tem as seguintes finalidades:') + '<ul>' + ['Possibilitar que o Controlador elabore contrato de trabalho ou qualquer outro documento relacionado ao seu registro na empresa;', 'Possibilitar que o Controlador utilize os dados pessoais para atualização, correção ou cadastro relacionado ao seu contrato de trabalho;', 'Possibilitar que o Controlador utilize as imagens e dados da marcação do ponto a fim de consultas e fechamento de folha para seu devido pagamento;', 'Possibilitar que o Controlador utilize os dados pessoais de forma confidencial para o que for necessário relacionado ao contrato de trabalho enquanto estiver registrado na empresa e, após seu desligamento, arquivar os documentos pelo tempo em que a lei exige a guarda.'].map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+      s += '<div class="sec">COMPARTILHAMENTO DE DADOS</div>' + P('O Controlador fica autorizado a compartilhar os dados pessoais do Titular com outros agentes de tratamento de dados, caso seja necessário para as finalidades listadas neste termo, observados os princípios e as garantias estabelecidas pela Lei nº 13.709.');
+      s += '<div class="sec">SEGURANÇA DOS DADOS</div>' + P('O Controlador responsabiliza-se pela manutenção de medidas de segurança, técnicas e administrativas aptas a proteger os dados pessoais de acessos não autorizados e de situações acidentais ou ilícitas de destruição, perda, alteração, comunicação ou qualquer forma de tratamento inadequado ou ilícito.') + P('Em conformidade ao art. 48 da Lei nº 13.709, o Controlador comunicará ao Titular e à Autoridade Nacional de Proteção de Dados (ANPD) a ocorrência de incidente de segurança que possa acarretar risco ou dano relevante ao Titular.');
+      s += '<div class="sec">TÉRMINO DO TRATAMENTO DOS DADOS</div>' + P('O Controlador poderá manter e tratar os dados pessoais do Titular durante todo o período em que os mesmos forem pertinentes ao alcance das finalidades listadas neste termo. Dados pessoais anonimizados, sem possibilidade de associação ao indivíduo, poderão ser mantidos por período indefinido.') + P('O Titular poderá solicitar via e-mail ou correspondência ao Controlador, a qualquer momento, que sejam eliminados os dados pessoais não anonimizados do Titular. O Titular fica ciente de que poderá ser inviável ao Controlador continuar o fornecimento de produtos ou serviços ao Titular a partir da eliminação dos dados pessoais.');
+      s += '<div class="sec">DIREITOS DO TITULAR</div>' + P('O Titular tem direito a obter do Controlador, em relação aos dados por ele tratados, a qualquer momento e mediante requisição: I – confirmação da existência de tratamento; II – acesso aos dados; III – correção de dados incompletos, inexatos ou desatualizados; IV – anonimização, bloqueio ou eliminação de dados desnecessários, excessivos ou tratados em desconformidade com o disposto na Lei nº 13.709; V – portabilidade dos dados a outro fornecedor de serviço ou produto, mediante requisição expressa, de acordo com a regulamentação da autoridade nacional, observados os segredos comercial e industrial; VI – eliminação dos dados pessoais tratados com o consentimento do titular, exceto nas hipóteses previstas no art. 16 da Lei nº 13.709; VII – informação das entidades públicas e privadas com as quais o controlador realizou uso compartilhado de dados; VIII – informação sobre a possibilidade de não fornecer consentimento e sobre as consequências da negativa; IX – revogação do consentimento, nos termos do § 5º do art. 8º da Lei nº 13.709.');
+      s += '<div class="sec">DIREITO DE REVOGAÇÃO DO CONSENTIMENTO</div>' + P('Este consentimento poderá ser revogado pelo Titular, a qualquer momento, mediante solicitação via e-mail ou correspondência ao Controlador.');
+      s += '<div class="nb">' + P(local, 'c dt') + ass([(d.nome ? esc(d.nome) : 'Nome do Titular') + '<br>Assinatura do Titular']) + '</div>';
+    } else if (M === 'cargo') {
+      var C = CARGOS.find(function (x) { return x.k === d.cargoK; }) || CARGOS[0];
+      s = P('DESCRIÇÃO DE CARGO', 'tit') + P(esc(C.t.toUpperCase()), 'sub');
+      s += linhaDados([[['Empresa', d.eRazao, 2], ['CNPJ', d.eCnpj]], [['Colaborador(a)', d.nome, 2], ['CPF', d.cpf]], [['Cargo', C.t], ['Departamento / loja', d.lLoja], ['Admissão', br(d.ini)]]]);
+      s += '<div class="sec">MISSÃO DO CARGO</div>' + P(C.missao.charAt(0).toUpperCase() + C.missao.slice(1));
+      s += P('<b>Reporta-se a:</b> ' + C.rep + '.' + (C.cbo ? ' &nbsp; <b>CBO:</b> ' + C.cbo + '.' : ''));
+      s += '<div class="sec">ATIVIDADES PRINCIPAIS</div><ul>' + C.p.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+      s += '<div class="sec">ATIVIDADES CORRELATAS</div><ul>' + C.c.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+      s += '<div class="sec">REQUISITOS</div>' + P(C.req.charAt(0).toUpperCase() + C.req.slice(1));
+      s += '<div class="nb"><div class="sec">CIÊNCIA DO(A) COLABORADOR(A)</div>' + P('Declaro que recebi, li e compreendi a descrição do cargo acima, comprometendo-me a desempenhar as atividades nela previstas, bem como as atividades correlatas e compatíveis com a minha condição pessoal, conforme orientação da liderança (art. 456, parágrafo único, da CLT).');
+      s += P(local, 'c dt') + ass2([d.nome ? esc(d.nome) + '<br>Colaborador(a)' : 'Colaborador(a)', (d.gestor ? esc(d.gestor) + '<br>' : '') + 'Gestor(a) imediato(a)', (d.rep ? esc(d.rep) + '<br>' : '') + 'Recursos Humanos / Empresa', null]) + '</div>';
+    }
+    return s;
+  }
   function pagina(d) {
-    var css = '.tit{font-weight:bold;text-align:center;font-size:13pt;margin:0 0 14pt;}.c{text-align:justify;margin:0 0 8pt;}.it{margin-left:18pt;}.dt{text-align:right;margin-top:14pt;}' +
+    var css = '.sub{text-align:center;font-weight:bold;font-size:11pt;margin:-8pt 0 12pt;color:#444;}.sec{font-weight:bold;font-size:10pt;color:#8b1a1a;border-bottom:1px solid #d9b3b3;margin:9pt 0 4pt;padding-bottom:1pt;}.box{border:1px solid #999;padding:5pt 7pt;margin:0 0 8pt;font-size:10.5pt;line-height:1.6;}' +
+      'table.fx{width:100%;border-collapse:collapse;margin:0 0 6pt;font-size:10pt;}table.fx td{border:1px solid #888;padding:2pt 5pt;vertical-align:top;}table.fx .lb{display:block;font-size:7.5pt;color:#666;text-transform:uppercase;}table.fx .vl{display:block;font-weight:bold;min-height:12pt;}' +
+      'table.ass2{width:100%;margin-top:8pt;border-collapse:collapse;}table.ass2 td{width:50%;padding:26pt 18pt 0;text-align:center;font-size:10pt;vertical-align:top;}table.ass2 .l{border-top:1px solid #000;margin-bottom:3pt;}.ln{display:inline-block;border-bottom:1px solid #000;}.op{font-size:11pt;margin:8pt 0;}' +
+      '.fhd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4pt;}.ft{width:3cm;height:4cm;border:1px solid #888;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8pt;color:#888;overflow:hidden;}.ft img{width:100%;height:100%;object-fit:cover;}table.fb td{height:14pt;}' +
+      '.tit{font-weight:bold;text-align:center;font-size:13pt;margin:0 0 14pt;}.c{text-align:justify;margin:0 0 8pt;}.it{margin-left:18pt;}.dt{text-align:right;margin-top:14pt;}' +
       'table.jor{width:100%;border-collapse:collapse;margin:2pt 0 8pt;font-size:10.5pt;}table.jor th,table.jor td{border:1px solid #555;padding:3pt 6pt;text-align:left;}table.jor th{background:#f2e3e3;}' +
       'table.ass{width:100%;margin-top:8pt;border-collapse:collapse;}table.ass td{padding:24pt 60pt 0;text-align:center;font-size:10.5pt;}table.ass .l{border-top:1px solid #000;margin-bottom:3pt;}' +
       '.pg{break-before:page;page-break-before:always;}.nb{break-inside:avoid;page-break-inside:avoid;}ul{margin:0 0 8pt;padding-left:22pt;}li{margin:0 0 3pt;text-align:justify;}' +
       '@page{margin-top:1.6cm;}@page :first{margin-top:0;}';
-    var tit = MODELOS[d.mod].n + (d.nome ? ' - ' + d.nome : '');
+    var tit = MODELOS[d.mod].n + (d.mod === 'cargo' ? ' - ' + ((CARGOS.find(function (x) { return x.k === d.cargoK; }) || {}).t || '') : '') + (d.nome ? ' - ' + d.nome : '');
     if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css, body: corpo(d) });
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(tit) + '</title><style>@page{size:A4;margin:2cm}body{font-family:Arial,sans-serif;font-size:11pt}' + css + '</style></head><body>' + corpo(d) + '</body></html>';
   }
@@ -25479,39 +25677,46 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       lEnd: v('ct-l-end'), lCid: v('ct-l-cid'), lTipo: v('ct-l-tipo'), lLoja: v('ct-l-loja'), gRazao: v('ct-l-grazao'), gCnpj: v('ct-l-gcnpj'),
       jor: { e1: v('ct-j-e1'), e2: v('ct-j-e2'), i1: v('ct-j-i1'), i2: v('ct-j-i2'), sab: v('ct-j-sab'), sabi: v('ct-j-sabi'), dom: v('ct-j-dom'), domi: v('ct-j-domi') },
       sal: v('ct-sal'), salExt: v('ct-salext'), ini: v('ct-ini'), hDias: v('ct-h-dias'), hAviso: v('ct-h-aviso'), hEq: v('ct-h-eq'), hAj: v('ct-h-aj'), hAjv: v('ct-h-ajv'),
-      cid: v('ct-cid'), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked
+      cid: v('ct-cid'), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked,
+      rep: v('ct-rep'), eTel: v('ct-e-tel'), eMail: v('ct-e-mail'), prazo: v('ct-prazo'), prorExt: v('ct-prorext'), sind: v('ct-sind').toUpperCase(), cargoK: v('ct-cargok'), gestor: v('ct-gestor').toUpperCase(),
+      rg: v('ct-rg'), rgEm: v('ct-rgem'), nas: v('ct-nas'), ec: v('ct-ec'), rua: v('ct-rua'), num: v('ct-num'), compl: v('ct-compl'), bairro: v('ct-bairro'), cidade: v('ct-cidade'), uf: v('ct-uf'), cep: v('ct-cep'),
+      sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || ''
     };
   }
   window.ctrGerar = function (branco) {
     var d;
-    if (branco) { d = { mod: mod(), jor: {}, prorr: el('ct-prorr').checked, menor: el('ct-menor').checked }; if (d.mod === 'hibrido') { d.hAj = ''; } _abrirDocSimples(pagina(d), MODELOS[d.mod].n.replace(/\s+/g, '_') + '_em_branco'); return; }
+    if (branco) { d = { mod: mod(), jor: {}, prorr: el('ct-prorr').checked, menor: el('ct-menor').checked, cargoK: v('ct-cargok') }; if (d.mod === 'hibrido') { d.hAj = ''; } _abrirDocSimples(pagina(d), MODELOS[d.mod].n.replace(/\s+/g, '_') + '_em_branco'); return; }
     d = coletar();
     if (!d.nome) { alert('Selecione o funcionário ou informe o nome do empregado.'); return; }
     if (!d.eRazao) { alert('Informe a empresa EMPREGADORA.'); return; }
-    if (!d.ini) { alert('Informe a data de início do contrato.'); el('ct-ini').focus(); return; }
+    if (ehCtr(d.mod) && !d.ini) { alert('Informe a data de início do contrato.'); el('ct-ini').focus(); return; }
+    if (d.rep) ls('rh_ctr_rep', d.rep); if (d.mod === 'oposicao' && d.sind) ls('rh_ctr_sind', d.sind); if (d.mod === 'lgpd') { ls('rh_ctr_etel', d.eTel); ls('rh_ctr_email', d.eMail); } if (d.mod === 'comp' || d.mod === 'prorhe') ls('rh_ctr_prazo', d.prazo);
     ls('rh_ctr_jor', JSON.stringify(d.jor)); if (d.mod === 'hibrido') { ls('rh_ctr_hdias', d.hDias); ls('rh_ctr_heq', d.hEq); }
     var H = DB.g(K_HIST); H.push(Object.assign({ id: nid(), em: new Date().toISOString() }, d)); DB.s(K_HIST, H);
     closeModal('modal-ctr');
-    _abrirDocSimples(pagina(d), (MODELOS[d.mod].n + '_' + d.nome).replace(/[\s\/–]+/g, '_'));
+    _abrirDocSimples(pagina(comFoto(d)), (MODELOS[d.mod].n + '_' + d.nome).replace(/[\s\/–()]+/g, '_'));
   };
   window.ctrHistorico = function () {
     injetar();
     var H = DB.g(K_HIST).slice().sort(function (a, b) { return (b.em || '').localeCompare(a.em || ''); });
-    el('ct-htab').innerHTML = H.length ? '<thead><tr><th>Gerado em</th><th>Contrato</th><th>Empregado(a)</th><th>Início</th><th></th></tr></thead><tbody>' + H.map(function (h) {
+    el('ct-htab').innerHTML = H.length ? '<thead><tr><th>Gerado em</th><th>Documento</th><th>Empregado(a)</th><th>Início</th><th></th></tr></thead><tbody>' + H.map(function (h) {
       return '<tr><td>' + esc(new Date(h.em).toLocaleString('pt-BR').slice(0, 17)) + '</td><td>' + esc((MODELOS[h.mod] || {}).n || '') + '</td><td>' + esc(h.nome) + '</td><td>' + br(h.ini) + '</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="ctrReabrir(\'' + h.id + '\')">📄 Abrir</button> <button class="btn-icon danger" title="Excluir do histórico" onclick="ctrHistExcluir(\'' + h.id + '\')">&#128465;</button></td></tr>';
     }).join('') + '</tbody>' : '<tr><td style="padding:18px;text-align:center;color:var(--gray-400);">Nenhum contrato gerado ainda.</td></tr>';
     openModal('modal-ctr-h');
   };
-  window.ctrReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(pagina(h), (MODELOS[h.mod].n + '_' + (h.nome || '')).replace(/[\s\/–]+/g, '_')); };
+  // a foto 3x4 (ficha de registro) vem do cadastro na hora de imprimir; não fica no histórico
+  function comFoto(d) { if (d && d.mod === 'ficha' && d.fid && typeof fotoStoreGet === 'function') { try { var f = fotoStoreGet(d.fid); if (f) return Object.assign({}, d, { foto: f }); } catch (e) {} } return d; }
+  window.ctrReabrir = function (id) { var h = DB.g(K_HIST).find(function (x) { return x.id === id; }); if (h) _abrirDocSimples(pagina(comFoto(h)), (MODELOS[h.mod].n + '_' + (h.nome || '')).replace(/[\s\/–]+/g, '_')); };
   window.ctrHistExcluir = function (id) { if (!confirm('Excluir este contrato do histórico?')) return; DB.s(K_HIST, DB.g(K_HIST).filter(function (x) { return x.id !== id; })); ctrHistorico(); };
 
   // ── cartão em Gerar Documentos ──
   function card() {
     var grid = el('doc-grid'); if (!grid || grid.querySelector('[data-docbase="contratos"]')) return;
-    var h = '<div class="trein-card" data-docbase="contratos" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">📝 Contratos</div><div class="tc-meta">Contrato de Experiência · Regime Híbrido · Motorista</div></div>' +
+    var h = '<div class="trein-card" data-docbase="contratos" style="border-left:4px solid ' + COR + ';"><div class="tc-header"><div><div class="tc-title">📁 Documentos admissionais</div><div class="tc-meta">Contratos de experiência · acordos de horas · VT · IR · ficha de registro · imagem · LGPD · descrição de cargo</div></div>' +
       '<button class="btn btn-outline btn-sm" title="Excluir este documento da lista" onclick="dmxExcluirBase(\'contratos\')">🗑️</button></div>' +
-      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Escolha o modelo, filtre por empresa e departamento, selecione o funcionário e confira os dados do contrato (jornada, salário, local de trabalho e datas de 45 + 45 dias). Sai no papel timbrado com a logo.</p>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + Object.keys(MODELOS).map(function (k, i) { return '<button class="btn ' + (i ? 'btn-outline' : 'btn-primary') + ' btn-sm"' + (i ? '' : ' style="background:' + COR + ';border-color:' + COR + ';"') + ' onclick="ctrAbrir(\'' + k + '\')">' + (k === 'padrao' ? '📝 Experiência' : k === 'hibrido' ? '🏠 Híbrido' : '🚚 Motorista') + '</button>'; }).join('') +
+      '<p style="font-size:13px;color:var(--gray-600);margin:8px 0;">Escolha o documento, filtre por empresa e departamento, selecione o funcionário e confira os dados (puxados do cadastro e editáveis). Sai no papel timbrado BIN com a logo e os campos de assinatura.</p>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + Object.keys(MODELOS).filter(ehCtr).map(function (k, i) { return '<button class="btn ' + (i ? 'btn-outline' : 'btn-primary') + ' btn-sm"' + (i ? '' : ' style="background:' + COR + ';border-color:' + COR + ';"') + ' onclick="ctrAbrir(\'' + k + '\')">' + (k === 'padrao' ? '📝 Experiência' : k === 'hibrido' ? '🏠 Híbrido' : '🚚 Motorista') + '</button>'; }).join('') +
+      '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + Object.keys(MODELOS).filter(function (k) { return !ehCtr(k); }).map(function (k) { var m = MODELOS[k]; return '<button class="btn btn-outline btn-sm" title="' + esc(m.n) + '" onclick="ctrAbrir(\'' + k + '\')">' + m.ic + ' ' + esc(m.n.replace(/^Declaração de |^Termo de |^Acordo de /, '').replace(' – Vale-Transporte', ' (VT)')) + '</button>'; }).join('') +
       '<button class="btn btn-outline btn-sm" onclick="ctrHistorico()">🗂️ Histórico</button></div></div>';
     grid.insertAdjacentHTML('afterbegin', h);
     try { if (typeof dmxRender === 'function') dmxRender(); } catch (e) {}
