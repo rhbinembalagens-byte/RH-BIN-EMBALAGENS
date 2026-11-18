@@ -7480,6 +7480,7 @@ async function _abrirDocFinal(docHTML, filename, f, sigMonica, sigBruno) {
   if (win) {
     win.document.write(finalHTML);
     win.document.close();
+    if (window.rhAdBotao) rhAdBotao(win, finalHTML, filename, f);
     setTimeout(function(){ win.focus(); win.print(); }, 700);
   }
 
@@ -13228,7 +13229,7 @@ var EMP_ENDERECO_PADRAO = '{{EMP_END}}';
 
 function _abrirDocSimples(docHTML, filename) {
   var w = window.open('', '_blank');
-  if (w) { w.document.write(docHTML); w.document.close(); setTimeout(function(){ w.print(); }, 700); }
+  if (w) { w.document.write(docHTML); w.document.close(); if (window.rhAdBotao) rhAdBotao(w, docHTML, filename); setTimeout(function(){ w.print(); }, 700); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -15685,7 +15686,7 @@ ${secoes.map(function (x) { return S(x[0], x[1], x[2]); }).join('')}
 
   function _abrirDocSimplesSemImprimir(html) {
     var w = window.open('', '_blank');
-    if (w) { w.document.write(html); w.document.close(); }
+    if (w) { w.document.write(html); w.document.close(); if (window.rhAdBotao) rhAdBotao(w, html, (String(html).match(/<title>([^<]*)<\/title>/i) || [])[1] || 'Documento'); }
     else alert('O navegador bloqueou a nova aba. Libere os pop-ups para este site.');
   }
 
@@ -26221,6 +26222,302 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   var _navA = window.nav;
   if (typeof _navA === 'function') window.nav = function () { var r = _navA.apply(this, arguments); try { injetar(); } catch (e) {} return r; };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(injetar, 50); }); else setTimeout(injetar, 50);
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   ASSINATURA DIGITAL PELO WHATSAPP (Autentique)
+   - Botão "📲 Enviar para assinatura" em todo documento gerado.
+   - O PDF vai para um Google Apps Script (intermediário) que guarda
+     o token da Autentique, envia ao funcionário e grava o PDF
+     assinado na pasta dele no Drive.
+   - Lista de envios com a situação: enviado, visualizado, assinado…
+   ════════════════════════════════════════════════════════════ */
+(function () {
+  var K = 'assin-digital', KC = 'assdig-cfg';
+  var H2P = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+  if (window.RT) {
+    if (RT.LIST && RT.LIST.indexOf(K) === -1) RT.LIST.push(K);
+    if (RT.OBJ && RT.OBJ.indexOf(KC) === -1) RT.OBJ.push(KC);
+    [K, KC].forEach(function (k) { if (RT.ALL && RT.ALL.indexOf(k) === -1) RT.ALL.push(k); });
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return ''; } }
+  function cfg() { try { var o = DB.go(KC); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch (e) { return {}; } }
+  function lista() { try { return DB.g(K) || []; } catch (e) { return []; } }
+  function salvarLista(L) { DB.s(K, L); }
+  function senha() { return ls('eq_assdig_senha') || (window.RHB && RHB.senha ? RHB.senha() : ''); }
+  function configurado() { return !!(cfg().url && senha()); }
+  function dig(s) { return String(s || '').replace(/\D/g, ''); }
+  function br(i) { if (!i) return ''; var d = new Date(i); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR'); }
+  function brh(i) { if (!i) return ''; var d = new Date(i); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+  function t(m, tipo) { if (typeof toast === 'function') toast(m, tipo); }
+
+  function call(obj) {
+    var u = cfg().url; if (!u) return Promise.reject(new Error('Endereço do Apps Script não configurado.'));
+    return fetch(u, { method: 'POST', body: JSON.stringify(Object.assign({ senha: senha() }, obj)), redirect: 'follow' })
+      .then(function (r) { if (!r.ok) throw new Error('Falha de rede (' + r.status + ')'); return r.json(); })
+      .then(function (j) {
+        if (j && j.erro === 'senha') throw new Error('Senha recusada pelo Apps Script de assinatura.');
+        if (!j || j.erro) throw new Error((j && j.erro) || 'Erro no servidor');
+        return j;
+      });
+  }
+  window.rhAdCall = call;
+
+  // ── Pessoas (CLT + sem registro + agência) ──
+  function pessoas() {
+    var P = [];
+    (DB.g('funcionarios') || []).forEach(function (f) { if (f && f.n && !/deslig/i.test(f.st || '')) P.push({ pk: f.id, nome: f.n, cpf: f.cpf || '', tel: f.tel || '', g: 'CLT' }); });
+    (DB.g('colab-ext') || []).forEach(function (c) { if (c && c.n && !/deslig|inativ/i.test(c.st || '')) P.push({ pk: 'x:' + c.id, nome: c.n, cpf: c.cpf || '', tel: c.tel || '', g: c.tipo === 'agencia' ? 'Agência' : 'Sem registro' }); });
+    P.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    return P;
+  }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  function acharNoDoc(html, P) {
+    var txt = norm(String(html || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' '));
+    var melhor = null; P.forEach(function (p) { var n = norm(p.nome); if (n.length > 5 && txt.indexOf(n) !== -1 && (!melhor || n.length > norm(melhor.nome).length)) melhor = p; });
+    return melhor;
+  }
+  function telFmt(s) { var d = dig(s).replace(/^55(?=\d{10,11}$)/, ''); return d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7) : d.length === 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6) : s || ''; }
+
+  // ── PDF a partir do documento aberto (mesma aparência da impressão) ──
+  function pagina(html) {
+    var css = (String(html).match(/<style[\s\S]*?<\/style>/gi) || []).join(' '), m, regs = /@page\s*(?::first)?\s*\{([^}]*)\}/gi, size = '', margin = null, mTop = null, r;
+    while ((r = regs.exec(css))) { if (/@page\s*:first/i.test(r[0])) continue; var b = r[1]; var s = b.match(/size\s*:\s*([^;]+)/i); if (s) size = s[1].trim(); var mg = b.match(/margin\s*:\s*([^;]+)/i); if (mg) margin = mg[1].trim(); var mt = b.match(/margin-top\s*:\s*([^;]+)/i); if (mt) mTop = mt[1].trim(); }
+    var land = /landscape/i.test(size), fmt = 'a4', mm = /([\d.]+)\s*(mm|cm)\s+([\d.]+)\s*(mm|cm)/i.exec(size);
+    if (mm) { var w = +mm[1] * (mm[2].toLowerCase() === 'cm' ? 10 : 1), h = +mm[3] * (mm[4].toLowerCase() === 'cm' ? 10 : 1); fmt = [w, h]; land = w > h; if (land) fmt = [h, w]; }
+    var conv = function (v) { var q = /([\d.]+)\s*(mm|cm|pt|in|px)?/i.exec(v); if (!q) return 0; var n = +q[1], u = (q[2] || 'px').toLowerCase(); return u === 'cm' ? n * 10 : u === 'pt' ? n * 0.3528 : u === 'in' ? n * 25.4 : u === 'px' ? n * 0.2646 : n; };
+    var M = [10, 10, 10, 10];
+    if (margin != null) { var p = margin.split(/\s+/).map(conv); M = p.length === 1 ? [p[0], p[0], p[0], p[0]] : p.length === 2 ? [p[0], p[1], p[0], p[1]] : p.length === 3 ? [p[0], p[1], p[2], p[1]] : p.slice(0, 4); }
+    if (mTop != null) M[0] = Math.max(M[0], conv(mTop));   // margem do topo das páginas seguintes
+    return { fmt: fmt, land: land, margin: M };
+  }
+  window.rhAdPagina = pagina;
+  var _h2pCode = null;
+  function codigoH2p() {
+    if (_h2pCode) return Promise.resolve(_h2pCode);
+    return fetch(H2P).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (t) { _h2pCode = t; return t; })
+      .catch(function () { throw new Error('Não consegui carregar o gerador de PDF (sem internet?).'); });
+  }
+  function carregarH2p(w) {
+    if (w.html2pdf) return Promise.resolve(w.html2pdf);
+    return codigoH2p().then(function (code) {
+      var s = w.document.createElement('script'); s.textContent = code; (w.document.head || w.document.body).appendChild(s);
+      if (!w.html2pdf) throw new Error('Falha ao preparar o gerador de PDF.');
+      return w.html2pdf;
+    });
+  }
+  function abToB64(ab) { var b = new Uint8Array(ab), s = '', i, c = 0x8000; for (i = 0; i < b.length; i += c) s += String.fromCharCode.apply(null, b.subarray(i, i + c)); return btoa(s); }
+  function gerarPdf(w, html) {
+    var pg = pagina(html);
+    return carregarH2p(w).then(function (h2p) {
+      // opções criadas no contexto do documento (listas de outra janela não são reconhecidas)
+      var opt = w.JSON.parse(JSON.stringify({
+        margin: [pg.margin[0], pg.margin[3], pg.margin[2], pg.margin[1]],
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: pg.fmt, orientation: pg.land ? 'landscape' : 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      }));
+      return h2p().set(opt).from(w.document.body).outputPdf('arraybuffer');
+    }).then(abToB64);
+  }
+  window.rhAdGerarPdf = gerarPdf;
+
+  // ── Envio ──
+  function enviar(o) {
+    // o: {pdf(b64), nome, pessoa{pk,nome,cpf}, tel, dias, exigirCpf}
+    return call({ acao: 'enviar', pdf: o.pdf, nome: o.nome, dias: o.dias, exigirCpf: o.exigirCpf, funcNome: o.pessoa.nome, signer: { nome: o.pessoa.nome, cpf: o.cpf, tel: o.tel } })
+      .then(function (j) {
+        var L = lista();
+        L.unshift({ id: j.id, doc: o.nome, pk: o.pessoa.pk, func: o.pessoa.nome, tel: dig(o.tel), em: new Date().toISOString(), prazo: j.prazo || '', st: 'enviado', link: j.link || '' });
+        salvarLista(L); render();
+        return j;
+      });
+  }
+
+  // ── Painel de envio (usado no documento aberto e no envio de PDF avulso) ──
+  function montarPainel(box, ctx) {
+    // ctx: { doc: Document, html, nome, pk, obterPdf: fn → Promise<b64>, aoEnviar }
+    var P = pessoas(), sel = ctx.pk ? P.filter(function (p) { return p.pk === ctx.pk; })[0] : acharNoDoc(ctx.html, P), c = cfg();
+    var grupos = {}; P.forEach(function (p) { (grupos[p.g] = grupos[p.g] || []).push(p); });
+    var st = 'width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin:3px 0 8px;font-family:inherit;';
+    if (!configurado()) {
+      box.innerHTML = '<div style="font-size:13px;line-height:1.5;">A assinatura digital ainda não está configurada.<br>No sistema, abra <strong>Gerar Documentos ▸ 📲 Assinaturas digitais</strong> e preencha o endereço do Apps Script.</div>';
+      return;
+    }
+    box.innerHTML =
+      '<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">📲 Enviar para assinatura (WhatsApp)</div>' +
+      '<label style="font-size:12px;color:#555;">Funcionário</label><select data-r="p" style="' + st + '"><option value="">— selecione —</option>' +
+      Object.keys(grupos).map(function (g) { return '<optgroup label="' + esc(g) + '">' + grupos[g].map(function (p) { return '<option value="' + esc(p.pk) + '"' + (sel && sel.pk === p.pk ? ' selected' : '') + '>' + esc(p.nome) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
+      '<div style="display:flex;gap:8px;"><div style="flex:1;"><label style="font-size:12px;color:#555;">WhatsApp</label><input data-r="tel" placeholder="(11) 99999-9999" style="' + st + '"></div>' +
+      '<div style="flex:1;"><label style="font-size:12px;color:#555;">CPF</label><input data-r="cpf" placeholder="000.000.000-00" style="' + st + '"></div></div>' +
+      '<label style="font-size:12px;color:#555;">Nome do documento</label><input data-r="nome" style="' + st + '" value="' + esc(String(ctx.nome || 'Documento').replace(/\.(pdf|html?)$/i, '').replace(/_/g, ' ')) + '">' +
+      '<div style="display:flex;gap:8px;align-items:center;"><label style="font-size:12px;color:#555;white-space:nowrap;">Link vale por</label><input data-r="dias" type="number" min="1" max="30" value="' + (+c.dias || 5) + '" style="' + st + 'width:70px;margin:0;"><span style="font-size:12px;color:#555;">dias</span></div>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin:8px 0;"><input type="checkbox" data-r="excpf" checked> Exigir o CPF do funcionário para assinar</label>' +
+      '<button data-r="ok" style="width:100%;padding:9px;border:0;border-radius:6px;background:#1f8a4c;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;">Enviar pelo WhatsApp</button>' +
+      '<div data-r="msg" style="font-size:12px;margin-top:8px;line-height:1.4;"></div>';
+    var q = function (r) { return box.querySelector('[data-r="' + r + '"]'); };
+    var preencher = function () { var p = P.filter(function (x) { return x.pk === q('p').value; })[0]; q('tel').value = p ? telFmt(p.tel) : ''; q('cpf').value = p ? p.cpf : ''; };
+    q('p').onchange = preencher; preencher();
+    q('ok').onclick = function () {
+      var p = P.filter(function (x) { return x.pk === q('p').value; })[0], tel = dig(q('tel').value).replace(/^55(?=\d{10,11}$)/, ''), msg = q('msg');
+      if (!p) { msg.innerHTML = '<span style="color:#c00;">Selecione o funcionário.</span>'; return; }
+      if (tel.length < 10 || tel.length > 11) { msg.innerHTML = '<span style="color:#c00;">Informe o WhatsApp com DDD.</span>'; return; }
+      if (q('excpf').checked && dig(q('cpf').value).length !== 11) { msg.innerHTML = '<span style="color:#c00;">CPF inválido. Corrija ou desmarque “Exigir o CPF”.</span>'; return; }
+      var b = q('ok'); b.disabled = true; b.style.opacity = '.6';
+      msg.innerHTML = '⏳ Gerando o PDF…';
+      Promise.resolve().then(ctx.obterPdf).then(function (pdf) {
+        msg.innerHTML = '⏳ Enviando para a Autentique…';
+        return enviar({ pdf: pdf, nome: q('nome').value.trim() || 'Documento', pessoa: p, cpf: q('cpf').value, tel: tel, dias: +q('dias').value || 5, exigirCpf: q('excpf').checked });
+      }).then(function (j) {
+        msg.innerHTML = '<span style="color:#1f8a4c;font-weight:bold;">✅ Enviado para ' + esc(p.nome) + ' pelo WhatsApp.</span><br>Prazo para assinar: ' + br(j.prazo) + '. Acompanhe em 📲 Assinaturas digitais.';
+        b.textContent = 'Enviado ✓';
+        if (ctx.aoEnviar) ctx.aoEnviar(j);
+        t('📲 Documento enviado para assinatura');
+      }).catch(function (e) {
+        b.disabled = false; b.style.opacity = '';
+        msg.innerHTML = '<span style="color:#c00;">❌ ' + esc(e.message || e) + '</span>';
+      });
+    };
+  }
+
+  // ── Botão no documento aberto ──
+  window.rhAdBotao = function (w, html, nome, f) {
+    try {
+      if (!w || !w.document || !w.document.body) return;
+      var d = w.document; if (d.getElementById('rhad-bar')) return;
+      var stl = d.createElement('style'); stl.textContent = '@media print{#rhad-bar{display:none!important}}'; (d.head || d.body).appendChild(stl);
+      var bar = d.createElement('div'); bar.id = 'rhad-bar'; bar.setAttribute('data-html2canvas-ignore', 'true');
+      bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483000;font-family:Arial,sans-serif;color:#222;';
+      bar.innerHTML = '<button type="button" style="padding:9px 14px;border:0;border-radius:20px;background:#1f8a4c;color:#fff;font-weight:bold;font-size:13px;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.25);">📲 Enviar para assinatura</button>' +
+        '<div style="display:none;position:absolute;right:0;top:44px;width:330px;background:#fff;border:1px solid #ddd;border-radius:10px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);"></div>';
+      d.body.appendChild(bar);
+      var btn = bar.firstChild, box = bar.lastChild, aberto = false;
+      btn.onclick = function () {
+        aberto = !aberto; box.style.display = aberto ? 'block' : 'none';
+        if (aberto && !box.innerHTML) montarPainel(box, { doc: d, html: html, nome: nome, pk: f && f.id ? f.id : '', obterPdf: function () { return gerarPdf(w, html); } });
+      };
+    } catch (e) { console.warn('rhAdBotao', e); }
+  };
+
+  // ── Tela "Assinaturas digitais" ──
+  var ST = { enviado: ['📤 Enviado', '#1565c0', '#e3f2fd'], visualizado: ['👀 Visualizado', '#6a1b9a', '#f3e5f5'], assinado: ['✅ Assinado', '#1b5e20', '#e8f5e9'], recusado: ['⛔ Recusado', '#b71c1c', '#ffebee'], expirado: ['⌛ Expirado', '#e65100', '#fff3e0'], cancelado: ['🚫 Cancelado', '#555', '#eee'], excluido: ['🚫 Excluído', '#555', '#eee'] };
+  function badge(s) { var x = ST[s] || [s || '—', '#555', '#eee']; return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:600;color:' + x[1] + ';background:' + x[2] + ';white-space:nowrap;">' + x[0] + '</span>'; }
+  function modal() {
+    var m = document.getElementById('rhad-bg'); if (m) return m;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="rhad-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10040;display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto;">' +
+      '<div style="background:#fff;border-radius:12px;max-width:980px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.25);">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;font-size:18px;">📲 Assinaturas digitais <small style="font-weight:normal;color:var(--gray-500);font-size:12px;">Autentique · WhatsApp</small></h3>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="rhAdAvulso()">📄 Enviar um PDF</button><button class="btn btn-outline btn-sm" onclick="rhAdAtualizar()">🔄 Atualizar situação</button><button class="btn btn-outline btn-sm" onclick="rhAdConfigToggle()">⚙️ Configuração</button><button class="btn btn-outline btn-sm" onclick="rhAdFechar()">✕</button></div></div>' +
+      '<p style="font-size:12.5px;color:var(--gray-600);margin:0 0 10px;">Para enviar, gere o documento normalmente e clique em <strong>📲 Enviar para assinatura</strong> no canto do documento. O PDF assinado é salvo na pasta do funcionário no Drive.</p>' +
+      '<div id="rhad-cfg" style="display:none;border:1px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:12px;background:var(--gray-50);"></div>' +
+      '<div id="rhad-avulso" style="display:none;border:1px solid var(--gray-200);border-radius:8px;padding:12px;margin-bottom:12px;max-width:420px;"></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"><input id="rhad-busca" placeholder="🔎 Buscar funcionário ou documento" oninput="rhAdRender()" style="flex:1;min-width:200px;"><select id="rhad-fst" onchange="rhAdRender()"><option value="">Todas as situações</option>' + Object.keys(ST).filter(function (k) { return k !== 'excluido'; }).map(function (k) { return '<option value="' + k + '">' + ST[k][0] + '</option>'; }).join('') + '</select></div>' +
+      '<div id="rhad-lista" style="overflow:auto;"></div><div id="rhad-msg" style="font-size:12px;color:var(--gray-600);margin-top:8px;"></div>' +
+      '</div></div>');
+    return document.getElementById('rhad-bg');
+  }
+  function render() {
+    var el = document.getElementById('rhad-lista'); if (!el) return;
+    var b = norm((document.getElementById('rhad-busca') || {}).value), fs = (document.getElementById('rhad-fst') || {}).value;
+    var L = lista().filter(function (r) { return (!b || norm(r.func + ' ' + r.doc).indexOf(b) !== -1) && (!fs || r.st === fs); });
+    var pend = lista().filter(function (r) { return r.st === 'enviado' || r.st === 'visualizado'; }).length;
+    document.querySelectorAll('.rhad-pend').forEach(function (s) { s.textContent = pend ? ' (' + pend + ')' : ''; });
+    if (!L.length) { el.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:24px;font-size:13px;">Nenhum documento enviado' + (b || fs ? ' com esse filtro' : ' ainda') + '.</div>'; return; }
+    el.innerHTML = '<table class="table" style="width:100%;font-size:12.5px;"><thead><tr><th>Enviado em</th><th>Funcionário</th><th>Documento</th><th>WhatsApp</th><th>Situação</th><th>Prazo</th><th></th></tr></thead><tbody>' +
+      L.map(function (r) {
+        var ac = '';
+        if (r.drive) ac += '<a class="btn btn-outline btn-sm" href="' + esc(r.drive) + '" target="_blank" rel="noopener" title="Abrir o PDF assinado no Drive">📂 PDF assinado</a> ';
+        if (r.link && (r.st === 'enviado' || r.st === 'visualizado')) ac += '<button class="btn btn-outline btn-sm" title="Copiar o link de assinatura" onclick="rhAdCopiar(\'' + esc(r.id) + '\')">🔗</button> ';
+        if (r.st === 'enviado' || r.st === 'visualizado') ac += '<button class="btn btn-outline btn-sm" title="Cancelar o envio" onclick="rhAdCancelar(\'' + esc(r.id) + '\')">🚫</button> ';
+        else ac += '<button class="btn btn-outline btn-sm" title="Tirar da lista" onclick="rhAdRemover(\'' + esc(r.id) + '\')">🗑️</button>';
+        return '<tr><td style="white-space:nowrap;">' + brh(r.em) + '</td><td>' + esc(r.func) + '</td><td>' + esc(r.doc) + '</td><td style="white-space:nowrap;">' + esc(telFmt(r.tel)) + '</td><td>' + badge(r.st) +
+          (r.st === 'assinado' && r.assinadoEm ? '<div style="font-size:11px;color:var(--gray-500);">' + brh(r.assinadoEm) + '</div>' : '') + (r.motivo ? '<div style="font-size:11px;color:#b71c1c;">' + esc(r.motivo) + '</div>' : '') + (r.erro ? '<div style="font-size:11px;color:#b71c1c;">' + esc(r.erro) + '</div>' : '') +
+          '</td><td style="white-space:nowrap;">' + br(r.prazo) + '</td><td style="white-space:nowrap;">' + ac + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  window.rhAdRender = render;
+  function renderCfg() {
+    var c = cfg(), el = document.getElementById('rhad-cfg'); if (!el) return;
+    el.innerHTML = '<div style="font-weight:600;margin-bottom:8px;">⚙️ Configuração</div>' +
+      '<div class="form-group"><label>Endereço do Apps Script de assinatura (termina com /exec)</label><input id="rhad-url" value="' + esc(c.url || '') + '" placeholder="https://script.google.com/macros/s/.../exec"></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;"><div class="form-group" style="flex:1;min-width:200px;"><label>Senha do Apps Script <small style="color:var(--gray-500);">(em branco = mesma senha da sincronização)</small></label><input id="rhad-senha" type="password" value="' + esc(ls('eq_assdig_senha')) + '" autocomplete="new-password"></div>' +
+      '<div class="form-group" style="width:150px;"><label>Link vale por (dias)</label><input id="rhad-dias" type="number" min="1" max="30" value="' + (+c.dias || 5) + '"></div></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="rhAdCfgSalvar()">💾 Salvar e testar</button><span id="rhad-cfg-msg" style="font-size:12.5px;"></span></div>' +
+      '<p style="font-size:11.5px;color:var(--gray-500);margin:8px 0 0;">O token da Autentique fica somente no Apps Script — nunca no sistema.</p>';
+  }
+  window.rhAdConfigToggle = function (forcar) { var el = document.getElementById('rhad-cfg'); if (!el) return; var v = forcar || el.style.display === 'none'; el.style.display = v ? 'block' : 'none'; if (v) renderCfg(); };
+  window.rhAdCfgSalvar = function () {
+    var c = cfg(), u = (document.getElementById('rhad-url').value || '').trim(), msg = document.getElementById('rhad-cfg-msg');
+    if (u && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u)) { msg.innerHTML = '<span style="color:#c00;">O endereço deve começar com https://script.google.com/macros/s/ e terminar com /exec</span>'; return; }
+    c.url = u; c.dias = Math.max(1, Math.min(30, +document.getElementById('rhad-dias').value || 5)); DB.so(KC, c);
+    ls('eq_assdig_senha', document.getElementById('rhad-senha').value || null);
+    if (!u) { msg.textContent = 'Salvo.'; return; }
+    msg.textContent = '⏳ Testando…';
+    call({ acao: 'testar' }).then(function (j) { msg.innerHTML = '<span style="color:#1b5e20;">✅ Conectado' + (j.conta ? ' à conta Autentique de <strong>' + esc(j.conta) + '</strong>' : '') + '.</span>'; })
+      .catch(function (e) { msg.innerHTML = '<span style="color:#c00;">❌ ' + esc(e.message) + '</span>'; });
+  };
+  window.rhAdAbrir = function () { var m = modal(); m.style.display = 'flex'; render(); if (!cfg().url) rhAdConfigToggle(true); else rhAdAtualizar(true); };
+  window.rhAdFechar = function () { var m = document.getElementById('rhad-bg'); if (m) m.style.display = 'none'; };
+  window.rhAdAtualizar = function (silencioso) {
+    var ids = lista().filter(function (r) { return r.st === 'enviado' || r.st === 'visualizado' || (r.st === 'assinado' && !r.drive); }).map(function (r) { return r.id; });
+    var msg = document.getElementById('rhad-msg');
+    if (!ids.length) { if (!silencioso && msg) msg.textContent = 'Nenhum envio pendente.'; return Promise.resolve(); }
+    if (!configurado()) return Promise.resolve();
+    if (msg) msg.textContent = '⏳ Consultando a Autentique…';
+    return call({ acao: 'status', ids: ids }).then(function (j) {
+      var L = lista(), n = 0;
+      L.forEach(function (r) { var s = j.docs && j.docs[r.id]; if (!s) return; if (s.erro) { r.erro = s.erro; return; } delete r.erro; if (s.st && s.st !== r.st) n++; r.st = s.st || r.st; if (s.st === 'assinado') r.assinadoEm = s.em || r.assinadoEm; if (s.drive) r.drive = s.drive; if (s.motivo) r.motivo = s.motivo; if (s.link) r.link = s.link; });
+      salvarLista(L); render();
+      if (msg) msg.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (n ? ' · ' + n + ' mudança(s)' : '');
+    }).catch(function (e) { if (msg) msg.innerHTML = '<span style="color:#c00;">❌ ' + esc(e.message) + '</span>'; });
+  };
+  window.rhAdCopiar = function (id) {
+    var r = lista().filter(function (x) { return x.id === id; })[0]; if (!r || !r.link) return;
+    (navigator.clipboard ? navigator.clipboard.writeText(r.link) : Promise.reject()).then(function () { t('🔗 Link copiado'); }).catch(function () { prompt('Link de assinatura:', r.link); });
+  };
+  window.rhAdCancelar = function (id) {
+    var r = lista().filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    if (!confirm('Cancelar o envio de “' + r.doc + '” para ' + r.func + '? O link deixa de funcionar.')) return;
+    call({ acao: 'cancelar', id: id }).then(function () { var L = lista(); L.forEach(function (x) { if (x.id === id) x.st = 'cancelado'; }); salvarLista(L); render(); t('Envio cancelado.'); })
+      .catch(function (e) { alert('Não foi possível cancelar: ' + e.message); });
+  };
+  window.rhAdRemover = function (id) {
+    if (!confirm('Tirar este registro da lista? (o PDF assinado continua no Drive)')) return;
+    salvarLista(lista().filter(function (x) { return x.id !== id; })); render();
+  };
+  // Envio de um PDF qualquer (ex.: documento digitalizado)
+  window.rhAdAvulso = function () {
+    var box = document.getElementById('rhad-avulso'); if (!box) return;
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = '<label style="font-size:12px;color:#555;">Arquivo PDF</label><input type="file" accept="application/pdf" id="rhad-pdf" style="width:100%;margin:3px 0 10px;"><div id="rhad-avulso-p"></div>';
+    var arq = null, inp = document.getElementById('rhad-pdf');
+    var montar = function () { montarPainel(document.getElementById('rhad-avulso-p'), { doc: document, html: '', nome: arq ? arq.name : 'Documento', obterPdf: function () { if (!arq) throw new Error('Escolha o arquivo PDF.'); return arq.arrayBuffer().then(abToB64); } }); };
+    inp.onchange = function () { arq = inp.files[0] || null; if (arq && arq.size > 15 * 1024 * 1024) { alert('PDF maior que 15 MB.'); arq = null; inp.value = ''; } montar(); };
+    montar();
+  };
+
+  window.addEventListener('storage', function (e) { if (e.key === 'eq_' + K) render(); });
+
+  // ── Botões nas telas de documentos ──
+  function botao() { return '<button class="btn btn-outline btn-sm rhad-btn" onclick="rhAdAbrir()">📲 Assinaturas digitais<span class="rhad-pend"></span></button>'; }
+  function injetar() {
+    var r = document.getElementById('dmx-btn-restaurar');
+    if (r && r.parentNode && !r.parentNode.querySelector('.rhad-btn')) r.insertAdjacentHTML('beforebegin', botao());
+    var da = document.getElementById('sec-docadm');
+    if (da) { var hd = da.querySelector('.card-header'); if (hd && !hd.querySelector('.rhad-btn')) { var bx = hd.querySelector('div[style*="display:flex"]') || hd; bx.insertAdjacentHTML('afterbegin', botao()); } }
+    var pend = lista().filter(function (x) { return x.st === 'enviado' || x.st === 'visualizado'; }).length;
+    document.querySelectorAll('.rhad-pend').forEach(function (s) { s.textContent = pend ? ' (' + pend + ')' : ''; });
+  }
+  var _navD = window.nav;
+  if (typeof _navD === 'function') window.nav = function () { var r = _navD.apply(this, arguments); try { injetar(); } catch (e) {} return r; };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(injetar, 60); }); else setTimeout(injetar, 60);
 })();
 </script>
 
