@@ -25318,6 +25318,12 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       campo('ct-mat', 'Matrícula / eSocial', null, 'ct-v-ficha') + campo('ct-cbo', 'CBO', null, 'ct-v-ficha') + campo('ct-banco', 'Banco / agência / conta', null, 'ct-v-ficha') +
       '<div class="form-group form-full ct-v-deps"><label>Dependentes (um por linha: nome ; relação ; nascimento)</label><textarea id="ct-deps" rows="3" placeholder="NOME DO DEPENDENTE ; Filho(a) ou enteado(a) até 21 anos ; 18/09/2012"></textarea></div>' +
       '</div></div>' +
+      '<div class="ct-v-vt"><div class="ct-sec">Vale-transporte</div>' +
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:4px 0 8px;"><label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;"><input type="radio" name="ct-vt-op" value="sim" style="width:auto;"> Opta pelo vale-transporte</label><label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;"><input type="radio" name="ct-vt-op" value="nao" style="width:auto;"> Não opta</label><label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;"><input type="radio" name="ct-vt-op" value="" checked style="width:auto;"> Deixar em branco</label></div>' +
+      '<table class="ct-jor"><tr><td><b>Meio de transporte</b></td><td style="width:9%;text-align:center;"><b>Ida</b></td><td style="width:18%;"><b>Valor ida (R$)</b></td><td style="width:9%;text-align:center;"><b>Volta</b></td><td style="width:18%;"><b>Valor volta (R$)</b></td></tr>' +
+      VT_MT.map(function (t, i) { return '<tr><td>' + t + (i === VT_MT.length - 1 ? ' <input id="ct-vt-outro" placeholder="qual?" style="width:55%;display:inline-block;">' : '') + '</td><td style="text-align:center;"><input type="checkbox" id="ct-vt-i' + i + '" style="width:auto;" onchange="vtConta()"></td><td><input id="ct-vt-iv' + i + '" placeholder="0,00" oninput="vtMarca(\'i\',' + i + ')"></td><td style="text-align:center;"><input type="checkbox" id="ct-vt-v' + i + '" style="width:auto;" onchange="vtConta()"></td><td><input id="ct-vt-vv' + i + '" placeholder="0,00" oninput="vtMarca(\'v\',' + i + ')"></td></tr>'; }).join('') + '</table>' +
+      '<div class="form-grid" style="margin-top:6px;"><div class="form-group"><label>Tipo de cartão</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;padding-top:4px;">' + VT_CART.map(function (t, i) { return '<label style="display:flex;gap:5px;align-items:center;text-transform:none;font-weight:500;"><input type="checkbox" id="ct-vt-c' + i + '" style="width:auto;"> ' + t + '</label>'; }).join('') + '</div></div>' +
+      '<div class="form-group"><label>Outro cartão (qual?)</label><input id="ct-vt-cout"></div><div class="form-group"><label>Conduções por dia (ida + volta)</label><input id="ct-vt-qtd" type="number" min="0" max="20"></div><div class="form-group"><label>Nº do cartão (opcional)</label><input id="ct-vt-num"></div></div></div>' +
       '<div class="ct-v-sind"><div class="ct-sec">Sindicato</div><div class="form-grid">' + campo('ct-sind', 'Nome do sindicato', null, 'form-full') + '</div></div>' +
       '<div class="ct-v-cargo"><div class="ct-sec">Descrição de cargo</div><div class="form-grid">' +
       campo('ct-cargok', 'Cargo', '<select id="ct-cargok">' + CARGOS.map(function (x) { return '<option value="' + x.k + '">' + esc(x.t) + '</option>'; }).join('') + '</select>') + campo('ct-gestor', 'Gestor(a) imediato(a) (nome)') + '</div></div>' +
@@ -25342,7 +25348,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       campo('ct-h-aj', 'Internet e energia nos dias remotos', '<select id="ct-h-aj" onchange="ctrLocal()"><option value="nao">Não haverá reembolso</option><option value="sim">Ajuda de custo mensal</option></select>') +
       '<div class="form-group" id="ct-h-ajv-g" style="display:none;"><label>Valor da ajuda de custo (R$)</label><input id="ct-h-ajv"></div>' + '</div></div>' +
       '<div class="ct-sec">Assinatura</div><div class="form-grid">' +
-      campo('ct-cid', 'Cidade da assinatura') + campo('ct-data', 'Data da assinatura', '<input id="ct-data" type="date">') +
+      campo('ct-cid', 'Cidade da assinatura', '<input id="ct-cid" list="ct-cid-l" placeholder="Ex.: São Paulo"><datalist id="ct-cid-l"><option value="São Paulo"><option value="Guarulhos"></datalist><div style="display:flex;gap:4px;margin-top:4px;"><button type="button" class="btn btn-outline btn-sm" onclick="sv_ctcid(\'São Paulo\')">São Paulo</button><button type="button" class="btn btn-outline btn-sm" onclick="sv_ctcid(\'Guarulhos\')">Guarulhos</button></div>') + campo('ct-data', 'Data da assinatura', '<div style="display:flex;gap:6px;"><select id="ct-data-modo" onchange="ctrDataModo()" style="width:auto;flex:0 0 auto;"><option value="adm">Data da admissão</option><option value="hoje">Hoje</option><option value="manual">Outra data</option></select><input id="ct-data" type="date" oninput="ctrDataManual()" style="flex:1;"></div>') +
       '<div class="form-group form-full ct-v-ctr"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
       '<label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-menor"> Incluir linha "Responsável legal (quando menor de idade)"</label></div></div>' +
       '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-outline" style="border-color:#1f8a4c;color:#1f8a4c;" onclick="rhAdGerarEnviar(function(){ctrGerar()})">📲 Gerar e enviar para assinatura</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar documento</button></div>' +
@@ -25361,7 +25367,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.ctrMultiTodos = function (g) { document.querySelectorAll('.ct-mchk').forEach(function (c) { c.checked = g === 'doc' ? !!MODELOS[c.value].g : false; }); ctrModelo(); };
   var VIS = { ctr: ['padrao', 'hibrido', 'motorista'], local: ['padrao', 'hibrido', 'motorista'], jor: ['padrao', 'hibrido', 'motorista', 'comp', 'prorhe', 'ficha'], sal: ['padrao', 'hibrido', 'motorista', 'prorhe', 'ficha', 'cargo'],
-    hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'] };
+    hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'], vt: ['vt'] };
   window.ctrModelo = function () {
     var m = mod(), MS = mods(), tem = function (L) { return MS.some(function (x) { return L.indexOf(x) !== -1; }); };
     Object.keys(VIS).forEach(function (k) { document.querySelectorAll('#modal-ctr .ct-v-' + k).forEach(function (x) { x.style.display = tem(VIS[k]) ? '' : 'none'; }); });
@@ -25410,12 +25416,22 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     el('ct-per').innerHTML = '1º: <b>' + br(i) + '</b> a <b>' + br(a2) + '</b> · prorrogação: <b>' + br(b1) + '</b> a <b>' + br(b2) + '</b>';
     if (!v('ct-data') || el('ct-data').dataset.auto === '1') { sv('ct-data', i); el('ct-data').dataset.auto = '1'; }
   };
+  window.sv_ctcid = function (x) { sv('ct-cid', x); };
+  function hojeIso() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  window.ctrDataModo = function () {
+    var m = v('ct-data-modo') || 'adm', i = el('ct-data');
+    if (m === 'adm') { i.dataset.auto = '1'; sv('ct-data', v('ct-ini')); }
+    else if (m === 'hoje') { i.dataset.auto = '0'; sv('ct-data', hojeIso()); }
+    else { i.dataset.auto = '0'; i.focus(); }
+  };
+  window.ctrDataManual = function () { el('ct-data').dataset.auto = '0'; if (el('ct-data-modo')) el('ct-data-modo').value = 'manual'; };
   window.ctrFunc = function () {
     var f = DB.g('funcionarios').find(function (x) { return x.id === v('ct-f-func'); }); if (!f) return;
     sv('ct-nome', String(f.n || '').toUpperCase()); sv('ct-cpf', f.cpf); sv('ct-ctps', f.ctps || ''); sv('ct-end', [f.end, f.cep ? 'CEP ' + f.cep : ''].filter(Boolean).join(', '));
     if (mod() !== 'motorista') sv('ct-cargo', String(f.car || '').toUpperCase());
     var s = num(f.sal); sv('ct-sal', s > 0 ? brl(s) : ''); ctrExt();
-    sv('ct-ini', f.adm || ''); el('ct-data').dataset.auto = '1'; sv('ct-data', ''); ctrDatas();
+    sv('ct-ini', f.adm || ''); var dm = v('ct-data-modo') || 'adm'; if (dm === 'adm') { el('ct-data').dataset.auto = '1'; sv('ct-data', ''); } ctrDatas(); if (dm === 'hoje') ctrDataModo();
+    vtCarregar(f.id);
     if (f.emp && v('ct-f-emp') !== f.emp) { el('ct-f-emp').value = f.emp; sv('ct-l-end', ''); empresaPara(f.emp); } else if (f.emp) empresaPara(f.emp);
     var dp = DB.g('departamentos').find(function (x) { return x.id === f.dep; }); if (dp) sv('ct-l-loja', dp.nome);
     // dados complementares (documentos admissionais)
@@ -25440,6 +25456,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     sv('ct-h-dias', ls('rh_ctr_hdias') || 'terça e quinta-feira'); sv('ct-h-aviso', '48 (quarenta e oito) horas'); sv('ct-h-eq', ls('rh_ctr_heq') || 'notebook, headset'); el('ct-h-aj').value = 'nao';
     el('ct-l-tipo').value = 'proprio'; el('ct-data').dataset.auto = '1'; el('ct-prorr').checked = true;
     ['ct-rg', 'ct-rgem', 'ct-nas', 'ct-ec', 'ct-rua', 'ct-num', 'ct-compl', 'ct-bairro', 'ct-cidade', 'ct-uf', 'ct-cep', 'ct-sexo', 'ct-cor', 'ct-escol', 'ct-defic', 'ct-natural', 'ct-nacion', 'ct-pai', 'ct-mae', 'ct-titulo', 'ct-pis', 'ct-tel', 'ct-telres', 'ct-mat', 'ct-cbo', 'ct-banco', 'ct-deps', 'ct-prorext', 'ct-gestor'].forEach(function (i) { sv(i, ''); });
+    sv('ct-cid', ls('rh_ctr_cid') || 'São Paulo'); if (el('ct-data-modo')) el('ct-data-modo').value = 'adm'; vtLimpar();
     sv('ct-rep', ls('rh_ctr_rep')); sv('ct-sind', ls('rh_ctr_sind') || 'SINDICATO DOS EMPREGADOS NO COMÉRCIO DE GUARULHOS'); sv('ct-e-tel', ls('rh_ctr_etel')); sv('ct-e-mail', ls('rh_ctr_email')); sv('ct-prazo', ls('rh_ctr_prazo') || 'prazo indeterminado');
     if (m) { var r = document.querySelector('input[name="ct-mod"][value="' + m + '"]'); if (r) r.checked = true; }
     el('ct-f-func').innerHTML = ''; ctrFiltro('ini'); ctrModelo(); ctrLocal(); ctrDatas();
@@ -25458,13 +25475,13 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var a2 = d.ini ? soma(d.ini, 44) : '', b1 = d.ini ? soma(d.ini, 45) : '', b2 = d.ini ? soma(d.ini, 89) : '';
     var dd = function (x) { return x ? '<b>' + br(x) + '</b>' : '___/___/______'; };
     var s = P(MODELOS[M].t, 'tit');
-    s += P('Pelo presente instrumento particular de Contrato de Experiência, a empresa ' + c(d.eRazao) + ', com sede à ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : ', ' + L_ + '/___') + ', inscrita no CNPJ sob nº ' + c(d.eCnpj) + ', doravante denominada <b>EMPREGADORA</b>, e o(a) Sr.(a) ' + c(d.nome) + ', residente e domiciliado(a) à ' + c(d.end) + ', portador(a) do CPF nº ' + c(d.cpf) +
+    s += P('Pelo presente instrumento particular de Contrato de Experiência, a empresa ' + c(d.eRazao) + ', com sede à ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : (d.eEnd ? '' : ', ' + L_ + '/___')) + ', inscrita no CNPJ sob nº ' + c(d.eCnpj) + ', doravante denominada <b>EMPREGADORA</b>, e o(a) Sr.(a) ' + c(d.nome) + ', residente e domiciliado(a) à ' + c(d.end) + ', portador(a) do CPF nº ' + c(d.cpf) +
       (MO ? ', da CTPS nº ' + c(d.ctps || (d.nome ? 'CTPS Digital' : '')) + ' e da CNH nº ' + c(d.cnh) + ', categoria ' + c(d.cnhCat, '______') + ', válida até ' + dd(d.cnhVal) : ' e da CTPS nº ' + c(d.ctps || (d.nome ? 'CTPS Digital' : ''))) +
       ', doravante denominado(a) <b>EMPREGADO(A)</b>, celebram o presente Contrato Individual de Trabalho por prazo determinado, a título de experiência, nos termos dos arts. 443, § 2º, alínea "c", 445, parágrafo único, ' + (H ? '451 e 75-A a 75-F' : 'e 451') + ' da Consolidação das Leis do Trabalho (CLT), regido pelas seguintes cláusulas:');
     s += P(cl('FUNÇÃO') + (MO ? 'O(A) EMPREGADO(A) trabalhará para a EMPREGADORA na função de <b>MOTORISTA</b>, cabendo-lhe conduzir os veículos da EMPREGADORA para entrega de mercadorias, transporte entre lojas e demais deslocamentos a serviço, auxiliar na conferência, carga e descarga das mercadorias transportadas, além das tarefas que vierem a ser objeto de ordens verbais, cartas ou avisos, desde que compatíveis com sua função e condição pessoal.'
       : 'O(A) EMPREGADO(A) trabalhará para a EMPREGADORA na função de ' + c(d.cargo) + ', além das tarefas que vierem a ser objeto de ordens verbais, cartas ou avisos, segundo as necessidades da EMPREGADORA, desde que compatíveis com sua função e condição pessoal.'));
     var proprio = d.lTipo !== 'grupo', bl = d.nome || d.eRazao;
-    s += P(cl(H ? 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO PRESENCIAL' : 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO') + 'O(A) EMPREGADO(A) será registrado(a) na empresa ' + c(d.rRazao) + ', CNPJ nº ' + c(d.rCnpj) + ', e ' + (MO ? 'terá como base de trabalho o endereço ' : H ? 'nos dias de trabalho presencial, realizará suas atividades no endereço ' : 'realizará suas atividades no endereço ') + c(d.lEnd) + (d.lCid ? ', ' + c(d.lCid) : ', ' + L_ + '/___') + (MO ? ', de onde partirá para as rotas definidas pela EMPREGADORA' : '') + ', correspondente a:');
+    s += P(cl(H ? 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO PRESENCIAL' : 'EMPRESA REGISTRADORA E LOCAL DE TRABALHO') + 'O(A) EMPREGADO(A) será registrado(a) na empresa ' + c(d.rRazao) + ', CNPJ nº ' + c(d.rCnpj) + ', e ' + (MO ? 'terá como base de trabalho o endereço ' : H ? 'nos dias de trabalho presencial, realizará suas atividades no endereço ' : 'realizará suas atividades no endereço ') + c(d.lEnd) + (d.lCid ? ', ' + c(d.lCid) : (d.lEnd ? '' : ', ' + L_ + '/___')) + (MO ? ', de onde partirá para as rotas definidas pela EMPREGADORA' : '') + ', correspondente a:');
     s += P('(' + (bl && proprio ? 'X' : '&nbsp;&nbsp;') + ') estabelecimento da própria EMPREGADORA (' + (proprio ? c(d.lLoja) : L_) + ');', 'c it');
     s += P('(' + (bl && !proprio ? 'X' : '&nbsp;&nbsp;') + ') estabelecimento da empresa ' + (!proprio ? c(d.gRazao) : L_) + ', CNPJ nº ' + (!proprio ? c(d.gCnpj) : L_) + ', integrante do mesmo grupo econômico da EMPREGADORA, sem que isso caracterize a coexistência de mais de um contrato de trabalho (art. 2º, § 2º, da CLT e Súmula 129 do TST).', 'c it');
     s += P('<b>Parágrafo único</b> – A EMPREGADORA poderá transferir o(a) EMPREGADO(A), a título temporário ou definitivo, para outro estabelecimento seu ou de empresa do mesmo grupo econômico, observados os requisitos e limites do art. 469 da CLT, inclusive o pagamento do adicional de transferência quando devido.');
@@ -25584,6 +25601,12 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   ];
   function cargoDe(nome) { nome = String(nome || ''); var ord = ['subgerente', 'encestoque', 'encadm', 'auxadm', 'rh', 'motorista', 'empacotador', 'caixa', 'auxloja', 'atendente', 'gerente']; for (var i = 0; i < ord.length; i++) { var c = CARGOS.find(function (x) { return x.k === ord[i]; }); if (c.re.test(nome)) return c.k; } return ''; }
   function ass2(L) { var s = '<table class="ass2">'; for (var i = 0; i < L.length; i += 2) s += '<tr><td><div class="l"></div>' + L[i] + '</td><td>' + (L[i + 1] != null ? '<div class="l"></div>' + L[i + 1] : '') + '</td></tr>'; return s + '</table>'; }
+  function endEmp(d) {
+    if (!d.rua && !d.end) return c(d.rua) + ', nº ' + c(d.num, '______') + ', bairro ' + c(d.bairro) + ', cidade ' + c(d.cidade) + '/' + c(d.uf, 'SP');
+    if (!d.rua) return c(d.end);
+    return [c(d.rua), d.num ? 'nº ' + c(d.num) : '', d.compl ? c(d.compl) : '', d.bairro ? 'bairro ' + c(d.bairro) : '', (d.cidade || d.uf) ? 'cidade ' + c([d.cidade, d.uf].filter(Boolean).join('/')) : '', d.cep ? 'CEP ' + c(d.cep) : ''].filter(Boolean).join(', ');
+  }
+  var VT_MT = ['INTEGRAÇÃO ÔNIBUS/METRÔ', 'INTEGRAÇÃO ÔNIBUS/TREM', 'ÔNIBUS MUNICIPAL', 'ÔNIBUS INTERMUNICIPAL', 'METRÔ OU TREM', 'OUTROS'], VT_CART = ['Bilhete Único', 'Cartão BOM', 'Cartão Dia Fácil', 'Outros'];
   function cx(x) { return '(' + (x ? 'X' : '&nbsp;&nbsp;') + ')'; }
   function v_(x, w) { return x ? '<b>' + esc(x) + '</b>' : '<span class="ln" style="min-width:' + (w || 120) + 'px"></span>'; }
   function hm(t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; }
@@ -25614,13 +25637,19 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     } else if (M === 'vt') {
       s += '<div class="box"><b>À Empresa:</b> ' + v_(d.eRazao, 260) + ' · CNPJ ' + v_(d.eCnpj, 120) + '<br><b>Endereço:</b> ' + v_(d.eEnd, 300) + (d.eCid ? ' · ' + esc(d.eCid) : '') + '</div>';
       s += linhaDados([[['Empregado(a)', d.nome, 2], ['RG', d.rg]], [['Função', d.cargo], ['CTPS', ctps], ['CPF', d.cpf]]]);
-      s += P(cx(false) + ' Opto pela utilização do Vale-Transporte &nbsp;&nbsp;&nbsp;&nbsp; ' + cx(false) + ' Não opto pela utilização do Vale-Transporte', 'c op');
+      var V = d.vt || {};
+      s += P(cx(V.op === 'sim') + ' Opto pela utilização do Vale-Transporte &nbsp;&nbsp;&nbsp;&nbsp; ' + cx(V.op === 'nao') + ' Não opto pela utilização do Vale-Transporte', 'c op');
       s += P('Nos termos do art. 7º do Decreto nº 95.247, de 17 de novembro de 1987, solicito receber o Vale-Transporte e comprometo-me a:');
       ['a) utilizá-lo exclusivamente para meu efetivo deslocamento residência–trabalho e vice-versa;', 'b) renovar anualmente, ou sempre que ocorrer alteração, a informação sobre meu endereço residencial e os serviços e meios de transporte mais adequados ao meu deslocamento residência–trabalho e vice-versa;', 'c) autorizar o desconto de até 6% (seis por cento) do meu salário básico mensal para o custeio do Vale-Transporte (art. 9º do Decreto nº 95.247/87);', 'd) declaro estar ciente de que a declaração falsa ou o uso indevido do Vale-Transporte constituem falta grave (art. 7º, § 3º, do Decreto nº 95.247/87).'].forEach(function (t) { s += P(t, 'c it'); });
       s += '<p class="c"><b>Minha residência atual:</b></p>' + linhaDados([[['Endereço', d.rua, 2], ['Nº', d.num]], [['Complemento', d.compl], ['Bairro', d.bairro, 2]], [['Cidade', d.cidade], ['UF', d.uf], ['CEP', d.cep]]]);
       var mt = ['INTEGRAÇÃO ÔNIBUS/METRÔ', 'INTEGRAÇÃO ÔNIBUS/TREM', 'ÔNIBUS MUNICIPAL', 'ÔNIBUS INTERMUNICIPAL', 'METRÔ OU TREM', 'OUTROS'];
-      s += '<table class="jor"><tr><th>Meio de transporte – IDA</th><th style="width:16%">Valor R$</th><th>Meio de transporte – VOLTA</th><th style="width:16%">Valor R$</th></tr>' + mt.map(function (t) { return '<tr><td>( &nbsp; ) ' + t + '</td><td></td><td>( &nbsp; ) ' + t + '</td><td></td></tr>'; }).join('') + '</table>';
-      s += P('<b>Tipo de cartão:</b> ( &nbsp; ) Bilhete Único &nbsp; ( &nbsp; ) Cartão BOM &nbsp; ( &nbsp; ) Cartão Dia Fácil &nbsp; ( &nbsp; ) Outros: ____________ &nbsp;&nbsp; Utilizando diariamente ______ conduções para locomover-me de minha residência ao trabalho e vice-versa.');
+      var vv = function (x) { return x && x.val ? 'R$ ' + esc(x.val) : ''; }, tn = function (t, i) { return t + (i === mt.length - 1 && V.outro ? ': <b>' + esc(V.outro) + '</b>' : ''); };
+      var nVal = function (x) { var n = parseFloat(String(x || '').replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; }, tot = 0;
+      (V.ida || []).concat(V.volta || []).forEach(function (x) { if (x && x.on) tot += nVal(x.val); });
+      s += '<table class="jor"><tr><th>Meio de transporte – IDA</th><th style="width:16%">Valor R$</th><th>Meio de transporte – VOLTA</th><th style="width:16%">Valor R$</th></tr>' + mt.map(function (t, i) { var a = (V.ida || [])[i] || {}, b = (V.volta || [])[i] || {}; return '<tr><td>' + cx(a.on) + ' ' + tn(t, i) + '</td><td>' + (a.on ? vv(a) : '') + '</td><td>' + cx(b.on) + ' ' + tn(t, i) + '</td><td>' + (b.on ? vv(b) : '') + '</td></tr>'; }).join('') +
+        (tot ? '<tr><td colspan="3" style="text-align:right;"><b>Total por dia (ida + volta)</b></td><td><b>R$ ' + tot.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '</b></td></tr>' : '') + '</table>';
+      var CA = V.cart || [];
+      s += P('<b>Tipo de cartão:</b> ' + cx(CA[0]) + ' Bilhete Único &nbsp; ' + cx(CA[1]) + ' Cartão BOM &nbsp; ' + cx(CA[2]) + ' Cartão Dia Fácil &nbsp; ' + cx(CA[3] || V.cartOut) + ' Outros: ' + (V.cartOut ? '<b>' + esc(V.cartOut) + '</b>' : '____________') + (V.num ? ' &nbsp; <b>Nº do cartão:</b> ' + esc(V.num) : '') + ' &nbsp;&nbsp; Utilizando diariamente ' + (V.qtd ? '<b>' + esc(V.qtd) + '</b>' : '______') + ' conduções para locomover-me de minha residência ao trabalho e vice-versa.');
       s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'Assinatura do(a) empregado(a)']) + '</div>';
     } else if (M === 'ir') {
       var D = String(d.deps || '').split(/\n/).map(function (l) { return l.split(/\s*[;|]\s*/); }).filter(function (r) { return r[0] && r[0].trim(); });
@@ -25656,7 +25685,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       s += '<div class="nb">' + ass2([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'EMPREGADO(A)', (window.rhAssEmp?rhAssEmp({b:2}):'') + (d.eRazao ? esc(d.eRazao) + '<br>' : '') + 'EMPREGADOR']) + '</div>';
     } else if (M === 'imagem') {
       s = P('AUTORIZAÇÃO PARA USO DA IMAGEM', 'tit');
-      s += P('Eu, ' + c(d.nome) + ', nascido(a) em ' + (d.nas ? '<b>' + br(d.nas) + '</b>' : '___/___/______') + ', na função de ' + c(d.cargo) + ', portador(a) da Cédula de Identidade RG nº ' + c(d.rg) + ', inscrito(a) no CPF/MF sob nº ' + c(d.cpf) + ', CTPS nº ' + c(ctps) + ', residente à ' + c(d.rua) + ', nº ' + c(d.num, '______') + ', bairro ' + c(d.bairro) + ', cidade ' + c(d.cidade) + '/' + c(d.uf, 'SP') + ', <b>AUTORIZO</b> o uso de minha imagem e voz, em todo e qualquer material entre fotos, sites, documentos e outros meios de comunicação, para interesse desta empresa ' + c(d.eRazao) + ', com sede na ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : '') + ', inscrita no CNPJ/MF sob o nº ' + c(d.eCnpj) + ', sejam essas destinadas à divulgação ao público em geral e/ou apenas para uso próprio da empresa, e desde que não haja desvirtuamento da sua finalidade.');
+      s += P('Eu, ' + c(d.nome) + ', nascido(a) em ' + (d.nas ? '<b>' + br(d.nas) + '</b>' : '___/___/______') + ', na função de ' + c(d.cargo) + ', portador(a) da Cédula de Identidade RG nº ' + c(d.rg) + ', inscrito(a) no CPF/MF sob nº ' + c(d.cpf) + ', CTPS nº ' + c(ctps) + ', residente à ' + endEmp(d) + ', <b>AUTORIZO</b> o uso de minha imagem e voz, em todo e qualquer material entre fotos, sites, documentos e outros meios de comunicação, para interesse desta empresa ' + c(d.eRazao) + ', com sede na ' + c(d.eEnd) + (d.eCid ? ', ' + c(d.eCid) : '') + ', inscrita no CNPJ/MF sob o nº ' + c(d.eCnpj) + ', sejam essas destinadas à divulgação ao público em geral e/ou apenas para uso próprio da empresa, e desde que não haja desvirtuamento da sua finalidade.');
       s += P('A presente autorização é concedida a título gratuito, abrangendo o uso da imagem acima mencionada em todo território nacional e no exterior, sob qualquer forma e meios, ou sejam, em destaque: (I) outdoor; (II) busdoor; folhetos em geral (encartes, mala direta, catálogo etc.); (III) folder de apresentação; (IV) anúncios em revistas e jornais em geral; (V) home page; (VI) cartazes; (VII) back-light; (VIII) mídia eletrônica (painéis, vídeos, televisão, cinema, programa para rádio, redes sociais, entre outros).');
       s += P('Por esta ser a expressão da minha vontade, declaro que autorizo o uso acima descrito sem que nada haja a ser reclamado a título de direitos conexos à minha imagem ou a qualquer outro, e assino a presente autorização em 2 (duas) vias de igual teor e forma.');
       s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) : 'Assinatura do(a) empregado(a)']) + '</div>';
@@ -25701,6 +25730,30 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css + '.novo{position:relative;break-before:page;page-break-before:always;}.novo .lg2{position:absolute;top:13pt;left:189.3pt;width:103.25pt;height:72.3pt;object-fit:contain;}.novo .tp2{height:93pt;}', body: corpoPronto || corpo(d) });
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(tit) + '</title><style>@page{size:A4;margin:2cm}body{font-family:Arial,sans-serif;font-size:11pt}' + css + '</style></head><body>' + corpo(d) + '</body></html>';
   }
+  // ── vale-transporte (formulário) ──
+  window.vtMarca = function (lado, i) { var c = el('ct-vt-' + lado + i); if (c && v('ct-vt-' + lado + 'v' + i)) c.checked = true; vtConta(); };
+  window.vtConta = function () { var n = 0; VT_MT.forEach(function (t, i) { if (el('ct-vt-i' + i).checked) n++; if (el('ct-vt-v' + i).checked) n++; }); if (n && (!v('ct-vt-qtd') || el('ct-vt-qtd').dataset.auto === '1')) { sv('ct-vt-qtd', n); el('ct-vt-qtd').dataset.auto = '1'; } };
+  function vtColetar() {
+    if (!el('ct-vt-qtd')) return null;
+    var op = (document.querySelector('input[name="ct-vt-op"]:checked') || {}).value || '';
+    var o = { op: op, ida: VT_MT.map(function (t, i) { return { on: el('ct-vt-i' + i).checked, val: v('ct-vt-iv' + i) }; }), volta: VT_MT.map(function (t, i) { return { on: el('ct-vt-v' + i).checked, val: v('ct-vt-vv' + i) }; }),
+      outro: v('ct-vt-outro'), cart: VT_CART.map(function (t, i) { return el('ct-vt-c' + i).checked; }), cartOut: v('ct-vt-cout'), qtd: v('ct-vt-qtd'), num: v('ct-vt-num') };
+    return o;
+  }
+  function vtPreencher(o) {
+    o = o || {};
+    document.querySelectorAll('input[name="ct-vt-op"]').forEach(function (r) { r.checked = r.value === (o.op || ''); });
+    VT_MT.forEach(function (t, i) { var a = (o.ida || [])[i] || {}, b = (o.volta || [])[i] || {}; el('ct-vt-i' + i).checked = !!a.on; sv('ct-vt-iv' + i, a.val || ''); el('ct-vt-v' + i).checked = !!b.on; sv('ct-vt-vv' + i, b.val || ''); });
+    VT_CART.forEach(function (t, i) { el('ct-vt-c' + i).checked = !!(o.cart || [])[i]; });
+    sv('ct-vt-outro', o.outro || ''); sv('ct-vt-cout', o.cartOut || ''); sv('ct-vt-qtd', o.qtd || ''); sv('ct-vt-num', o.num || ''); el('ct-vt-qtd').dataset.auto = o.qtd ? '0' : '1';
+  }
+  window.vtLimpar = function () { if (el('ct-vt-qtd')) vtPreencher({}); };
+  // traz o último vale-transporte preenchido para o mesmo funcionário
+  window.vtCarregar = function (fid) {
+    if (!el('ct-vt-qtd')) return;
+    var H = DB.g(K_HIST).filter(function (x) { return x.fid === fid && x.vt && (x.mod === 'vt' || x.vt.op || (x.vt.ida || []).some(function (y) { return y.on; })); });
+    vtPreencher(H.length ? H[H.length - 1].vt : {});
+  };
   function coletar() {
     return {
       mod: mod(), fid: v('ct-f-func'), nome: v('ct-nome').toUpperCase(), cpf: v('ct-cpf'), ctps: v('ct-ctps'), end: v('ct-end'), cargo: v('ct-cargo').toUpperCase(), cnh: v('ct-cnh'), cnhCat: v('ct-cnhcat'), cnhVal: v('ct-cnhval'),
@@ -25708,10 +25761,10 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       lEnd: v('ct-l-end'), lCid: v('ct-l-cid'), lTipo: v('ct-l-tipo'), lLoja: v('ct-l-loja'), gRazao: v('ct-l-grazao'), gCnpj: v('ct-l-gcnpj'),
       jor: { e1: v('ct-j-e1'), e2: v('ct-j-e2'), i1: v('ct-j-i1'), i2: v('ct-j-i2'), sab: v('ct-j-sab'), sabi: v('ct-j-sabi'), dom: v('ct-j-dom'), domi: v('ct-j-domi') },
       sal: v('ct-sal'), salExt: v('ct-salext'), ini: v('ct-ini'), hDias: v('ct-h-dias'), hAviso: v('ct-h-aviso'), hEq: v('ct-h-eq'), hAj: v('ct-h-aj'), hAjv: v('ct-h-ajv'),
-      cid: v('ct-cid'), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked,
+      cid: (function (c) { if (c) ls('rh_ctr_cid', c); return c; })(v('ct-cid')), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked,
       rep: v('ct-rep'), eTel: v('ct-e-tel'), eMail: v('ct-e-mail'), prazo: v('ct-prazo'), prorExt: v('ct-prorext'), sind: v('ct-sind').toUpperCase(), cargoK: v('ct-cargok'), gestor: v('ct-gestor').toUpperCase(),
       rg: v('ct-rg'), rgEm: v('ct-rgem'), nas: v('ct-nas'), ec: v('ct-ec'), rua: v('ct-rua'), num: v('ct-num'), compl: v('ct-compl'), bairro: v('ct-bairro'), cidade: v('ct-cidade'), uf: v('ct-uf'), cep: v('ct-cep'),
-      sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || ''
+      sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || '', vt: vtColetar()
     };
   }
   // vários documentos do mesmo funcionário num só arquivo (cada um começa em página nova, com a logo)
