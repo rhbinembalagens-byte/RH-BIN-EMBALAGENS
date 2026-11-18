@@ -26551,7 +26551,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       var j = { docs: docs };
       var L = lista(), n = 0;
       L.forEach(function (r) { var s = j.docs && j.docs[r.id]; if (!s) return; if (s.erro) { r.erro = s.erro; return; } delete r.erro; if (s.st && s.st !== r.st) n++; r.st = s.st || r.st; if (s.st === 'assinado') r.assinadoEm = s.em || r.assinadoEm; if (s.drive) r.drive = s.drive; if (s.motivo) r.motivo = s.motivo; if (s.link) r.link = s.link; });
-      salvarLista(L); render(); if (window.rhCampRender) rhCampRender();
+      salvarLista(L); render(); if (window.rhCampRender) rhCampRender(); if (window.rhAdPastas) { try { var np = rhAdPastas(); if (np) t('📁 ' + np + ' documento(s) assinado(s) adicionado(s) à pasta do funcionário'); } catch (e) {} }
       if (msg) msg.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + (n ? ' · ' + n + ' mudança(s)' : '');
     }).catch(function (e) { if (msg) msg.innerHTML = '<span style="color:#c00;">❌ ' + esc(e.message) + '</span>'; });
   };
@@ -26976,6 +26976,59 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   var _abrAd = window.rhAdAbrir;
   if (typeof _abrAd === 'function') window.rhAdAbrir = function () { var r = _abrAd.apply(this, arguments); try { injetar(); } catch (e) {} return r; };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(injetar, 80); }); else setTimeout(injetar, 80);
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   DOCUMENTOS ASSINADOS DIGITALMENTE NA PASTA DO FUNCIONÁRIO
+   - Quando a Autentique confirma a assinatura e o PDF vai para o Drive,
+     o documento entra em 📁 Documentos do cadastro do funcionário
+     (grupo "✍️ Assinados digitalmente"), com o botão 👁️ Visualizar.
+   - Na mesma pastinha aparece o que ainda está aguardando assinatura.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+  var LABEL = '✍️ Assinados digitalmente';
+  function envios() { try { return DB.g('assin-digital') || []; } catch (e) { return []; } }
+  function idDrive(u) { var m = /\/d\/([A-Za-z0-9_-]{10,})/.exec(u || '') || /[?&]id=([A-Za-z0-9_-]{10,})/.exec(u || ''); return m ? m[1] : ''; }
+  window.rhAdPastas = function () {
+    var E = envios(), R = E.filter(function (r) { return r.st === 'assinado' && r.drive && r.pk && r.pk.indexOf('x:') !== 0 && !r.naPasta; });
+    if (!R.length) return 0;
+    var F = DB.g('funcionarios') || [], n = 0;
+    R.forEach(function (r) {
+      var f = F.find(function (x) { return x.id === r.pk; }); if (!f) return;
+      f.docs = f.docs || [];
+      r.naPasta = true;   // só entra uma vez (se for apagado da pasta, não volta)
+      if (f.docs.some(function (d) { return d.assinId === r.id || (d.url && d.url === r.drive); })) return;
+      f.docs.push({ label: LABEL, name: (r.doc || 'Documento') + ' – ASSINADO.pdf', url: r.drive, id: idDrive(r.drive), assinId: r.id, dt: r.assinadoEm || '', origem: 'Autentique' });
+      n++;
+    });
+    if (n) DB.s('funcionarios', F);
+    DB.s('assin-digital', E);
+    return n;
+  };
+  // aguardando assinatura (mostra na pastinha)
+  var _rv = window.renderViewDocs;
+  if (typeof _rv === 'function') window.renderViewDocs = function (funcId) {
+    try { rhAdPastas(); } catch (e) {}
+    var r = _rv.apply(this, arguments);
+    try {
+      var P = envios().filter(function (x) { return x.pk === funcId && (x.st === 'enviado' || x.st === 'visualizado'); });
+      var body = document.getElementById('docs-modal-body');
+      if (P.length && body) {
+        var d = document.createElement('div');
+        d.style.cssText = 'margin-bottom:12px;padding:8px 10px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;font-size:12.5px;';
+        d.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">⏳ Aguardando assinatura digital</div>' + P.map(function (x) {
+          return '<div>📄 ' + String(x.doc || '').replace(/</g, '&lt;') + ' <span style="color:var(--gray-500);">· enviado em ' + new Date(x.em).toLocaleDateString('pt-BR') + (x.st === 'visualizado' ? ' · 👀 já abriu' : '') + '</span></div>';
+        }).join('') + '<div style="font-size:11.5px;color:var(--gray-500);margin-top:4px;">Assim que assinar, o PDF aparece aqui em “' + LABEL + '”.</div>';
+        var dv = document.getElementById('docs-drive-folder');
+        if (dv && dv.nextSibling) body.insertBefore(d, dv.nextSibling); else body.insertBefore(d, body.firstChild);
+      }
+    } catch (e) {}
+    return r;
+  };
+  window.addEventListener('storage', function (e) { if (e.key === 'eq_assin-digital') { try { rhAdPastas(); } catch (x) {} } });
+  setTimeout(function () { try { rhAdPastas(); } catch (e) {} }, 3000);
 })();
 </script>
 
