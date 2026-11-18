@@ -24014,9 +24014,15 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     });
     // valor pago: recibos de férias enviados (📎 Recibos de férias, no menu Férias)
     var usados = {};
+    // data de pagamento do recibo: o valor entra só no mês em que foi pago (sem data → mês do início do gozo)
+    var pagDe = function (rc) { return iso(rc.pag) || iso(rc.ini) || ''; }, noMes = function (d) { return !!d && d >= P.de && d <= P.ate; };
+    var fora = function (o, pg) { o.pagoEm = pg; o.pagoFora = pg < P.de ? 'ant' : 'pos'; };
     if (typeof window.ferRecibosDe === 'function') {
-      fer.forEach(function (x) { x.pago = 0; ferRecibosDe(x.p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri || ri > x.fim || rf < x.ini) return; usados[rc.id] = 1; x.pago += +rc.valor || 0; }); x.pago = Math.round(x.pago * 100) / 100; });
-      L.forEach(function (p) { ferRecibosDe(p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri || ri > P.ate || rf < P.de) return; usados[rc.id] = 1; fer.push({ p: p, ini: ri, fim: rf, dias: Math.round((new Date(rf + 'T12:00:00') - new Date(ri + 'T12:00:00')) / 86400000) + 1, st: 'Recibo enviado', per: '', pago: +rc.valor || 0 }); }); });
+      fer.forEach(function (x) { x.pago = 0; ferRecibosDe(x.p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri || ri > x.fim || rf < x.ini) return; usados[rc.id] = 1; var pg = pagDe(rc); x.dtPag = pg; if (noMes(pg)) x.pago += +rc.valor || 0; else fora(x, pg); }); x.pago = Math.round(x.pago * 100) / 100; if (x.pago) { delete x.pagoFora; delete x.pagoEm; } });
+      L.forEach(function (p) { ferRecibosDe(p.id).forEach(function (rc) { var ri = iso(rc.ini), rf = iso(rc.fim) || ri; if (usados[rc.id] || !ri) return; var pg = pagDe(rc), sob = !(ri > P.ate || rf < P.de); if (!sob && !noMes(pg)) return; usados[rc.id] = 1;
+        var o = { p: p, ini: ri, fim: rf, dias: Math.round((new Date(rf + 'T12:00:00') - new Date(ri + 'T12:00:00')) / 86400000) + 1, st: 'Recibo enviado', per: '', pago: noMes(pg) ? (+rc.valor || 0) : 0, dtPag: pg };
+        if (!noMes(pg)) fora(o, pg); else if (!sob) o.st = 'Pago no mês (férias de ' + br(ri) + ')';
+        fer.push(o); }); });
     }
     fer.sort(function (x, y) { return x.ini.localeCompare(y.ini) || x.p.n.localeCompare(y.p.n); });
     desl.forEach(function (p) { p.resc = typeof window.rescisoesDe === 'function' ? Math.round(rescisoesDe(p.id).reduce(function (s, r) { return s + (+r.valor || 0); }, 0) * 100) / 100 : 0; });
@@ -24031,6 +24037,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   function dg(s) { return String(s || '').replace(/\D/g, ''); }
   function nm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim(); }
   var BCOL = [['mob', 'Mobilidade'], ['livre', 'Livre'], ['bonus', 'Bônus'], ['comp', 'Comp. Salário'], ['vtdep', 'VT Depósito'], ['alim', 'Alimentação + Refeição'], ['vtdin', 'VT Dinheiro']];
+  function ferPagoTxt(r, xl) { if (r.pago) return xl ? r.pago : 'R$ ' + brl(r.pago); if (r.pagoFora) return r.pagoFora === 'ant' ? 'Pago no mês anterior (' + br(r.pagoEm) + ')' : 'Pago em ' + br(r.pagoEm); return xl ? '' : '—'; }
+  window.rdrFerPagoTxt = ferPagoTxt;
   function despesas(D) {
     var P = D.P, ok = function (d) { d = iso(d); return d && d >= P.de && d <= P.ate; }, r2 = function (v) { return Math.round((v || 0) * 100) / 100; };
     var lista = D.ativos.slice(); D.desl.forEach(function (p) { if (lista.indexOf(p) === -1) lista.push(p); });
@@ -24135,7 +24143,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<h2>2. Admitidos no mês</h2>' + (D.adm.length ? '<div class="ad">' + D.adm.map(function (x) { var f = foto(x.fotoId); return '<div class="c">' + (f ? '<img src="' + f + '">' : '<span class="ph">' + esc(ini(x.n)) + '</span>') + '<div><b>' + esc(x.n) + '</b><br>Cargo: ' + esc(x.car || '—') + '<br>Loja: ' + esc(x.loja || '—') + '<br>Admissão: ' + br(x.adm) + '<br>Salário: ' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '<br>' + esc(x.vinc) + '</div></div>'; }).join('') + '</div>' : vazio('Nenhuma admissão no mês.')) +
       // 3. férias
       '<h2>3. Férias no mês</h2>' + (D.fer.length ? '<table><thead><tr><th>Nome</th><th>Cargo</th><th>Loja</th><th>Início</th><th>Fim</th><th>Dias</th><th>Período aquisitivo</th><th>Situação</th><th>Valor pago</th></tr></thead><tbody>' +
-        D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td><td class="n">' + (r.pago ? 'R$ ' + brl(r.pago) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL PAGO DE FÉRIAS</td><td class="n">R$ ' + brl(D.ferPago) + '</td></tr></tbody></table>' : vazio('Ninguém de férias no mês.')) +
+        D.fer.map(function (r) { return '<tr><td>' + esc(r.p.n) + '</td><td>' + esc(r.p.car) + '</td><td>' + esc(r.p.loja || '—') + '</td><td>' + br(r.ini) + '</td><td>' + br(r.fim) + '</td><td class="n">' + r.dias + '</td><td>' + esc(r.per) + '</td><td>' + esc(r.st) + '</td><td class="n">' + ferPagoTxt(r) + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="8">TOTAL PAGO DE FÉRIAS</td><td class="n">R$ ' + brl(D.ferPago) + '</td></tr></tbody></table>' : vazio('Ninguém de férias no mês.')) +
       // 4. desligados
       '<h2>4. Desligados no mês</h2>' + (D.desl.length ? '<table><thead><tr><th>Foto</th><th>Nome</th><th>Cargo</th><th>Loja</th><th>Admissão</th><th>Desligamento</th><th>Salário</th><th>Vínculo</th><th>Motivo</th><th>Valor da rescisão</th></tr></thead><tbody>' +
         D.desl.map(function (x) { var fd = foto(x.fotoId); return '<tr><td style="width:46px;padding:2px;">' + (fd ? '<img src="' + fd + '" style="width:42px;height:52px;object-fit:cover;border-radius:3px;display:block;">' : '<span style="display:flex;width:42px;height:52px;align-items:center;justify-content:center;background:#e8eaf6;color:' + COR + ';font-weight:bold;border-radius:3px;">' + esc(ini(x.n)) + '</span>') + '</td><td>' + esc(x.n) + '</td><td>' + esc(x.car) + '</td><td>' + esc(x.loja || '—') + '</td><td>' + br(x.adm) + '</td><td>' + br(x.dtDesl) + '</td><td class="n">' + (x.sal ? 'R$ ' + brl(x.sal) : '—') + '</td><td>' + esc(x.vinc) + '</td><td>' + esc(x.mot) + '</td><td class="n">' + (x.resc ? 'R$ ' + brl(x.resc) : '—') + '</td></tr>'; }).join('') + '<tr class="t"><td colspan="9">TOTAL DE RESCISÕES</td><td class="n">R$ ' + brl(D.rescPago) + '</td></tr></tbody></table>' : vazio('Nenhum desligamento no mês.')) +
@@ -24265,7 +24273,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       secao('FÉRIAS NO MÊS');
       lin(['', 'Nome', 'Cargo', 'Loja', 'Empresa', 'Início', 'Fim', 'Dias', 'Período aquisitivo', 'Situação', 'Valor pago'], 2);
       if (!D.fer.length) lin(['', 'Ninguém de férias no mês.']);
-      D.fer.forEach(function (f) { lin(['', f.p.n, f.p.car, f.p.loja, emp(f.p.emp).razao || '', br(f.ini), br(f.fim), f.dias, f.per, f.st, f.pago || ''], 0, [10]); });
+      D.fer.forEach(function (f) { lin(['', f.p.n, f.p.car, f.p.loja, emp(f.p.emp).razao || '', br(f.ini), br(f.fim), f.dias, f.per, f.st, ferPagoTxt(f, 1)], 0, [10]); });
       if (D.fer.length) lin(['', 'TOTAL — ' + D.fer.length + ' em férias', '', '', '', '', '', '', '', '', D.ferPago], 4, [10]);
       var aba1 = { nome: 'Relatório', linhas: R, est: est, alt: alt, moedaLin: ml, fotos: fotos, larg: [9, 36, 24, 20, 30, 16, 13, 13, 22, 26, 17], fixa: 0 };
       // aba 2: funcionários com todas as despesas do mês (filtro por loja e total do filtro)
@@ -24557,6 +24565,10 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var esc = cand.filter(function (p) { return g < 0 || p.pos > g; })[0] || cand[0];
     return esc ? { ini: esc.ini, fim: esc.fim } : { ini: '', fim: '' };
   }
+  function dataPag(txt) {
+    var t = String(txt || '').replace(/\s+/g, ' '), m = t.match(/(?:data\s+(?:do|de)\s+pagamento|pagamento\s+em|pago\s+em|data\s+(?:do|de)\s+cr[ée]dito)[^0-9]{0,30}(\d{2}\/\d{2}\/\d{4})/i);
+    return m ? isoBr(m[1]) : '';
+  }
   function dataAfast(txt) {
     // TRCT: cabeçalho "24 Data de Admissão 25 Data do Aviso Prévio 26 Data de Afastamento" e as datas na linha de baixo (a de afastamento é a última)
     var L = String(txt || '').split('\n'), DT = /\d{2}\/\d{2}\/\d{4}/g;
@@ -24595,26 +24607,26 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var fs = Array.prototype.slice.call(el('frup-arq').files || []); if (!fs.length) return;
     el('frup-st').textContent = '⏳ lendo ' + fs.length + ' arquivo(s)…';
     for (var i = 0; i < fs.length; i++) {
-      var f = fs[i], o = { id: uidx(), file: f, nome: f.name, pk: '', como: '', valor: 0, ini: '', fim: '', data: '', erro: '' };
+      var f = fs[i], o = { id: uidx(), file: f, nome: f.name, pk: '', como: '', valor: 0, ini: '', fim: '', data: '', pag: '', erro: '' };
       try {
         var t = await textoPdf(new Uint8Array(await f.arrayBuffer())), a = acharPessoa(t);
         o.pk = a.p ? a.p.pk : ''; o.como = a.como; o.valor = valorLiquido(t);
-        if (TIPO === 'fer') { var d = datasFerias(t); o.ini = d.ini; o.fim = d.fim; } else { o.data = dataAfast(t) || (a.p && a.p.dtDesl ? String(a.p.dtDesl).slice(0, 10) : ''); }
+        if (TIPO === 'fer') { var d = datasFerias(t); o.ini = d.ini; o.fim = d.fim; o.pag = dataPag(t); } else { o.data = dataAfast(t) || (a.p && a.p.dtDesl ? String(a.p.dtDesl).slice(0, 10) : ''); }
       } catch (e) { o.erro = e.message || String(e); }
       NOVOS.push(o);
     }
     el('frup-st').textContent = '✅ ' + fs.length + ' lido(s) — confira abaixo';
     desenharNovos();
   };
-  window.frupNovoManual = function () { NOVOS.push({ id: uidx(), file: null, nome: '(sem arquivo)', pk: '', valor: 0, ini: '', fim: '', data: '' }); desenharNovos(); };
+  window.frupNovoManual = function () { NOVOS.push({ id: uidx(), file: null, nome: '(sem arquivo)', pk: '', valor: 0, ini: '', fim: '', data: '', pag: '' }); desenharNovos(); };
   function opcoes(sel) { return '<option value="">— escolha o funcionário —</option>' + pessoas().map(function (p) { return '<option value="' + esc(p.pk) + '"' + (p.pk === sel ? ' selected' : '') + '>' + esc(p.n) + (p.g !== 'CLT' ? ' (' + p.g + ')' : '') + (p.desl ? ' · desligado' : '') + '</option>'; }).join(''); }
   function desenharNovos() {
     var fer = TIPO === 'fer';
-    el('frup-novos').innerHTML = NOVOS.length ? '<table style="font-size:12.5px;width:100%;"><thead><tr><th>Arquivo</th><th>Funcionário</th>' + (fer ? '<th>Início do gozo</th><th>Fim do gozo</th>' : '<th>Data de afastamento</th>') + '<th>Valor pago (líquido)</th><th></th></tr></thead><tbody>' +
+    el('frup-novos').innerHTML = NOVOS.length ? '<table style="font-size:12.5px;width:100%;"><thead><tr><th>Arquivo</th><th>Funcionário</th>' + (fer ? '<th>Início do gozo</th><th>Fim do gozo</th><th title="Mês em que o valor entra no relatório da diretoria. Em branco = mês do início do gozo">Data do pagamento</th>' : '<th>Data de afastamento</th>') + '<th>Valor pago (líquido)</th><th></th></tr></thead><tbody>' +
       NOVOS.map(function (o, i) {
         return '<tr style="' + (!o.pk || !o.valor ? 'background:#fff7e6;' : '') + '"><td style="font-size:11.5px;max-width:200px;word-break:break-all;">' + esc(o.nome) + (o.erro ? '<div style="color:#c0392b;">' + esc(o.erro) + '</div>' : '') + '</td>' +
           '<td><select style="max-width:280px;" onchange="frupSet(' + i + ',\'pk\',this.value)">' + opcoes(o.pk) + '</select>' + (o.como ? '<div style="font-size:10.5px;color:var(--green-dark);">✔ encontrado pelo ' + o.como + '</div>' : (o.pk ? '' : '<div style="font-size:10.5px;color:#c0392b;">não identificado — escolha</div>')) + '</td>' +
-          (fer ? '<td><input type="date" value="' + o.ini + '" onchange="frupSet(' + i + ',\'ini\',this.value)"></td><td><input type="date" value="' + o.fim + '" onchange="frupSet(' + i + ',\'fim\',this.value)"></td>' : '<td><input type="date" value="' + o.data + '" onchange="frupSet(' + i + ',\'data\',this.value)"></td>') +
+          (fer ? '<td><input type="date" value="' + o.ini + '" onchange="frupSet(' + i + ',\'ini\',this.value)"></td><td><input type="date" value="' + o.fim + '" onchange="frupSet(' + i + ',\'fim\',this.value)"></td><td><input type="date" value="' + (o.pag || '') + '" onchange="frupSet(' + i + ',\'pag\',this.value)"></td>' : '<td><input type="date" value="' + o.data + '" onchange="frupSet(' + i + ',\'data\',this.value)"></td>') +
           '<td><input type="text" value="' + (o.valor ? brl(o.valor) : '') + '" placeholder="0,00" style="width:110px;text-align:right;" onchange="frupSet(' + i + ',\'valor\',this.value)"></td>' +
           '<td><button class="btn-icon danger" title="Remover" onclick="frupSet(' + i + ',\'del\')">🗑</button></td></tr>';
       }).join('') + '</tbody></table>' : '';
@@ -24631,7 +24643,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       var o = NOVOS[i], p = pessoa(o.pk) || { n: '' }, arq = o.file ? { name: o.file.name } : null;
       if (o.file && podeDrive) { try { var up = await uploadFileToDrive(o.file, p.n); arq = { name: o.file.name, id: up.id, url: up.webViewLink }; } catch (e) { console.warn(e); } }
       var r = { id: o.id, pk: o.pk, fid: o.pk.indexOf('f:') === 0 ? o.pk.slice(2) : o.pk, nome: p.n, valor: o.valor, arq: arq, em: new Date().toISOString() };
-      if (fer) { r.ini = o.ini; r.fim = o.fim || o.ini; } else r.data = o.data;
+      if (fer) { r.ini = o.ini; r.fim = o.fim || o.ini; r.pag = o.pag || ''; } else r.data = o.data;
       L.push(r);
     }
     DB.s(K[TIPO], L);
@@ -24642,20 +24654,21 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var fer = TIPO === 'fer', m = +el('frup-mes').value, a = +el('frup-ano').value, q = sem(el('frup-busca').value);
     var L = DB.g(K[TIPO]).filter(function (r) {
       var d = fer ? r.ini : r.data; if (q && sem(r.nome).indexOf(q) === -1) return false;
-      if (m < 0) return true; if (fer) { var de = a + '-' + String(m + 1).padStart(2, '0') + '-01', ate = a + '-' + String(m + 1).padStart(2, '0') + '-31'; return r.ini <= ate && (r.fim || r.ini) >= de; }
+      if (m < 0) return true; if (fer) { var de = a + '-' + String(m + 1).padStart(2, '0') + '-01', ate = a + '-' + String(m + 1).padStart(2, '0') + '-31'; return (r.ini <= ate && (r.fim || r.ini) >= de) || (!!r.pag && r.pag >= de && r.pag <= ate); }
       return d && +d.slice(0, 4) === a && +d.slice(5, 7) === m + 1;
     }).sort(function (x, y) { return String(fer ? y.ini : y.data).localeCompare(String(fer ? x.ini : x.data)); });
     var T = L.reduce(function (s, r) { return s + (+r.valor || 0); }, 0);
     el('frup-tot').innerHTML = L.length + ' lançamento(s) · total <strong>R$ ' + brl(T) + '</strong>';
-    el('frup-tab').innerHTML = '<thead><tr><th>Funcionário</th>' + (fer ? '<th>Gozo</th>' : '<th>Data de afastamento</th>') + '<th style="text-align:right;">Valor pago</th><th>Arquivo</th><th></th></tr></thead><tbody>' +
+    el('frup-tab').innerHTML = '<thead><tr><th>Funcionário</th>' + (fer ? '<th>Gozo</th><th title="Mês em que o valor entra no relatório da diretoria. Em branco = mês do início do gozo">Data do pagamento</th>' : '<th>Data de afastamento</th>') + '<th style="text-align:right;">Valor pago</th><th>Arquivo</th><th></th></tr></thead><tbody>' +
       (L.length ? L.map(function (r) {
-        return '<tr><td><strong>' + esc(r.nome) + '</strong></td><td>' + (fer ? br(r.ini) + ' a ' + br(r.fim) : br(r.data)) + '</td>' +
+        return '<tr><td><strong>' + esc(r.nome) + '</strong></td><td>' + (fer ? br(r.ini) + ' a ' + br(r.fim) + '</td><td><input type="date" value="' + (r.pag || '') + '" onchange="frupPag(\'' + r.id + '\',this.value)" title="Em branco = mês do início do gozo">' : br(r.data)) + '</td>' +
           '<td style="text-align:right;"><input type="text" value="' + brl(r.valor) + '" style="width:110px;text-align:right;" onchange="frupEditar(\'' + r.id + '\',this.value)"></td>' +
           '<td style="font-size:11.5px;">' + (r.arq ? (r.arq.url ? '<a href="' + esc(r.arq.url) + '" target="_blank">📎 ' + esc(r.arq.name) + '</a>' : '📎 ' + esc(r.arq.name)) : '—') + '</td>' +
           '<td><button class="btn-icon danger" title="Excluir lançamento" onclick="frupExcluir(\'' + r.id + '\')">🗑</button></td></tr>';
-      }).join('') : '<tr><td colspan="5" style="color:var(--gray-400);text-align:center;">Nenhum lançamento.</td></tr>') + '</tbody>';
+      }).join('') : '<tr><td colspan="' + (fer ? 6 : 5) + '" style="color:var(--gray-400);text-align:center;">Nenhum lançamento.</td></tr>') + '</tbody>';
   };
   window.frupEditar = function (id, v) { var L = DB.g(K[TIPO]), r = L.find(function (x) { return x.id === id; }); if (!r) return; r.valor = num(v); DB.s(K[TIPO], L); frupLista(); };
+  window.frupPag = function (id, v) { var L = DB.g(K.fer), r = L.find(function (x) { return x.id === id; }); if (!r) return; r.pag = v || ''; DB.s(K.fer, L); if (typeof toast === 'function') toast(v ? '📅 Pagamento: ' + br(v) + ' — o valor entra no relatório desse mês' : 'Sem data: o valor entra no mês do início do gozo'); };
   window.frupExcluir = function (id) { if (!confirm('Excluir este lançamento? (o arquivo no Drive não é apagado)')) return; DB.s(K[TIPO], DB.g(K[TIPO]).filter(function (x) { return x.id !== id; })); frupLista(); };
   // para o relatório da diretoria
   window.ferRecibosDe = function (rid) { return DB.g(K.fer).filter(function (r) { return (r.pk === 'f:' + rid || r.pk === rid || r.fid === rid); }); };
