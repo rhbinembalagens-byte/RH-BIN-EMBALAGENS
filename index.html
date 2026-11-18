@@ -26367,18 +26367,28 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     });
   }
   function abToB64(ab) { var b = new Uint8Array(ab), s = '', i, c = 0x8000; for (i = 0; i < b.length; i += c) s += String.fromCharCode.apply(null, b.subarray(i, i + c)); return btoa(s); }
+  // Limite da Autentique no plano gratuito: 5 MB por arquivo. Gera mais leve e, se passar, tenta de novo com menos qualidade.
+  var LIMITE_PDF = 4.6 * 1024 * 1024, NIVEIS = [[1.6, 0.82], [1.3, 0.72], [1.1, 0.6], [1, 0.5]];
   function gerarPdf(w, html) {
     var pg = pagina(html);
     return carregarH2p(w).then(function (h2p) {
-      // opções criadas no contexto do documento (listas de outra janela não são reconhecidas)
-      var opt = w.JSON.parse(JSON.stringify({
-        margin: [pg.margin[0], pg.margin[3], pg.margin[2], pg.margin[1]],
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: pg.fmt, orientation: pg.land ? 'landscape' : 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      }));
-      return h2p().set(opt).from(w.document.body).outputPdf('arraybuffer');
+      var tentar = function (n) {
+        var q = NIVEIS[n];
+        // opções criadas no contexto do documento (listas de outra janela não são reconhecidas)
+        var opt = w.JSON.parse(JSON.stringify({
+          margin: [pg.margin[0], pg.margin[3], pg.margin[2], pg.margin[1]],
+          image: { type: 'jpeg', quality: q[1] },
+          html2canvas: { scale: q[0], useCORS: true, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: pg.fmt, orientation: pg.land ? 'landscape' : 'portrait', compress: true },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        }));
+        return h2p().set(opt).from(w.document.body).outputPdf('arraybuffer').then(function (ab) {
+          if (ab.byteLength > LIMITE_PDF && n < NIVEIS.length - 1) return tentar(n + 1);
+          if (ab.byteLength > 5 * 1024 * 1024) throw new Error('O PDF ficou com ' + (ab.byteLength / 1048576).toFixed(1).replace('.', ',') + ' MB e a Autentique aceita até 5 MB. Envie menos documentos de uma vez.');
+          return ab;
+        });
+      };
+      return tentar(0);
     }).then(abToB64);
   }
   window.rhAdGerarPdf = gerarPdf;
@@ -26402,7 +26412,9 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var grupos = {}; P.forEach(function (p) { (grupos[p.g] = grupos[p.g] || []).push(p); });
     var st = 'width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;margin:3px 0 8px;font-family:inherit;';
     if (!configurado()) {
-      box.innerHTML = '<div style="font-size:13px;line-height:1.5;">A assinatura digital ainda não está configurada.<br>No sistema, abra <strong>Gerar Documentos ▸ 📲 Assinaturas digitais</strong> e preencha o endereço do Apps Script.</div>';
+      box.innerHTML = '<div style="font-size:13px;line-height:1.5;">' + (cfg().url ? 'Falta a <strong>senha</strong> do Apps Script de assinatura.' : 'A assinatura digital ainda não está configurada.') + '<br>No sistema, abra <strong>Gerar Documentos ▸ 📲 Assinaturas digitais ▸ ⚙️ Configuração</strong>' + (cfg().url ? ' e preencha a senha.' : ' e cole o endereço do Apps Script (termina com /exec).') + '</div>' +
+        '<button type="button" data-r="cfg" style="margin-top:10px;width:100%;padding:8px;border:1px solid #1f8a4c;border-radius:6px;background:#fff;color:#1f8a4c;font-weight:bold;cursor:pointer;">⚙️ Abrir a configuração no sistema</button>';
+      box.querySelector('[data-r="cfg"]').onclick = function () { try { window.rhAdAbrir(); rhAdConfigToggle(true); window.focus(); } catch (e) {} box.querySelector('[data-r="cfg"]').textContent = '✔ Aberta na aba do sistema'; };
       return;
     }
     box.innerHTML =
