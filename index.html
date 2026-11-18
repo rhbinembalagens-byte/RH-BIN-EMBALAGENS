@@ -26668,6 +26668,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var P = window.rhAdPessoas ? rhAdPessoas() : [];
     if (C.modo === 'docs') P = P.filter(function (p) { return p.g === 'CLT'; });
     else if (!C.incExt) P = P.filter(function (p) { return p.g === 'CLT'; });
+    if (C.pks && C.pks.length) P = P.filter(function (p) { return C.pks.indexOf(p.pk) !== -1; });
     return P.map(function (p) {
       var r = ultimo(C, p.pk), st = r ? (r.st || 'enviado') : ((C.erros || {})[p.pk] ? 'erro' : 'nao');
       var faltas = []; if (dig(p.tel).length < 10) faltas.push('WhatsApp'); if (!cpfOk(p.cpf)) faltas.push('CPF');
@@ -26716,11 +26717,50 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       M.map(function (m) { return '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;cursor:pointer;"><input type="checkbox" class="rhcp-mod" value="' + m.k + '" style="width:auto;"> ' + (m.ic ? m.ic + ' ' : '') + esc(m.n) + '</label>'; }).join('') + '</div>' +
       '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="rhcp-modo" value="pdf" onchange="rhCampModo()" style="width:auto;margin-top:2px;"> <span><strong>Um PDF igual para todos</strong> — ex.: termo de ciência, comunicado, política</span></label>' +
       '<div id="rhcp-pdfbox" style="display:none;margin:0 0 10px 26px;"><input type="file" id="rhcp-pdf" accept="application/pdf"><label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:6px;text-transform:none;font-weight:500;"><input type="checkbox" id="rhcp-ext" style="width:auto;"> Incluir colaboradores sem registro e de agência</label></div>' +
+      '<div style="font-weight:600;font-size:13px;margin:6px 0;">Para quem?</div>' +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:4px;cursor:pointer;text-transform:none;font-weight:500;"><input type="radio" name="rhcp-quem" value="todos" checked onchange="rhCampQuem()" style="width:auto;"> Todos os funcionários</label>' +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px;cursor:pointer;text-transform:none;font-weight:500;"><input type="radio" name="rhcp-quem" value="escolher" onchange="rhCampQuem()" style="width:auto;"> Escolher um ou mais funcionários</label>' +
+      '<div id="rhcp-quem-box" style="display:none;margin:0 0 10px 26px;"></div>' +
       '<div class="form-grid"><div class="form-group"><label>Prazo para assinar (dias)</label><input id="rhcp-dias" type="number" min="1" max="30" value="' + (+c.dias || 7) + '"></div>' +
       '<div class="form-group"><label>Seu nome (aparece nas mensagens)</label><input id="rhcp-rh" value="' + esc(c.rhNome || (rhNome() === 'o RH' ? '' : rhNome())) + '" placeholder="Ex.: Mônica"></div>' +
       '<div class="form-group"><label>WhatsApp do RH (para dúvidas)</label><input id="rhcp-tel" value="' + esc(c.rhTel || '') + '" placeholder="(11) 90000-0000"></div></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">' + (camps().length ? '<button class="btn btn-outline" onclick="rhCampTrocar(ATUAL_CAMP())">Cancelar</button>' : '') + '<button class="btn btn-primary" onclick="rhCampCriar()">Criar campanha</button></div></div>';
     window.ATUAL_CAMP = function () { return ATUAL; };
+  };
+  // lista de funcionários para escolher (criação ou edição da campanha)
+  function escolhaHtml(pks) {
+    var P = window.rhAdPessoas ? rhAdPessoas() : [], G = {};
+    P.forEach(function (p) { var l = loja(p); (G[l] = G[l] || []).push(p); });
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;"><input id="rhcp-qbusca" placeholder="🔎 Buscar nome" oninput="rhCampQFiltro()" style="flex:1;min-width:160px;"><button type="button" class="btn btn-outline btn-sm" onclick="rhCampQTodos(true)">Marcar visíveis</button><button type="button" class="btn btn-outline btn-sm" onclick="rhCampQTodos(false)">Desmarcar</button><span id="rhcp-qn" style="font-size:12.5px;font-weight:700;color:#1f8a4c;align-self:center;"></span></div>' +
+      '<div style="max-height:260px;overflow:auto;border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;">' +
+      Object.keys(G).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); }).map(function (l) {
+        return '<div class="rhcp-qg"><div style="font-weight:700;font-size:12px;color:var(--gray-600);margin:6px 0 2px;">' + esc(l) + '</div>' + G[l].map(function (p) {
+          return '<label class="rhcp-qi" data-n="' + esc(norm(p.nome)) + '" style="display:flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 0;cursor:pointer;text-transform:none;font-weight:500;"><input type="checkbox" class="rhcp-q" value="' + esc(p.pk) + '" data-g="' + esc(p.g) + '" onchange="rhCampQConta()" style="width:auto;"' + (pks && pks.indexOf(p.pk) !== -1 ? ' checked' : '') + '> ' + esc(p.nome) + (p.g !== 'CLT' ? ' <small style="color:var(--gray-500);">(' + esc(p.g) + ')</small>' : '') + '</label>';
+        }).join('') + '</div>';
+      }).join('') + '</div>';
+  }
+  window.rhCampQuem = function () {
+    var esc_ = (document.querySelector('input[name="rhcp-quem"]:checked') || {}).value === 'escolher', b = el('rhcp-quem-box');
+    b.style.display = esc_ ? '' : 'none'; if (esc_ && !b.innerHTML) { b.innerHTML = escolhaHtml([]); rhCampQConta(); }
+  };
+  window.rhCampQFiltro = function () { var q = norm(el('rhcp-qbusca').value); document.querySelectorAll('.rhcp-qi').forEach(function (x) { x.style.display = !q || x.dataset.n.indexOf(q) !== -1 ? 'flex' : 'none'; }); document.querySelectorAll('.rhcp-qg').forEach(function (g) { g.style.display = Array.prototype.some.call(g.querySelectorAll('.rhcp-qi'), function (x) { return x.style.display !== 'none'; }) ? '' : 'none'; }); };
+  window.rhCampQTodos = function (v) { document.querySelectorAll('.rhcp-qi').forEach(function (x) { if (x.style.display !== 'none') x.querySelector('input').checked = v; }); rhCampQConta(); };
+  window.rhCampQConta = function () { var n = document.querySelectorAll('.rhcp-q:checked').length, s = el('rhcp-qn'); if (s) s.textContent = n ? n + ' escolhido(s)' : ''; };
+  function escolhidos() { return Array.prototype.filter.call(document.querySelectorAll('.rhcp-q'), function (c) { return c.checked; }).map(function (c) { return c.value; }); }
+  window.rhCampParticipantes = function () {
+    var C = atual(); if (!C) return; var b = el('rhcp-fila');
+    b.innerHTML = '<div style="padding:10px 12px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;margin-bottom:8px;"><div style="font-weight:700;margin-bottom:6px;">👥 Funcionários desta campanha</div>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin-bottom:6px;text-transform:none;font-weight:500;"><input type="checkbox" id="rhcp-ptodos" style="width:auto;"' + (C.pks && C.pks.length ? '' : ' checked') + '> Todos os funcionários (ignora a lista abaixo)</label>' +
+      escolhaHtml(C.pks || []) + '<div style="display:flex;gap:6px;margin-top:8px;"><button class="btn btn-primary btn-sm" onclick="rhCampParticipantesSalvar()">Salvar</button><button class="btn btn-outline btn-sm" onclick="el_rhcp_fila_fechar2()">Cancelar</button></div></div>';
+    window.el_rhcp_fila_fechar2 = function () { el('rhcp-fila').innerHTML = ''; };
+    rhCampQConta();
+  };
+  window.rhCampParticipantesSalvar = function () {
+    var todos = el('rhcp-ptodos').checked, L = escolhidos();
+    if (!todos && !L.length) { alert('Escolha pelo menos um funcionário ou marque “Todos”.'); return; }
+    salvarAtual(function (c) { c.pks = todos ? [] : L; });
+    if (!todos) L.forEach(function (k) { SEL[k] = true; });
+    el('rhcp-fila').innerHTML = ''; render();
   };
   window.rhCampModo = function () { var pdf = (document.querySelector('input[name="rhcp-modo"]:checked') || {}).value === 'pdf'; el('rhcp-docs').style.display = pdf ? 'none' : 'grid'; el('rhcp-pdfbox').style.display = pdf ? '' : 'none'; };
   window.rhCampCriar = function () {
@@ -26731,10 +26771,14 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (modo === 'pdf' && !f) { alert('Escolha o arquivo PDF.'); return; }
     if (f && f.size > 4.8 * 1024 * 1024) { alert('O PDF tem mais de 5 MB, limite da Autentique.'); return; }
     var c = cfg(); c.rhNome = el('rhcp-rh').value.trim(); c.rhTel = el('rhcp-tel').value.trim(); DB.so(KCFG, c);
-    var C = { id: nid(), nome: el('rhcp-nome').value.trim() || 'Atualização digital', docNome: el('rhcp-docnome').value.trim() || 'BIN Embalagens – Documentos', modo: modo, mods: mods, pdfNome: f ? f.name : '', incExt: !!(el('rhcp-ext') && el('rhcp-ext').checked), dias: Math.max(1, Math.min(30, +el('rhcp-dias').value || 7)), criada: new Date().toISOString(), avisos: {}, erros: {}, msgAviso: MSG_AVISO, msgLembrete: MSG_LEMBRETE, msgGrupo: MSG_GRUPO };
+    var quem = (document.querySelector('input[name="rhcp-quem"]:checked') || {}).value, pks = quem === 'escolher' ? escolhidos() : [];
+    if (quem === 'escolher' && !pks.length) { alert('Escolha pelo menos um funcionário.'); return; }
+    if (modo === 'docs' && pks.length) { var ext = pks.filter(function (k) { return k.indexOf('x:') === 0; }); if (ext.length) { if (!confirm(ext.length + ' escolhido(s) é(são) sem registro/agência e não têm Documentos Admissionais. Continuar sem eles?')) return; pks = pks.filter(function (k) { return k.indexOf('x:') !== 0; }); } }
+    if (modo === 'pdf' && pks.some(function (k) { return k.indexOf('x:') === 0; }) && el('rhcp-ext')) el('rhcp-ext').checked = true;
+    var C = { id: nid(), pks: pks, nome: el('rhcp-nome').value.trim() || 'Atualização digital', docNome: el('rhcp-docnome').value.trim() || 'BIN Embalagens – Documentos', modo: modo, mods: mods, pdfNome: f ? f.name : '', incExt: !!(el('rhcp-ext') && el('rhcp-ext').checked), dias: Math.max(1, Math.min(30, +el('rhcp-dias').value || 7)), criada: new Date().toISOString(), avisos: {}, erros: {}, msgAviso: MSG_AVISO, msgLembrete: MSG_LEMBRETE, msgGrupo: MSG_GRUPO };
     if (f) f.arrayBuffer().then(function (ab) { PDF_AVULSO[C.id] = ab; });
-    var L = camps(); L.push(C); salvarCamps(L); ATUAL = C.id; render();
-    t('📣 Campanha criada');
+    var L = camps(); L.push(C); salvarCamps(L); ATUAL = C.id; SEL = {}; pks.forEach(function (k) { SEL[k] = true; }); render();
+    t('📣 Campanha criada' + (pks.length ? ' — ' + pks.length + ' funcionário(s) já selecionado(s) para envio' : ''));
   };
   function atual() { return camps().filter(function (c) { return c.id === ATUAL; })[0]; }
   function salvarAtual(fn) { var L = camps(); L.forEach(function (c) { if (c.id === ATUAL) fn(c); }); salvarCamps(L); }
@@ -26753,7 +26797,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var enviados = R.length - (cnt.nao || 0) - (cnt.erro || 0);
     var desc = C.modo === 'docs' ? (window.ctrModelosLista ? ctrModelosLista().filter(function (m) { return C.mods.indexOf(m.k) !== -1; }).map(function (m) { return m.n; }).join(', ') : C.mods.join(', ')) : 'PDF: ' + C.pdfNome;
     box.innerHTML =
-      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;"><strong>' + esc(C.docNome) + '</strong> · ' + esc(desc) + ' · prazo ' + C.dias + ' dias · criada em ' + br(C.criada) + ' · <a href="#" onclick="rhCampExcluir();return false;" style="color:#b71c1c;">excluir campanha</a></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:8px;"><strong>' + esc(C.docNome) + '</strong> · ' + esc(desc) + ' · prazo ' + C.dias + ' dias · criada em ' + br(C.criada) + ' · 👥 ' + (C.pks && C.pks.length ? C.pks.length + ' funcionário(s) escolhido(s)' : 'todos os funcionários') + ' (<a href="#" onclick="rhCampParticipantes();return false;">alterar</a>) · <a href="#" onclick="rhCampExcluir();return false;" style="color:#b71c1c;">excluir campanha</a></div>' +
       '<div style="background:#f1f8e9;border:1px solid #c5e1a5;border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:10px;line-height:1.55;"><strong>Passo a passo para o funcionário confiar:</strong> ' +
       '<b>1.</b> Mande o <a href="#" onclick="rhCampComunicado();return false;">📢 comunicado</a> nos grupos das lojas e peça aos gerentes para avisarem a equipe (tem <a href="#" onclick="rhCampCartaz();return false;">🖨️ cartaz para imprimir</a>). ' +
       '<b>2.</b> Antes de enviar, use <b>📣 Avisar</b> para mandar uma mensagem do WhatsApp do RH dizendo que a Autentique vai chegar. ' +
