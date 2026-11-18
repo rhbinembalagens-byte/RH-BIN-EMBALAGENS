@@ -26676,7 +26676,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   }
 
   // ── tela ──
-  var ATUAL = '', FILA = null, PARAR = false, PDF_AVULSO = {}, PROG = '';
+  var ATUAL = '', FILA = null, PARAR = false, PDF_AVULSO = {}, PROG = '', SEL = {};
   function modal() {
     var m = el('rhcp-bg'); if (m) return m;
     document.body.insertAdjacentHTML('beforeend',
@@ -26695,7 +26695,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (window.rhAdConfigurado && rhAdConfigurado() && window.rhAdAtualizar) rhAdAtualizar(true);
   };
   window.rhCampFechar = function () { var m = el('rhcp-bg'); if (m) m.style.display = 'none'; };
-  window.rhCampTrocar = function (id) { ATUAL = id; PROG = ''; render(); };
+  window.rhCampTrocar = function (id) { ATUAL = id; PROG = ''; SEL = {}; render(); };
   function opcoesSel() {
     var s = el('rhcp-sel'); if (!s) return;
     s.innerHTML = camps().slice().reverse().map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === ATUAL ? ' selected' : '') + '>' + esc(c.nome) + '</option>'; }).join('') || '<option value="">— nenhuma campanha —</option>';
@@ -26769,19 +26769,24 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<button class="btn btn-outline btn-sm" onclick="rhAdAtualizar && rhAdAtualizar()">🔄 Atualizar situação</button>' +
       '<button class="btn btn-outline btn-sm" onclick="rhCampPendentes()">🖨️ Lista de pendentes</button></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--gray-50);border-radius:8px;">' +
-      '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;text-transform:none;font-weight:600;cursor:pointer;"><input type="checkbox" id="rhcp-todos" onchange="rhCampMarcarTodos(this.checked)" style="width:auto;"> Marcar todos da lista</label>' +
-      '<span id="rhcp-nsel" style="font-size:12.5px;color:var(--gray-600);"></span><span style="flex:1;"></span>' +
-      '<button class="btn btn-outline btn-sm" onclick="rhCampFilaAvisos()">📣 Avisar marcados (um por um)</button>' +
-      '<button class="btn btn-primary btn-sm" style="background:#1f8a4c;border-color:#1f8a4c;" onclick="rhCampEnviar()">📲 Enviar pela Autentique</button>' +
+      '<span style="font-size:12.5px;font-weight:600;">Selecionar:</span>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhCampMarcar(\'todos\')">Todos da lista</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhCampMarcar(\'nao\')">Só não enviados</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhCampMarcar(\'pend\')">Só pendentes</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhCampMarcar(\'\')">Nenhum</button>' +
+      '<span id="rhcp-nsel" style="font-size:12.5px;font-weight:700;color:#1f8a4c;"></span><span style="flex:1;"></span>' +
+      '<button class="btn btn-outline btn-sm" onclick="rhCampFilaAvisos()">📣 Avisar selecionados</button>' +
+      '<button class="btn btn-primary btn-sm" id="rhcp-env-btn" style="background:#1f8a4c;border-color:#1f8a4c;" onclick="rhCampEnviar()">📲 Enviar pela Autentique</button>' +
       '<button class="btn btn-outline btn-sm" id="rhcp-parar" style="display:none;" onclick="rhCampParar()">⏹ Parar</button></div>' +
       '<div id="rhcp-prog" style="font-size:12.5px;margin-bottom:6px;">' + PROG + '</div><div id="rhcp-fila"></div>' +
-      '<div style="overflow:auto;max-height:52vh;"><table class="table" style="width:100%;font-size:12.5px;"><thead><tr><th style="width:28px;"></th><th>Funcionário</th><th>Loja</th><th>WhatsApp</th><th>Aviso RH</th><th>Situação</th><th>Enviado</th><th>Assinado</th><th></th></tr></thead><tbody>' +
+      '<div style="font-size:11.5px;color:var(--gray-500);margin:-2px 0 4px;">Dica: clique na linha do funcionário para selecionar ou tirar. Use a busca ou o filtro de loja para achar alguém.</div>' +
+      '<div style="overflow:auto;max-height:52vh;"><table class="table" style="width:100%;font-size:12.5px;"><thead><tr><th style="width:28px;"><input type="checkbox" id="rhcp-todos" title="Selecionar todos da lista" onchange="rhCampMarcarTodos(this.checked)" style="width:auto;"></th><th>Funcionário</th><th>Loja</th><th>WhatsApp</th><th>Aviso RH</th><th>Situação</th><th>Enviado</th><th>Assinado</th><th></th></tr></thead><tbody>' +
       (V.length ? V.map(function (x) {
         var r = x.r, pend = r && (x.st === 'enviado' || x.st === 'visualizado'), ac = '';
         ac += '<button class="btn btn-outline btn-sm" title="Avisar pelo WhatsApp do RH" onclick="rhCampAvisar(\'' + esc(x.p.pk) + '\')">📣</button> ';
         if (pend) ac += '<button class="btn btn-outline btn-sm" title="Lembrete pelo WhatsApp do RH" onclick="rhCampLembrete(\'' + esc(x.p.pk) + '\')">🔔</button> ';
         if (r && r.drive) ac += '<a class="btn btn-outline btn-sm" title="PDF assinado" href="' + esc(r.drive) + '" target="_blank" rel="noopener">📂</a> ';
-        return '<tr><td><input type="checkbox" class="rhcp-chk" value="' + esc(x.p.pk) + '" onchange="rhCampContar()" style="width:auto;"' + (x.st === 'assinado' ? ' disabled' : '') + '></td>' +
+        return '<tr class="rhcp-tr" data-pk="' + esc(x.p.pk) + '" data-st="' + x.st + '" onclick="rhCampLinha(event,this)" style="cursor:pointer;"><td><input type="checkbox" class="rhcp-chk" value="' + esc(x.p.pk) + '" onchange="rhCampContar()" style="width:auto;"' + (x.st === 'assinado' ? ' disabled title="Já assinou"' : '') + (SEL[x.p.pk] && x.st !== 'assinado' ? ' checked' : '') + '></td>' +
           '<td>' + esc(x.p.nome) + (x.p.g !== 'CLT' ? ' <small style="color:var(--gray-500);">(' + esc(x.p.g) + ')</small>' : '') + (x.faltas.length ? '<div style="font-size:11px;color:#e65100;">⚠️ falta ' + x.faltas.join(' e ') + ' no cadastro</div>' : '') + (x.erro && x.st === 'erro' ? '<div style="font-size:11px;color:#b71c1c;">' + esc(x.erro) + '</div>' : '') + '</td>' +
           '<td>' + esc(x.loja) + '</td><td style="white-space:nowrap;">' + esc(window.rhAdTelFmt ? rhAdTelFmt(x.p.tel) : x.p.tel) + '</td>' +
           '<td style="white-space:nowrap;font-size:11.5px;">' + (x.aviso ? '✔ ' + brh(x.aviso) : '—') + '</td><td>' + badge(x.st) + '</td>' +
@@ -26793,9 +26798,22 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   window.rhCampFiltro = function (v) { el('rhcp-corpo').dataset.st = v || ''; render(); };
   window.rhCampLoja = function (v) { el('rhcp-corpo').dataset.loja = v || ''; render(); };
   var _bt; window.rhCampBusca = function (v) { el('rhcp-corpo').dataset.busca = v || ''; clearTimeout(_bt); _bt = setTimeout(function () { render(); var i = document.querySelector('#rhcp-corpo input[placeholder^="🔎"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 300); };
-  function marcados() { return Array.prototype.filter.call(document.querySelectorAll('.rhcp-chk'), function (c) { return c.checked && !c.disabled; }).map(function (c) { return c.value; }); }
+  function marcados() { var C = atual(); if (!C) return []; var ok = {}; pessoasDa(C).forEach(function (x) { if (x.st !== 'assinado') ok[x.p.pk] = 1; }); return Object.keys(SEL).filter(function (k) { return SEL[k] && ok[k]; }); }
   window.rhCampMarcarTodos = function (v) { document.querySelectorAll('.rhcp-chk').forEach(function (c) { if (!c.disabled) c.checked = v; }); rhCampContar(); };
-  window.rhCampContar = function () { var n = marcados().length, s = el('rhcp-nsel'); if (s) s.textContent = n ? n + ' marcado(s)' : 'Marque quem vai receber'; };
+  window.rhCampMarcar = function (q) {
+    document.querySelectorAll('.rhcp-tr').forEach(function (tr) { var c = tr.querySelector('.rhcp-chk'), st = tr.dataset.st; if (c.disabled) return; c.checked = q === 'todos' ? true : q === 'nao' ? (st === 'nao' || st === 'erro') : q === 'pend' ? (st !== 'assinado') : false; });
+    if (q === '') SEL = {}; rhCampContar();
+  };
+  window.rhCampLinha = function (ev, tr) {
+    if (ev.target.closest('button,a,input')) return;
+    var c = tr.querySelector('.rhcp-chk'); if (!c || c.disabled) return; c.checked = !c.checked; rhCampContar();
+  };
+  window.rhCampContar = function () {
+    document.querySelectorAll('.rhcp-tr').forEach(function (tr) { var c = tr.querySelector('.rhcp-chk'); SEL[tr.dataset.pk] = !!(c && c.checked); tr.style.background = c && c.checked ? '#e8f5e9' : ''; });
+    var n = marcados().length, s = el('rhcp-nsel'), b = el('rhcp-env-btn');
+    if (s) s.textContent = n ? n + ' selecionado(s)' : '';
+    if (b) b.textContent = n ? '📲 Enviar para ' + n + ' pela Autentique' : '📲 Enviar pela Autentique';
+  };
   window.rhCampExcluir = function () {
     var C = atual(); if (!C || !confirm('Excluir a campanha “' + C.nome + '”? Os envios já feitos continuam em 📲 Assinaturas digitais.')) return;
     salvarCamps(camps().filter(function (c) { return c.id !== C.id; })); ATUAL = ''; var L = camps(); ATUAL = L.length ? L[L.length - 1].id : ''; if (ATUAL) render(); else rhCampNova();
