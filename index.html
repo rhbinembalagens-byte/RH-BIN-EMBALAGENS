@@ -13229,7 +13229,8 @@ var EMP_ENDERECO_PADRAO = '{{EMP_END}}';
 
 function _abrirDocSimples(docHTML, filename) {
   var w = window.open('', '_blank');
-  if (w) { w.document.write(docHTML); w.document.close(); if (window.rhAdBotao) rhAdBotao(w, docHTML, filename); setTimeout(function(){ w.print(); }, 700); }
+  var _envAss = !!window._rhAdEnviar; window._rhAdEnviar = false;
+  if (w) { w.document.write(docHTML); w.document.close(); if (window.rhAdBotao) rhAdBotao(w, docHTML, filename, null, _envAss); if (!_envAss) setTimeout(function(){ w.print(); }, 700); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -19535,7 +19536,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="form-group"><label>Cidade (local)</label><input id="tu-cidade" type="text"></div>' +
       '<div class="form-group"><label>Data <span style="font-weight:400;text-transform:none;">(vazio = preencher à mão)</span></label><input id="tu-data" type="date"></div>' +
       '<div class="form-group form-full"><label>Empregador – nome e cargo de quem entrega</label><input id="tu-resp" type="text" placeholder="ex.: MARIA SILVA – RH" style="text-transform:uppercase;"></div>' +
-      '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-termo-uni\')">Cancelar</button><button class="btn btn-primary" onclick="tuGerar()">📄 Gerar termo</button></div></div></div>');
+      '</div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal(\'modal-termo-uni\')">Cancelar</button><button class="btn btn-outline" style="border-color:#1f8a4c;color:#1f8a4c;" onclick="rhAdGerarEnviar(function(){tuGerar()})">📲 Gerar e enviar para assinatura</button><button class="btn btn-primary" onclick="tuGerar()">📄 Gerar termo</button></div></div></div>');
   }
   window.tuLinha = function (it, tam, qtd, val) {
     var box = el('tu-itens'), row = document.createElement('div');
@@ -25344,7 +25345,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       campo('ct-cid', 'Cidade da assinatura') + campo('ct-data', 'Data da assinatura', '<input id="ct-data" type="date">') +
       '<div class="form-group form-full ct-v-ctr"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
       '<label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-menor"> Incluir linha "Responsável legal (quando menor de idade)"</label></div></div>' +
-      '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar documento</button></div>' +
+      '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-outline" style="border-color:#1f8a4c;color:#1f8a4c;" onclick="rhAdGerarEnviar(function(){ctrGerar()})">📲 Gerar e enviar para assinatura</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar documento</button></div>' +
       '</div></div>' +
       '<div class="modal-bg" id="modal-ctr-h"><div class="modal" style="max-width:820px;"><div class="modal-header"><h3>🗂️ Documentos admissionais gerados</h3><button class="modal-close" onclick="closeModal(\'modal-ctr-h\')">&#10005;</button></div><div style="max-height:60vh;overflow:auto;"><table class="data-table" id="ct-htab"></table></div></div></div>';
     document.body.insertAdjacentHTML('beforeend', h);
@@ -26265,6 +26266,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       });
   }
   window.rhAdCall = call;
+  // "Gerar e enviar para assinatura": abre o documento já com o painel de envio (sem imprimir)
+  window.rhAdGerarEnviar = function (fn) { window._rhAdEnviar = true; try { fn(); } finally { setTimeout(function () { window._rhAdEnviar = false; }, 0); } };
 
   // ── Pessoas (CLT + sem registro + agência) ──
   function pessoas() {
@@ -26386,7 +26389,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   }
 
   // ── Botão no documento aberto ──
-  window.rhAdBotao = function (w, html, nome, f) {
+  window.rhAdBotao = function (w, html, nome, f, abrir) {
     try {
       if (!w || !w.document || !w.document.body) return;
       var d = w.document; if (d.getElementById('rhad-bar')) return;
@@ -26401,6 +26404,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
         aberto = !aberto; box.style.display = aberto ? 'block' : 'none';
         if (aberto && !box.innerHTML) montarPainel(box, { doc: d, html: html, nome: nome, pk: f && f.id ? f.id : '', obterPdf: function () { return gerarPdf(w, html); } });
       };
+      if (abrir) btn.onclick();
     } catch (e) { console.warn('rhAdBotao', e); }
   };
 
