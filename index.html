@@ -19588,16 +19588,35 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     tuFuncMudou();
     el('modal-termo-uni').classList.add('open');
   };
+  // itens entregues (menu Uniforme, últimos 60 dias) e unidade provável — usados também nos Documentos Admissionais
+  window.tuItensDe = function (nomePessoa) {
+    var nome = tuNorm(nomePessoa), lim = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10), ag = {};
+    if (nome) DB.g('uni-mov').forEach(function (m) {
+      if (m.tipo !== 'Saída' || tuNorm(m.func) !== nome || String(m.data || '') < lim) return;
+      var itn = (DB.g('uni-itens').find(function (x) { return x.id === m.item; }) || {}).nome || m.item, k = tuNorm(itn) + '|' + tuNorm(m.tam);
+      ag[k] = ag[k] || { it: String(itn || '').toUpperCase(), tam: String(m.tam || '').toUpperCase(), q: 0 }; ag[k].q += +m.qtd || 0;
+    });
+    return Object.keys(ag).map(function (k) { var x = ag[k]; x.v = ls('rh_tu_val_' + tuNorm(x.it)) || ''; return x; });
+  };
+  window.tuUnidadeDe = function (p) { return tuUnidadePalpite(p || {}); };
+  window.TU_UNIDADES = TU_UNID;
+  window.tuItensNomes = function () { return DB.g('uni-itens').map(function (x) { return String(x.nome || '').toUpperCase(); }); };
   window.tuGerar = function () {
-    var u = function (v, len) { return v ? '<span class="pre">' + esc(v) + '</span>' : L(len); };
     var nome = el('tu-nome').value.trim().toLocaleUpperCase('pt-BR'), cpf = el('tu-cpf').value.trim(), cargo = el('tu-cargo').value.trim().toLocaleUpperCase('pt-BR');
     var razao = (el('tu-razao').value.trim() || 'BIN EMBALAGENS').toLocaleUpperCase('pt-BR'), cnpj = el('tu-cnpj').value.trim();
     var un = (document.querySelector('input[name="tu-un"]:checked') || {}).value;
     var itens = Array.prototype.map.call(document.querySelectorAll('#tu-itens .tu-it'), function (r) { var i = r.querySelectorAll('input'); return { it: i[0].value.trim().toLocaleUpperCase('pt-BR'), tam: i[1].value.trim().toUpperCase(), q: i[2].value.trim(), v: numero(i[3].value) }; })
       .filter(function (x) { return x.it || x.tam || x.q || x.v; });
-    itens.forEach(function (x) { if (x.it && x.v > 0) ls('rh_tu_val_' + tuNorm(x.it), brl(x.v)); });
-    var cidade = el('tu-cidade').value.trim() || 'Guarulhos – SP', dt = el('tu-data').value, dp = dt ? dt.split('-') : null, resp = el('tu-resp').value.trim().toLocaleUpperCase('pt-BR');
+    var cidade = el('tu-cidade').value.trim() || 'Guarulhos – SP', dt = el('tu-data').value, resp = el('tu-resp').value.trim().toLocaleUpperCase('pt-BR');
     ls('rh_rec_cidade', cidade); ls('rh_tu_resp', resp);
+    var html = tuMontarHtml({ nome: nome, cpf: cpf, cargo: cargo, razao: razao, cnpj: cnpj, un: un, itens: itens, cidade: cidade, dt: dt, resp: resp });
+    closeModal('modal-termo-uni');
+    _abrirDocSimples(html, ('Termo_Uniforme_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
+  };
+  window.tuMontarHtml = function (o) {
+    var nome = o.nome || '', cpf = o.cpf || '', cargo = o.cargo || '', razao = o.razao || 'BIN EMBALAGENS', cnpj = o.cnpj || '', un = o.un == null ? '' : o.un, itens = (o.itens || []).filter(function (x) { return x && (x.it || x.tam || x.q || x.v); });
+    itens.forEach(function (x) { x.v = typeof x.v === 'number' ? x.v : numero(x.v); if (x.it && x.v > 0) ls('rh_tu_val_' + tuNorm(x.it), brl(x.v)); });
+    var cidade = o.cidade || 'Guarulhos – SP', dt = o.dt || '', dp = dt ? dt.split('-') : null, resp = o.resp || '';
     var linhas = itens.slice(); while (linhas.length < 5) linhas.push(null);
     var css = '@page{size:A4;margin:1.2cm 1.8cm 1cm;}*{box-sizing:border-box;}body{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#3A2E1A;margin:0;font-size:10.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
       '@media screen{html{background:#e6e6e6;}body{background:#fff;width:21cm;min-height:29.7cm;padding:1.2cm 1.8cm 1cm;margin:16px auto;box-shadow:0 2px 12px rgba(0,0,0,.18);}}' +
@@ -19623,8 +19642,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<p class="local">' + esc(cidade) + ', ' + (dp ? String(+dp[2]).padStart(2, '0') : L(6)) + ' de ' + (dp ? MESES[+dp[1] - 1] : L(22)) + ' de ' + (dp ? dp[0] : L(8)) + '.</p>' +
       '<table class="ass"><tr><td><div class="l">' + (nome ? esc(nome) + '<br>' : '') + 'Colaborador(a)</div></td><td class="gap"></td><td><div class="l">' + (window.rhAssImg?rhAssImg():'') + (resp ? esc(resp) + '<br>' : '') + 'Empregador (nome e cargo)</div></td></tr></table>' +
       '<div class="end">' + esc(TU_END) + '</div></body></html>';
-    closeModal('modal-termo-uni');
-    _abrirDocSimples(html, ('Termo_Uniforme_' + (nome || 'em_branco')).replace(/\s+/g, '_'));
+    return html;
   };
   // ── cartões na tela Gerar Documentos ──
   function injetarCards() {
@@ -25262,7 +25280,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     ficha: { g: 'doc', ic: '🗂️', t: 'REGISTRO DE EMPREGADO', n: 'Ficha de Registro de Empregado', d: 'Dados pessoais, documentos, contrato e quadros de anotação' },
     imagem: { g: 'doc', ic: '📸', t: 'AUTORIZAÇÃO PARA USO DA IMAGEM', n: 'Termo de Autorização de Uso da Imagem', d: 'Uso de imagem e voz, a título gratuito' },
     lgpd: { g: 'doc', ic: '🔒', t: 'TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS', n: 'Termo de Consentimento – LGPD', d: 'Lei nº 13.709/2018 · dados, finalidades e direitos' },
-    cargo: { g: 'doc', ic: '📋', t: 'DESCRIÇÃO DE CARGO', n: 'Descrição de Cargo', d: '11 cargos BIN · missão, atividades, requisitos e ciência' }
+    cargo: { g: 'doc', ic: '📋', t: 'DESCRIÇÃO DE CARGO', n: 'Descrição de Cargo', d: '11 cargos BIN · missão, atividades, requisitos e ciência' },
+    unif: { g: 'doc', ic: '👕', t: 'TERMO DE RECEBIMENTO E RESPONSABILIDADE DE UNIFORME', n: 'Termo de Recebimento de Uniforme', d: 'Itens, tamanhos e quantidades (das entregas do Estoque de Uniformes) · unidade' }
   };
   function ehCtr(m) { return !MODELOS[m].g; }
   var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -25325,6 +25344,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       VT_MT.map(function (t, i) { return '<tr><td>' + t + (i === VT_MT.length - 1 ? ' <input id="ct-vt-outro" placeholder="qual?" style="width:55%;display:inline-block;">' : '') + '</td><td style="text-align:center;"><input type="checkbox" id="ct-vt-i' + i + '" style="width:auto;" onchange="vtConta()"></td><td><input id="ct-vt-iv' + i + '" placeholder="0,00" oninput="vtMarca(\'i\',' + i + ')"></td><td style="text-align:center;"><input type="checkbox" id="ct-vt-v' + i + '" style="width:auto;" onchange="vtConta()"></td><td><input id="ct-vt-vv' + i + '" placeholder="0,00" oninput="vtMarca(\'v\',' + i + ')"></td></tr>'; }).join('') + '</table>' +
       '<div class="form-grid" style="margin-top:6px;"><div class="form-group"><label>Tipo de cartão</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;padding-top:4px;">' + VT_CART.map(function (t, i) { return '<label style="display:flex;gap:5px;align-items:center;text-transform:none;font-weight:500;"><input type="checkbox" id="ct-vt-c' + i + '" style="width:auto;"> ' + t + '</label>'; }).join('') + '</div></div>' +
       '<div class="form-group"><label>Outro cartão (qual?)</label><input id="ct-vt-cout"></div><div class="form-group"><label>Conduções por dia (ida + volta)</label><input id="ct-vt-qtd" type="number" min="0" max="20"></div><div class="form-group"><label>Nº do cartão (opcional)</label><input id="ct-vt-num"></div></div></div>' +
+      '<div class="ct-v-unif"><div class="ct-sec">Termo de uniforme</div>' +
+      '<div class="form-group"><label>Unidade</label><div id="ct-tu-un" style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;padding-top:4px;">' + (window.TU_UNIDADES || []).map(function (u, i) { return '<label style="display:flex;gap:5px;align-items:center;font-weight:500;text-transform:none;margin:0;"><input type="radio" name="ct-tu-un" value="' + i + '" style="width:auto;"> ' + esc(u) + '</label>'; }).join('') + '<label style="display:flex;gap:5px;align-items:center;font-weight:500;text-transform:none;margin:0;"><input type="radio" name="ct-tu-un" value="" checked style="width:auto;"> em branco</label></div></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;"><strong style="font-size:13px;">Itens entregues</strong><span id="ct-tu-info" style="font-size:11.5px;color:var(--gray-500);"></span><button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="ctTuLinha()">+ Item</button></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 90px 90px 120px 30px;gap:6px;font-size:11px;font-weight:700;color:var(--gray-600);margin-bottom:4px;"><span>ITEM</span><span>TAMANHO</span><span>QUANTIDADE</span><span>VALOR UNIT. (R$)</span><span></span></div><div id="ct-tu-itens"></div><datalist id="ct-tu-dl"></datalist>' +
+      '<div style="font-size:11.5px;color:var(--gray-500);margin-top:4px;">Quem entrega (empregador – nome e cargo) = campo <b>Representante da empresa</b>; data de entrega = <b>Data da assinatura</b>.</div></div>' +
       '<div class="ct-v-sind"><div class="ct-sec">Sindicato</div><div class="form-grid">' + campo('ct-sind', 'Nome do sindicato', null, 'form-full') + '</div></div>' +
       '<div class="ct-v-cargo"><div class="ct-sec">Descrição de cargo</div><div class="form-grid">' +
       campo('ct-cargok', 'Cargo', '<select id="ct-cargok">' + CARGOS.map(function (x) { return '<option value="' + x.k + '">' + esc(x.t) + '</option>'; }).join('') + '</select>') + campo('ct-gestor', 'Gestor(a) imediato(a) (nome)') + '</div></div>' +
@@ -25351,6 +25375,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="ct-sec">Assinatura</div><div class="form-grid">' +
       campo('ct-cid', 'Cidade da assinatura', '<input id="ct-cid" list="ct-cid-l" placeholder="Ex.: São Paulo"><datalist id="ct-cid-l"><option value="São Paulo"><option value="Guarulhos"></datalist><div style="display:flex;gap:4px;margin-top:4px;"><button type="button" class="btn btn-outline btn-sm" onclick="sv_ctcid(\'São Paulo\')">São Paulo</button><button type="button" class="btn btn-outline btn-sm" onclick="sv_ctcid(\'Guarulhos\')">Guarulhos</button></div>') + campo('ct-data', 'Data da assinatura', '<div style="display:flex;gap:6px;"><select id="ct-data-modo" onchange="ctrDataModo()" style="width:auto;flex:0 0 auto;"><option value="adm">Data da admissão</option><option value="hoje">Hoje</option><option value="manual">Outra data</option></select><input id="ct-data" type="date" oninput="ctrDataManual()" style="flex:1;"></div>') +
       '<div class="form-group form-full ct-v-ctr"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-prorr" checked> Incluir o Termo de Prorrogação (2ª página)</label>' +
+      '</div><div class="form-group form-full ct-v-capa"><label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-capa" checked> Incluir <b>&nbsp;página de capa&nbsp;</b> com a lista dos documentos e a declaração de ciência (recomendado quando vários documentos saem juntos)</label>' +
       '<label style="text-transform:none;font-weight:500;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="ct-menor"> Incluir linha "Responsável legal (quando menor de idade)"</label></div></div>' +
       '<div class="modal-footer"><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button><button class="btn btn-outline" onclick="ctrGerar(true)">📄 Em branco</button><button class="btn btn-outline" onclick="closeModal(\'modal-ctr\')">Cancelar</button><button class="btn btn-outline" style="border-color:#1f8a4c;color:#1f8a4c;" onclick="rhAdGerarEnviar(function(){ctrGerar()})">📲 Gerar e enviar para assinatura</button><button class="btn btn-primary" style="background:' + COR + ';border-color:' + COR + ';" onclick="ctrGerar()">🖨️ Gerar documento</button></div>' +
       '</div></div>' +
@@ -25368,10 +25393,11 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.ctrMultiTodos = function (g) { document.querySelectorAll('.ct-mchk').forEach(function (c) { c.checked = g === 'doc' ? !!MODELOS[c.value].g : false; }); ctrModelo(); };
   var VIS = { ctr: ['padrao', 'hibrido', 'motorista'], local: ['padrao', 'hibrido', 'motorista'], jor: ['padrao', 'hibrido', 'motorista', 'comp', 'prorhe', 'ficha'], sal: ['padrao', 'hibrido', 'motorista', 'prorhe', 'ficha', 'cargo'],
-    hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'], vt: ['vt'] };
+    hor: ['comp', 'prorhe'], prorhe: ['prorhe'], rep: ['comp', 'prorhe', 'cargo', 'unif'], lgpd: ['lgpd'], comp: ['vt', 'ir', 'ficha', 'imagem', 'lgpd'], ficha: ['ficha'], deps: ['ir', 'ficha'], sind: ['oposicao'], cargo: ['cargo'], vt: ['vt'], unif: ['unif'] };
   window.ctrModelo = function () {
     var m = mod(), MS = mods(), tem = function (L) { return MS.some(function (x) { return L.indexOf(x) !== -1; }); };
     Object.keys(VIS).forEach(function (k) { document.querySelectorAll('#modal-ctr .ct-v-' + k).forEach(function (x) { x.style.display = tem(VIS[k]) ? '' : 'none'; }); });
+    document.querySelectorAll('#modal-ctr .ct-v-capa').forEach(function (x) { x.style.display = MS.length > 1 ? '' : 'none'; });
     if (el('ct-multi-n')) el('ct-multi-n').textContent = multi() ? MS.length + ' documento(s) selecionado(s) — saem juntos, um após o outro' : '';
     if (el('ct-ini-lbl')) el('ct-ini-lbl').textContent = tem(['padrao', 'hibrido', 'motorista']) ? 'Início do contrato (admissão)' : (MS.length === 1 && m === 'prorhe') ? 'Vigora a partir de' : 'Data de admissão';
     if (tem(['cargo']) && el('ct-f-func').value) { var ck = cargoDe(v('ct-cargo')); if (ck) el('ct-cargok').value = ck; }
@@ -25432,7 +25458,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (mod() !== 'motorista') sv('ct-cargo', String(f.car || '').toUpperCase());
     var s = num(f.sal); sv('ct-sal', s > 0 ? brl(s) : ''); ctrExt();
     sv('ct-ini', f.adm || ''); var dm = v('ct-data-modo') || 'adm'; if (dm === 'adm') { el('ct-data').dataset.auto = '1'; sv('ct-data', ''); } ctrDatas(); if (dm === 'hoje') ctrDataModo();
-    vtCarregar(f.id);
+    vtCarregar(f.id); tuPreencher(f);
     if (f.emp && v('ct-f-emp') !== f.emp) { el('ct-f-emp').value = f.emp; sv('ct-l-end', ''); empresaPara(f.emp); } else if (f.emp) empresaPara(f.emp);
     var dp = DB.g('departamentos').find(function (x) { return x.id === f.dep; }); if (dp) sv('ct-l-loja', dp.nome);
     // dados complementares (documentos admissionais)
@@ -25455,9 +25481,10 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     var J = {}; try { J = JSON.parse(ls('rh_ctr_jor') || '{}'); } catch (e) {}
     sv('ct-j-e1', J.e1 || '08:00'); sv('ct-j-e2', J.e2 || '18:00'); sv('ct-j-i1', J.i1 || '12:00'); sv('ct-j-i2', J.i2 || '13:00'); sv('ct-j-sab', J.sab || 'Compensado'); sv('ct-j-sabi', J.sabi || '—'); sv('ct-j-dom', J.dom || 'Folga'); sv('ct-j-domi', J.domi || '—');
     sv('ct-h-dias', ls('rh_ctr_hdias') || 'terça e quinta-feira'); sv('ct-h-aviso', '48 (quarenta e oito) horas'); sv('ct-h-eq', ls('rh_ctr_heq') || 'notebook, headset'); el('ct-h-aj').value = 'nao';
+    if (el('ct-capa')) el('ct-capa').checked = true;
     el('ct-l-tipo').value = 'proprio'; el('ct-data').dataset.auto = '1'; el('ct-prorr').checked = true;
     ['ct-rg', 'ct-rgem', 'ct-nas', 'ct-ec', 'ct-rua', 'ct-num', 'ct-compl', 'ct-bairro', 'ct-cidade', 'ct-uf', 'ct-cep', 'ct-sexo', 'ct-cor', 'ct-escol', 'ct-defic', 'ct-natural', 'ct-nacion', 'ct-pai', 'ct-mae', 'ct-titulo', 'ct-pis', 'ct-tel', 'ct-telres', 'ct-mat', 'ct-cbo', 'ct-banco', 'ct-deps', 'ct-prorext', 'ct-gestor'].forEach(function (i) { sv(i, ''); });
-    sv('ct-cid', ls('rh_ctr_cid') || 'São Paulo'); if (el('ct-data-modo')) el('ct-data-modo').value = 'adm'; vtLimpar();
+    sv('ct-cid', ls('rh_ctr_cid') || 'São Paulo'); if (el('ct-data-modo')) el('ct-data-modo').value = 'adm'; vtLimpar(); tuPreencher(null);
     sv('ct-rep', ls('rh_ctr_rep')); sv('ct-sind', ls('rh_ctr_sind') || 'SINDICATO DOS EMPREGADOS NO COMÉRCIO DE GUARULHOS'); sv('ct-e-tel', ls('rh_ctr_etel')); sv('ct-e-mail', ls('rh_ctr_email')); sv('ct-prazo', ls('rh_ctr_prazo') || 'prazo indeterminado');
     if (m) { var r = document.querySelector('input[name="ct-mod"][value="' + m + '"]'); if (r) r.checked = true; }
     el('ct-f-func').innerHTML = ''; ctrFiltro('ini'); ctrModelo(); ctrLocal(); ctrDatas();
@@ -25608,6 +25635,22 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     return [c(d.rua), d.num ? 'nº ' + c(d.num) : '', d.compl ? c(d.compl) : '', d.bairro ? 'bairro ' + c(d.bairro) : '', (d.cidade || d.uf) ? 'cidade ' + c([d.cidade, d.uf].filter(Boolean).join('/')) : '', d.cep ? 'CEP ' + c(d.cep) : ''].filter(Boolean).join(', ');
   }
   var VT_MT = ['INTEGRAÇÃO ÔNIBUS/METRÔ', 'INTEGRAÇÃO ÔNIBUS/TREM', 'ÔNIBUS MUNICIPAL', 'ÔNIBUS INTERMUNICIPAL', 'METRÔ OU TREM', 'OUTROS'], VT_CART = ['Bilhete Único', 'Cartão BOM', 'Cartão Dia Fácil', 'Outros'];
+  // termo de uniforme dentro do papel timbrado dos Documentos Admissionais (estilos isolados em .tu-pg)
+  function escopoCss(css) {
+    css = String(css).replace(/@page[^{]*\{[^}]*\}/g, '').replace(/@media screen\{(?:[^{}]*\{[^}]*\})*[^{}]*\}/g, '');
+    return css.replace(/([^{}]+)\{([^}]*)\}/g, function (m0, sel, dec) {
+      sel = sel.trim(); if (!sel || sel.charAt(0) === '@') return m0;
+      return sel.split(',').map(function (s) { s = s.trim(); if (s === '*') return '.tu-pg *'; if (s === 'body' || s === 'html') return '.tu-pg'; return '.tu-pg ' + s; }).join(',') + '{' + dec + '}';
+    });
+  }
+  function tuCorpo(d) {
+    if (!window.tuMontarHtml) return '<p class="tit">TERMO DE RECEBIMENTO DE UNIFORME</p>';
+    var T = d.tu || {}, dt = d.data || '';
+    var h = tuMontarHtml({ nome: d.nome || '', cpf: d.cpf || '', cargo: d.cargo || '', razao: (d.eRazao || 'BIN EMBALAGENS').toUpperCase(), cnpj: d.eCnpj || '', un: T.un == null ? '' : T.un, itens: (T.itens || []).map(function (x) { return { it: x.it, tam: x.tam, q: x.q, v: x.v }; }), cidade: d.cid || '', dt: dt, resp: (d.rep || '').toUpperCase() });
+    var css = (h.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '', body = (h.match(/<body>([\s\S]*)<\/body>/) || [])[1] || '';
+    body = body.replace(/<div class="logo">[\s\S]*?<\/div>/, '').replace(/<div class="tit">[\s\S]*?<\/div>/, '');
+    return '<p class="tit">' + MODELOS.unif.t + '</p><style>' + escopoCss(css) + '.tu-pg{padding:0 !important;margin:0 !important;width:auto !important;min-height:0 !important;box-shadow:none !important;background:none !important;}</style><div class="tu-pg">' + body + '</div>';
+  }
   function cx(x) { return '(' + (x ? 'X' : '&nbsp;&nbsp;') + ')'; }
   function v_(x, w) { return x ? '<b>' + esc(x) + '</b>' : '<span class="ln" style="min-width:' + (w || 120) + 'px"></span>'; }
   function hm(t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; }
@@ -25702,6 +25745,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       s += '<div class="sec">DIREITOS DO TITULAR</div>' + P('O Titular tem direito a obter do Controlador, em relação aos dados por ele tratados, a qualquer momento e mediante requisição: I – confirmação da existência de tratamento; II – acesso aos dados; III – correção de dados incompletos, inexatos ou desatualizados; IV – anonimização, bloqueio ou eliminação de dados desnecessários, excessivos ou tratados em desconformidade com o disposto na Lei nº 13.709; V – portabilidade dos dados a outro fornecedor de serviço ou produto, mediante requisição expressa, de acordo com a regulamentação da autoridade nacional, observados os segredos comercial e industrial; VI – eliminação dos dados pessoais tratados com o consentimento do titular, exceto nas hipóteses previstas no art. 16 da Lei nº 13.709; VII – informação das entidades públicas e privadas com as quais o controlador realizou uso compartilhado de dados; VIII – informação sobre a possibilidade de não fornecer consentimento e sobre as consequências da negativa; IX – revogação do consentimento, nos termos do § 5º do art. 8º da Lei nº 13.709.');
       s += '<div class="sec">DIREITO DE REVOGAÇÃO DO CONSENTIMENTO</div>' + P('Este consentimento poderá ser revogado pelo Titular, a qualquer momento, mediante solicitação via e-mail ou correspondência ao Controlador.');
       s += '<div class="nb">' + P(local, 'c dt') + ass([(d.nome ? esc(d.nome) : 'Nome do Titular') + '<br>Assinatura do Titular']) + '</div>';
+    } else if (M === 'unif') {
+      s = tuCorpo(d);
     } else if (M === 'cargo') {
       var C = CARGOS.find(function (x) { return x.k === d.cargoK; }) || CARGOS[0];
       s = P('DESCRIÇÃO DE CARGO', 'tit') + P(esc(C.t.toUpperCase()), 'sub');
@@ -25730,6 +25775,25 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (titulo) tit = titulo;
     if (typeof _dmPagina === 'function') return _dmPagina({ title: tit, footer: '', ml: 56.7, mr: 56.7, topo: 138, logoTop: 58, logoLeft: 246, bodyCss: 'font-family:Arial,Helvetica,sans-serif;font-size:11pt;line-height:1.35;', css: css + '.novo{position:relative;break-before:page;page-break-before:always;}.novo .lg2{position:absolute;top:13pt;left:189.3pt;width:103.25pt;height:72.3pt;object-fit:contain;}.novo .tp2{height:93pt;}', body: corpoPronto || corpo(d) });
     return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(tit) + '</title><style>@page{size:A4;margin:2cm}body{font-family:Arial,sans-serif;font-size:11pt}' + css + '</style></head><body>' + corpo(d) + '</body></html>';
+  }
+  // ── termo de uniforme (formulário) ──
+  window.ctTuLinha = function (x) {
+    x = x || {}; var box = el('ct-tu-itens'); if (!box) return; var r = document.createElement('div');
+    r.className = 'ct-tu-it'; r.style.cssText = 'display:grid;grid-template-columns:1fr 90px 90px 120px 30px;gap:6px;margin-bottom:5px;';
+    r.innerHTML = '<input list="ct-tu-dl" style="text-transform:uppercase;" value="' + esc(x.it || '') + '"><input style="text-transform:uppercase;" value="' + esc(x.tam || '') + '"><input type="number" min="0" value="' + esc(x.q || '') + '"><input placeholder="0,00" value="' + esc(x.v || '') + '"><button type="button" class="btn-icon danger" title="Remover" onclick="this.parentNode.remove()">✕</button>';
+    box.appendChild(r);
+  };
+  function tuPreencher(f) {
+    if (!el('ct-tu-itens')) return;
+    el('ct-tu-dl').innerHTML = (window.tuItensNomes ? tuItensNomes() : []).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('');
+    el('ct-tu-itens').innerHTML = '';
+    var L = f && window.tuItensDe ? tuItensDe(f.n) : []; L.forEach(function (x) { ctTuLinha(x); }); for (var i = L.length; i < 3; i++) ctTuLinha();
+    el('ct-tu-info').textContent = L.length ? '(' + L.length + ' item(ns) das entregas do menu Uniforme nos últimos 60 dias)' : '';
+    var iu = f && window.tuUnidadeDe ? tuUnidadeDe(f) : -1, r = document.querySelector('input[name="ct-tu-un"][value="' + (iu >= 0 ? iu : '') + '"]'); if (r) r.checked = true;
+  }
+  function tuColetar() {
+    if (!el('ct-tu-itens')) return null;
+    return { un: (document.querySelector('input[name="ct-tu-un"]:checked') || {}).value || '', itens: Array.prototype.map.call(document.querySelectorAll('#ct-tu-itens .ct-tu-it'), function (r) { var i = r.querySelectorAll('input'); return { it: i[0].value.trim().toUpperCase(), tam: i[1].value.trim().toUpperCase(), q: i[2].value.trim(), v: i[3].value.trim() }; }).filter(function (x) { return x.it || x.tam || x.q || x.v; }) };
   }
   // ── vale-transporte (formulário) ──
   window.vtMarca = function (lado, i) { var c = el('ct-vt-' + lado + i); if (c && v('ct-vt-' + lado + 'v' + i)) c.checked = true; vtConta(); };
@@ -25765,11 +25829,27 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       cid: (function (c) { if (c) ls('rh_ctr_cid', c); return c; })(v('ct-cid')), data: v('ct-data'), prorr: el('ct-prorr').checked, menor: el('ct-menor').checked,
       rep: v('ct-rep'), eTel: v('ct-e-tel'), eMail: v('ct-e-mail'), prazo: v('ct-prazo'), prorExt: v('ct-prorext'), sind: v('ct-sind').toUpperCase(), cargoK: v('ct-cargok'), gestor: v('ct-gestor').toUpperCase(),
       rg: v('ct-rg'), rgEm: v('ct-rgem'), nas: v('ct-nas'), ec: v('ct-ec'), rua: v('ct-rua'), num: v('ct-num'), compl: v('ct-compl'), bairro: v('ct-bairro'), cidade: v('ct-cidade'), uf: v('ct-uf'), cep: v('ct-cep'),
-      sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || '', vt: vtColetar()
+      sexo: v('ct-sexo'), cor: v('ct-cor'), escol: v('ct-escol'), defic: v('ct-defic'), natural: v('ct-natural'), nacion: v('ct-nacion'), pai: v('ct-pai'), mae: v('ct-mae'), titulo: v('ct-titulo'), pis: v('ct-pis'), tel: v('ct-tel'), telRes: v('ct-telres'), mat: v('ct-mat'), cbo: v('ct-cbo'), banco: v('ct-banco'), deps: (el('ct-deps') || {}).value || '', vt: vtColetar(), tu: tuColetar(), capa: el('ct-capa') ? el('ct-capa').checked : true
     };
   }
   // vários documentos do mesmo funcionário num só arquivo (cada um começa em página nova, com a logo)
-  function juntar(L) { var lg = typeof LOGO_MODELO_DOC_B64 !== 'undefined' ? LOGO_MODELO_DOC_B64 : ''; return L.map(function (d, i) { var b = corpo(comFoto(d)); return i ? '<div class="novo"><img class="lg2" src="' + lg + '" alt=""><div class="tp2"></div>' + b + '</div>' : b; }).join(''); }
+  // página de capa: lista dos documentos do arquivo + declaração de recebimento e ciência (assinada pelo empregado)
+  function capa(L) {
+    var d = L[0], P = function (t, cl) { return '<p class="' + (cl || 'c') + '">' + t + '</p>'; };
+    var s = P('TERMO DE RECEBIMENTO E CIÊNCIA DE DOCUMENTOS', 'tit');
+    s += linhaDados([[['Empregado(a)', d.nome, 2], ['CPF', d.cpf]], [['Função', d.cargo], ['Empresa', d.eRazao], ['CNPJ', d.eCnpj]]]);
+    s += P('Declaro, para todos os fins, que recebi, li integralmente e estou ciente e de acordo com o conteúdo de <b>cada um dos ' + L.length + ' (' + (['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze', 'quinze'][L.length] || L.length) + ') documentos</b> relacionados abaixo, que fazem parte deste mesmo arquivo, em páginas sequenciais, e que <b>assino em conjunto</b> — inclusive por meio eletrônico, nos termos do art. 10, § 2º, da MP nº 2.200-2/2001 e da Lei nº 14.063/2020 —, valendo esta assinatura para todos eles:');
+    s += '<table class="jor"><tr><th style="width:8%">Nº</th><th>Documento</th></tr>' + L.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(MODELOS[x.mod] ? MODELOS[x.mod].n : x.mod) + '</td></tr>'; }).join('') + '</table>';
+    s += P('Declaro, ainda, que tive oportunidade de esclarecer minhas dúvidas antes de assinar e que recebi ou posso obter uma via de cada documento.');
+    var local = (d.cid ? esc(d.cid) : '______________________') + ', ' + dataExt(d.data) + '.';
+    s += '<div class="nb">' + P(local, 'c dt') + ass([d.nome ? esc(d.nome) + '<br>EMPREGADO(A)' : 'Assinatura do(a) empregado(a)']) + '</div>';
+    return s;
+  }
+  function juntar(L) {
+    var lg = typeof LOGO_MODELO_DOC_B64 !== 'undefined' ? LOGO_MODELO_DOC_B64 : '', comCapa = L.length > 1 && L[0].capa !== false;
+    var pag = function (b) { return '<div class="novo"><img class="lg2" src="' + lg + '" alt=""><div class="tp2"></div>' + b + '</div>'; };
+    return (comCapa ? capa(L) : '') + L.map(function (d, i) { var b = corpo(comFoto(d)); return (i || comCapa) ? pag(b) : b; }).join('');
+  }
   function ctrGerarVarios(branco) {
     var MS = mods(); if (!MS.length) { alert('Marque pelo menos um documento.'); return; }
     var base;
@@ -25838,8 +25918,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       Object.keys(IC).forEach(function (k) { if (!MODELOS[k].ic) MODELOS[k].ic = IC[k]; });
       var ctr = Object.keys(MODELOS).filter(ehCtr).map(function (k) { return cardDoc(k, MODELOS[k], COR); }).join('');
       var docs = Object.keys(MODELOS).filter(function (k) { return !ehCtr(k); }).map(function (k) { return cardDoc(k, MODELOS[k], '#1565c0'); }).join('') +
-        '<div class="trein-card" style="border-left:4px solid #6d4c41;display:flex;flex-direction:column;"><div class="tc-header"><div><div class="tc-title">👕 Termo de Recebimento de Uniforme</div><div class="tc-meta">Itens, tamanhos e quantidades das entregas do Estoque de Uniformes · 1 página</div></div></div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px;"><button class="btn btn-primary btn-sm" style="background:#6d4c41;border-color:#6d4c41;" onclick="if(window.tuAbrir)tuAbrir()">🖨️ Gerar</button></div></div>';
+'';
       ref.insertAdjacentHTML('afterend', '<div class="section-page" id="sec-' + SEC + '"><div class="card">' +
         '<div class="card-header" style="flex-wrap:wrap;gap:8px;"><div><span class="card-title">📁 Documentos Admissionais</span><div style="font-size:12.5px;color:var(--gray-400);margin-top:3px;">Escolha o documento → filtre por <strong>empresa</strong>, <strong>departamento</strong> e <strong>funcionário</strong> → confira os dados (puxados do cadastro e editáveis) → imprima no papel timbrado BIN, com os campos de assinatura.</div></div>' +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-outline" onclick="daTodos(true)">✔ Selecionar todos</button><button class="btn btn-outline" onclick="daTodos(false)">✖ Limpar</button><button class="btn btn-primary" id="da-gerar" disabled onclick="daGerar()">🖨️ Gerar selecionados (0)</button><button class="btn btn-outline" onclick="ctrHistorico()">🗂️ Histórico</button></div></div>' +
@@ -26448,7 +26527,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
         msg.innerHTML = '⏳ Enviando para a Autentique…';
         return enviar({ pdf: pdf, nome: q('nome').value.trim() || 'Documento', pessoa: p, cpf: q('cpf').value, tel: tel, dias: +q('dias').value || 5, exigirCpf: q('excpf').checked });
       }).then(function (j) {
-        msg.innerHTML = '<span style="color:#1f8a4c;font-weight:bold;">✅ Enviado para ' + esc(p.nome) + ' pelo WhatsApp.</span><br>Prazo para assinar: ' + br(j.prazo) + '. Acompanhe em 📲 Assinaturas digitais.';
+        msg.innerHTML = '<span style="color:#1f8a4c;font-weight:bold;">✅ Enviado para ' + esc(p.nome) + ' pelo WhatsApp.</span><br>Prazo para assinar: ' + br(j.prazo) + '.' + (j.protecao ? ' Com rubrica em ' + (j.paginas || 'todas as') + ' página(s) e leitura obrigatória.' : j.protecao === false ? ' <span style="color:#e65100;">(sem rubrica por página: a Autentique não aceitou essa opção)</span>' : '') + ' Acompanhe em 📲 Assinaturas digitais.';
         b.textContent = 'Enviado ✓';
         if (ctx.aoEnviar) ctx.aoEnviar(j);
         t('📲 Documento enviado para assinatura');
