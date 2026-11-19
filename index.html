@@ -1153,6 +1153,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <input type="search" id="fer-busca" placeholder="🔍 Buscar funcionário, cargo, unidade, observação…" oninput="rdFer()" style="flex:1;min-width:220px;">
       <select id="fer-unid" onchange="rdFer()"><option value="">Todas as unidades</option></select>
       <select id="fer-mes" onchange="rdFer()" title="Mês do início do gozo"><option value="">Todos os meses</option></select>
+      <select id="fer-ctb" onchange="rdFer()" title="Solicitação para a contabilidade"><option value="">Contabilidade: todos</option><option value="nao">📨 Ainda não solicitados</option><option value="sim">✅ Já solicitados</option></select>
       <label style="font-size:12px;color:var(--gray-600);font-weight:600;">Ordenar:</label>
       <select class="sort-sel" id="fer-sort-campo" onchange="rdFer()">
         <option value="nome">Funcionário (A-Z)</option>
@@ -1178,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', function () {
       </select>
     </div>
     <div class="table-wrap" style="overflow-x:auto;"><table id="fer-tabela">
-      <thead><tr><th>Unid Trabalho</th><th>Unid Registro</th><th>Cargo/Função</th><th>Funcionário</th><th>Data de admissão</th><th>Período aquisitivo</th><th>Data limite de saída</th><th>Saldo Ant.</th><th>Mês</th><th>Início gozo</th><th>Fim gozo</th><th>Dias a descansar</th><th>Saldo</th><th>Observações</th><th>Situação</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Unid Trabalho</th><th>Unid Registro</th><th>Cargo/Função</th><th>Funcionário</th><th>Data de admissão</th><th>Período aquisitivo</th><th>Data limite de saída</th><th>Saldo Ant.</th><th>Mês</th><th>Início gozo</th><th>Fim gozo</th><th>Dias a descansar</th><th>Saldo</th><th>Observações</th><th>Situação</th><th title="Programação já solicitada para a contabilidade?">Contabilidade</th><th>Ações</th></tr></thead>
       <tbody id="tb-fer"></tbody>
     </table></div>
   </div>
@@ -16342,6 +16343,7 @@ function rhPodeEnviar() {
     var linhas = ativos.filter(function (r) {
       if (filtroAba !== 'todos' && corDe(r) !== filtroAba) return false;
       if (mesSel && mesK(r) !== mesSel) return false;
+      var fc = (el('fer-ctb') || {}).value; if (fc === 'sim' && !r.contab) return false; if (fc === 'nao' && (r.contab || !ferIso(r.ini) || r.st === 'Concluída')) return false;
       if (un && ferUT(r, fDe(r)) !== un) return false;
       if (q) { var f = funcs.find(function (x) { return x.id === r.fid; }) || {}; if (norm([f.n, r.car || f.car, ferUT(r, f), ferUR(r, f), r.obs].join(' ')).indexOf(q) === -1) return false; }
       return true;
@@ -16370,7 +16372,7 @@ function rhPodeEnviar() {
       else { x = norm(nomeDe(a)) + perInicioAno(a) + (a.ini || ''); y = norm(nomeDe(b)) + perInicioAno(b) + (b.ini || ''); }
       return x < y ? -dir : x > y ? dir : 0;
     });
-    if (!linhas.length) { tb.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:30px;color:var(--gray-400)">' + (ativos.length ? 'Nenhum registro neste filtro.' : 'Nenhuma férias registrada. Use 📥 Importar planilha ou cadastre funcionários com data de admissão.') + '</td></tr>'; return; }
+    if (!linhas.length) { tb.innerHTML = '<tr><td colspan="17" style="text-align:center;padding:30px;color:var(--gray-400)">' + (ativos.length ? 'Nenhum registro neste filtro.' : 'Nenhuma férias registrada. Use 📥 Importar planilha ou cadastre funcionários com data de admissão.') + '</td></tr>'; return; }
     var h = hoje(), em60 = addDias(h, 60);
     tb.innerHTML = linhas.map(function (r) {
       var f = funcs.find(function (x) { return x.id === r.fid; }) || {};
@@ -16385,6 +16387,7 @@ function rhPodeEnviar() {
         '<td>' + esc(ferDias(r)) + '</td><td>' + esc(r.saldo) + '</td>' +
         '<td class="obs">' + esc(r.obs) + '</td>' +
         '<td><strong>' + statusTxt(r) + '</strong></td>' +
+        '<td style="white-space:nowrap;">' + ctbCel(r) + '</td>' +
         '<td><div class="fer-acoes">' +
           '<button class="btn-icon" title="Editar / Programar" onclick="editFer(\'' + r.id + '\')">✏️</button>' +
           (r.st !== 'Concluída' ? '<button class="btn-icon" title="Marcar como realizada (gera o próximo período)" onclick="ferRealizada(\'' + r.id + '\')">✅</button>' : '') +
@@ -16393,6 +16396,18 @@ function rhPodeEnviar() {
     }).join('');
   };
   window.ferAba = function (a) { filtroAba = a; rdFer(); };
+  // ── solicitado para a contabilidade ──
+  function ctbCel(r) {
+    if (r.contab) return '<button type="button" class="btn btn-outline btn-sm" style="border-color:#2e7d32;color:#2e7d32;line-height:1.2;" title="Clique para desmarcar" onclick="ferContab(\'' + r.id + '\')">✅ Solicitado<br><small style="font-weight:400;">' + fdx(r.contab) + '</small></button>';
+    if (!ferIso(r.ini) || r.st === 'Concluída') return '<span style="color:var(--gray-400)">—</span>';
+    return '<button type="button" class="btn btn-outline btn-sm" title="Marcar que a programação já foi enviada para a contabilidade" onclick="ferContab(\'' + r.id + '\')">📨 Marcar solicitado</button>';
+  }
+  window.ferContab = function (id) {
+    var L = DB.g('ferias'), r = L.find(function (x) { return x.id === id; }); if (!r) return;
+    if (r.contab) { if (!confirm('Desmarcar a solicitação para a contabilidade (marcada em ' + fdx(r.contab) + ')?')) return; delete r.contab; }
+    else { var d = prompt('Data em que foi solicitado para a contabilidade (dd/mm/aaaa):', fdx(hoje())); if (d == null) return; var iso = ferIso(d); if (!iso) { alert('Data inválida.'); return; } r.contab = iso; }
+    DB.s('ferias', L); rdFer(); toast(r.contab ? '📨 Marcado como solicitado à contabilidade' : 'Solicitação desmarcada');
+  };
 
   window.ferRealizada = function (id) {
     var lista = DB.g('ferias'), r = lista.find(function (x) { return x.id === id; }); if (!r) return;
@@ -16476,10 +16491,10 @@ function rhPodeEnviar() {
     if (!window.XLSX) { alert('Exportação indisponível sem internet.'); return; }
     var funcs = DB.g('funcionarios');
     var linhas = DB.g('ferias').filter(function (r) { var f = funcs.find(function (x) { return x.id === r.fid; }); return f && f.st !== 'Desligado'; });
-    var aoa = [['Unid Trabalho','Unid Registro','Cargo/Função','Funcionário','Data de admissão','Periodo aquisitivo','Data limite de saída','Saldo Ant.','Mês','Início gozo','Fim gozo','Dias a descansar','Saldo','Observações','Situação']];
+    var aoa = [['Unid Trabalho','Unid Registro','Cargo/Função','Funcionário','Data de admissão','Periodo aquisitivo','Data limite de saída','Saldo Ant.','Mês','Início gozo','Fim gozo','Dias a descansar','Saldo','Observações','Situação','Solicitado à contabilidade']];
     linhas.forEach(function (r) {
       var f = funcs.find(function (x) { return x.id === r.fid; }) || {};
-      aoa.push([ferUT(r, f), ferUR(r, f), r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, ferMes(r), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), ferDias(r), r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, '')]);
+      aoa.push([ferUT(r, f), ferUR(r, f), r.car || f.car || '', f.n || '', fdx(f.adm), r.per || '', fdx(r.lim), r.saldoAnt == null ? '' : r.saldoAnt, ferMes(r), fdx(r.ini), fdx(r.fim || (r.ret ? addDias(r.ret, -1) : '')), ferDias(r), r.saldo == null ? '' : r.saldo, r.obs || '', statusTxt(r).replace(/^\S+\s/, ''), r.contab ? 'Sim – ' + fdx(r.contab) : '']);
     });
     var ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = aoa[0].map(function (h, i) { return { wch: i === 13 ? 50 : i === 3 ? 32 : 14 }; });
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Controle de Férias');
