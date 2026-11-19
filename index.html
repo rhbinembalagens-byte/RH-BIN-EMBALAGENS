@@ -1152,6 +1152,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <div class="fer-bar">
       <input type="search" id="fer-busca" placeholder="🔍 Buscar funcionário, cargo, unidade, observação…" oninput="rdFer()" style="flex:1;min-width:220px;">
       <select id="fer-unid" onchange="rdFer()"><option value="">Todas as unidades</option></select>
+      <select id="fer-mes" onchange="rdFer()" title="Mês do início do gozo"><option value="">Todos os meses</option></select>
       <label style="font-size:12px;color:var(--gray-600);font-weight:600;">Ordenar:</label>
       <select class="sort-sel" id="fer-sort-campo" onchange="rdFer()">
         <option value="nome">Funcionário (A-Z)</option>
@@ -5231,7 +5232,7 @@ async function savUniOut() {
   DB.so('uni-est', est);
   const f = DB.g('funcionarios').find(function(x) { return x.id === fid; });
   const movs = DB.g('uni-mov');
-  movs.unshift({ id: uid(), tipo: 'Saída', item: item, tam: tam, qtd: qtd, func: f ? f.n : '—', data: v('uo-data') || td(), obs: v('uo-obs') });
+  movs.unshift({ id: uid(), tipo: 'Saída', item: item, tam: tam, qtd: qtd, func: f ? f.n : '—', fid: fid || '', data: v('uo-data') || td(), obs: v('uo-obs') });
   DB.s('uni-mov', movs);
   if (driveReady) { await driveSyncObj('uni-est'); await driveSync('uni-mov'); }
   closeModal('modal-uni-out');
@@ -5606,7 +5607,7 @@ function updDash() {
   document.getElementById('s-exp').textContent = exp;
   var _lbl = document.getElementById('s-exp').parentNode.querySelector('.stat-label');
   if (_lbl) _lbl.innerHTML = 'Em Experiência' + (exp ? '<div style="font-size:11px;opacity:.75;margin-top:2px;">45 dias: ' + e45 + ' · 90 dias: ' + e90 + (venc7 ? ' · <strong>' + venc7 + ' vence' + (venc7 > 1 ? 'm' : '') + ' em 7d</strong>' : '') + '</div>' : '');
-  document.getElementById('s-fer').textContent = DB.g('ferias').filter(r => r.st === 'Em andamento').length;
+  document.getElementById('s-fer').textContent = DB.g('ferias').filter(r => r.st === 'Em andamento' || (window.ferEmGozo && ferEmGozo(r))).length;
   document.getElementById('s-ex').textContent = DB.g('exames').filter(function(e){ return !e.res; }).length;
   if(typeof updExmAlerts === 'function') updExmAlerts();
   if(typeof renderPagAlertas === 'function') renderPagAlertas();
@@ -16300,8 +16301,11 @@ function rhPodeEnviar() {
   }
   window.ferGarantirPeriodos = garantirPeriodos;
 
-  function corDe(r) { return r.st === 'Concluída' ? 'verde' : r.st === 'A programar' ? 'amarelo' : r.st === 'Em andamento' ? 'andamento' : 'branco'; }
-  function statusTxt(r) { return { 'Concluída': '🟢 Realizada', 'A programar': '🟡 A programar', 'Agendada': '⚪ Programada', 'Em andamento': '🔵 Em andamento' }[r.st] || r.st || ''; }
+  // em andamento = hoje está entre o início e o fim do gozo (mesmo que o status salvo seja "Programada")
+  function emGozo(r) { if (!r || r.st === 'Concluída') return false; var i = ferIso(r.ini), f = ferFimIso(r), h = hoje(); return !!(i && f && i <= h && h <= f); }
+  window.ferEmGozo = emGozo;
+  function corDe(r) { return r.st === 'Concluída' ? 'verde' : (r.st === 'Em andamento' || emGozo(r)) ? 'andamento' : r.st === 'A programar' ? 'amarelo' : 'branco'; }
+  function statusTxt(r) { if (r.st !== 'Concluída' && emGozo(r)) return '🔵 Em andamento'; return { 'Concluída': '🟢 Realizada', 'A programar': '🟡 A programar', 'Agendada': '⚪ Programada', 'Em andamento': '🔵 Em andamento' }[r.st] || r.st || ''; }
 
   // ── tela ──
   // Unid Trabalho = departamento do cadastro · Unid Registro = empresa do contrato (cadastro); se o cadastro estiver vazio, usa o que foi digitado/importado
@@ -16329,9 +16333,15 @@ function rhPodeEnviar() {
     var fDe = function (r) { return funcs.find(function (x) { return x.id === r.fid; }) || {}; };
     var us = {}; ativos.forEach(function (r) { var u = ferUT(r, fDe(r)); if (u) us[u] = 1; });
     var su = el('fer-unid'); if (su) { var atual = su.value; su.innerHTML = '<option value="">Todas as unidades</option>' + Object.keys(us).sort().map(function (u) { return '<option>' + esc(u) + '</option>'; }).join(''); su.value = us[atual] ? atual : ''; }
+    // meses (pelo início do gozo)
+    var mesK = function (r) { var i = ferIso(r.ini); return i ? i.slice(0, 7) : (/^\d{4}-\d{2}/.test(r.mes || '') ? r.mes.slice(0, 7) : ''); };
+    var ms = {}; ativos.forEach(function (r) { if (filtroAba !== 'todos' && corDe(r) !== filtroAba) return; var k = mesK(r); if (k) ms[k] = (ms[k] || 0) + 1; });
+    var sm = el('fer-mes'), mesSel = sm ? sm.value : '';
+    if (sm) { if (mesSel && !ms[mesSel]) ms[mesSel] = 0; sm.innerHTML = '<option value="">Todos os meses</option>' + Object.keys(ms).sort().map(function (k) { return '<option value="' + k + '"' + (k === mesSel ? ' selected' : '') + '>' + mesTxt(k) + ' (' + ms[k] + ')</option>'; }).join(''); }
     var q = norm((el('fer-busca') || {}).value), un = (su || {}).value || '';
     var linhas = ativos.filter(function (r) {
       if (filtroAba !== 'todos' && corDe(r) !== filtroAba) return false;
+      if (mesSel && mesK(r) !== mesSel) return false;
       if (un && ferUT(r, fDe(r)) !== un) return false;
       if (q) { var f = funcs.find(function (x) { return x.id === r.fid; }) || {}; if (norm([f.n, r.car || f.car, ferUT(r, f), ferUR(r, f), r.obs].join(' ')).indexOf(q) === -1) return false; }
       return true;
@@ -27183,6 +27193,46 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.addEventListener('storage', function (e) { if (e.key === 'eq_assin-digital') { try { rhAdPastas(); } catch (x) {} } });
   setTimeout(function () { try { rhAdPastas(); } catch (e) {} }, 3000);
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   CADASTRO DO FUNCIONÁRIO › UNIFORME: mostra as SAÍDAS do Estoque de
+   Uniformes feitas para este funcionário (vínculo pelo id; nas saídas
+   antigas, pelo nome). Somente leitura — para corrigir, use o Estoque.
+   ════════════════════════════════════════════════════════════ */
+(function () {
+  function esc(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+  function br(i) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(i || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (i || ''); }
+  window.uniSaidasDe = function (fid) {
+    var f = (DB.g('funcionarios') || []).find(function (x) { return x.id === fid; }); if (!f) return [];
+    var n = norm(f.n), IT = DB.g('uni-itens') || [];
+    return (DB.g('uni-mov') || []).filter(function (m) { return m.tipo === 'Saída' && (m.fid ? m.fid === fid : norm(m.func) === n); })
+      .map(function (m) { var it = IT.find(function (x) { return x.id === m.item; }); return { item: it ? it.nome : m.item, tam: m.tam, qtd: +m.qtd || 0, data: m.data, obs: m.obs }; })
+      .sort(function (a, b) { return String(b.data || '').localeCompare(String(a.data || '')); });
+  };
+  var _r = window.renderUniformeModal;
+  if (typeof _r === 'function') window.renderUniformeModal = function (fid) {
+    var res = _r.apply(this, arguments);
+    try {
+      var cont = document.getElementById('uniforme-lista-modal'); if (!cont) return res;
+      var box = document.getElementById('uniforme-estoque-func');
+      if (!box) { box = document.createElement('div'); box.id = 'uniforme-estoque-func'; cont.parentNode.insertBefore(box, cont); }
+      var L = fid ? uniSaidasDe(fid) : [];
+      var vazio = document.getElementById('uniforme-vazio');
+      if (!L.length) { box.innerHTML = fid ? '<div style="font-size:12px;color:var(--gray-500);margin:4px 0 10px;">📤 Nenhuma saída do Estoque de Uniformes para este funcionário.</div>' : ''; return res; }
+      if (vazio && !DB.g('uniformes').some(function (u) { return u.fid === fid; })) vazio.style.display = 'none';
+      var tot = L.reduce(function (s, x) { return s + x.qtd; }, 0);
+      box.innerHTML = '<div style="font-weight:700;font-size:13px;margin:4px 0 6px;">📤 Saídas do Estoque de Uniformes <span style="font-weight:400;color:var(--gray-500);font-size:12px;">(puxado automaticamente)</span></div>' +
+        '<table class="table" style="width:100%;font-size:12.5px;margin-bottom:6px;"><thead><tr><th>Item</th><th>Tamanho</th><th style="text-align:center;">Qtde</th><th>Data</th><th>Obs.</th></tr></thead><tbody>' +
+        L.map(function (x) { return '<tr><td>' + esc(x.item) + '</td><td>' + esc(x.tam) + '</td><td style="text-align:center;">' + x.qtd + '</td><td>' + br(x.data) + '</td><td>' + esc(x.obs) + '</td></tr>'; }).join('') +
+        '</tbody></table><div style="font-size:12px;color:var(--gray-600);margin-bottom:14px;">Total retirado do estoque: <strong>' + tot + '</strong> peça' + (tot === 1 ? '' : 's') + ' · para corrigir, use o menu Uniformes.</div>' +
+        '<div style="font-weight:700;font-size:13px;margin:4px 0 6px;">✍️ Entregas lançadas manualmente</div>';
+    } catch (e) { console.warn(e); }
+    return res;
+  };
 })();
 </script>
 
