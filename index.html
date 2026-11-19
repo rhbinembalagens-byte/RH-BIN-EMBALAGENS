@@ -25407,6 +25407,16 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     el('ct-menor').checked = !tem(['motorista']) || tem(['padrao', 'hibrido']);
     var b = document.querySelector('#modal-ctr .modal-footer .btn-primary'); if (b) b.textContent = multi() ? '🖨️ Gerar ' + MS.length + ' documento(s)' : ehCtr(m) ? '🖨️ Gerar contrato' : '🖨️ Gerar documento';
   };
+  // CLT + colaboradores sem registro e de agência (ids "x:…")
+  function pessoaCt(id) {
+    id = String(id || '');
+    if (id.indexOf('x:') === 0) {
+      var c = (DB.g('colab-ext') || []).find(function (x) { return x.id === id.slice(2); }); if (!c) return null;
+      return { id: id, n: c.n, cpf: c.cpf, rg: c.rg, nas: c.nas, sex: c.sex, tel: c.tel, end: c.end, cep: c.cep, emp: c.emp, dep: c.dep, car: c.car, adm: c.ini || c.adm || '', sal: '', ec: c.ec, pis: c.pis, ctps: c.ctps, _ext: c.tipo || 'semreg', agencia: c.agencia };
+    }
+    return DB.g('funcionarios').find(function (x) { return x.id === id; }) || null;
+  }
+  window.ctrPessoa = pessoaCt;
   function emps() { return DB.g('empresas').slice().sort(function (a, b) { return String(a.razao || '').localeCompare(String(b.razao || ''), 'pt-BR'); }); }
   window.ctrFiltro = function (de) {
     var e = v('ct-f-emp'), d = v('ct-f-dep');
@@ -25418,9 +25428,13 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       if (e) empresaPara(e);
     }
     var cur = v('ct-f-func');
-    var F = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!e || f.emp === e) && (!d || f.dep === d); }).sort(function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); });
-    el('ct-f-func').innerHTML = ops(F.map(function (f) { return [f.id, String(f.n || '').toUpperCase() + (f.adm ? ' · adm. ' + br(f.adm) : '')]; }), cur, '— selecione (' + F.length + ') —');
-    if (!F.some(function (f) { return f.id === cur; })) el('ct-f-func').value = '';
+    var cmp = function (a, b) { return String(a.n || '').localeCompare(String(b.n || ''), 'pt-BR'); };
+    var F = DB.g('funcionarios').filter(function (f) { return f.st !== 'Desligado' && (!e || f.emp === e) && (!d || f.dep === d); }).sort(cmp);
+    var X = (DB.g('colab-ext') || []).filter(function (c) { return (!c.st || c.st === 'Ativo') && (!e || !c.emp || c.emp === e) && (!d || c.dep === d); }).sort(cmp);
+    var grp = function (rot, L, pre, dt) { return L.length ? '<optgroup label="' + rot + ' (' + L.length + ')">' + L.map(function (f) { var id = pre + f.id; return '<option value="' + esc(id) + '"' + (id === cur ? ' selected' : '') + '>' + esc(String(f.n || '').toUpperCase() + (f[dt] ? ' · ' + (pre ? 'início ' : 'adm. ') + br(f[dt]) : '')) + '</option>'; }).join('') + '</optgroup>' : ''; };
+    var tot = F.length + X.length;
+    el('ct-f-func').innerHTML = '<option value="">— selecione (' + tot + ') —</option>' + grp('CLT', F, '', 'adm') + grp('Sem registro', X.filter(function (c) { return c.tipo !== 'agencia'; }), 'x:', 'ini') + grp('Agência', X.filter(function (c) { return c.tipo === 'agencia'; }), 'x:', 'ini');
+    if (!F.some(function (f) { return f.id === cur; }) && !X.some(function (c) { return 'x:' + c.id === cur; })) el('ct-f-func').value = '';
     if (de === 'dep' && d) { var dp = DB.g('departamentos').find(function (x) { return x.id === d; }); if (dp) sv('ct-l-loja', dp.nome); }
   };
   function empresaPara(id) {
@@ -25453,7 +25467,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   };
   window.ctrDataManual = function () { el('ct-data').dataset.auto = '0'; if (el('ct-data-modo')) el('ct-data-modo').value = 'manual'; };
   window.ctrFunc = function () {
-    var f = DB.g('funcionarios').find(function (x) { return x.id === v('ct-f-func'); }); if (!f) return;
+    var f = pessoaCt(v('ct-f-func')); if (!f) return;
     sv('ct-nome', String(f.n || '').toUpperCase()); sv('ct-cpf', f.cpf); sv('ct-ctps', f.ctps || ''); sv('ct-end', [f.end, f.cep ? 'CEP ' + f.cep : ''].filter(Boolean).join(', '));
     if (mod() !== 'motorista') sv('ct-cargo', String(f.car || '').toUpperCase());
     var s = num(f.sal); sv('ct-sal', s > 0 ? brl(s) : ''); ctrExt();
@@ -26745,7 +26759,7 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
   function badge(s) { var x = ST[s] || ST.nao; return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:600;color:' + x[1] + ';background:' + x[2] + ';white-space:nowrap;">' + x[0] + '</span>'; }
   function pessoasDa(C) {
     var P = window.rhAdPessoas ? rhAdPessoas() : [];
-    if (C.modo === 'docs') P = P.filter(function (p) { return p.g === 'CLT'; });
+    if (C.modo === 'docs') { if (!C.incExt) P = P.filter(function (p) { return p.g === 'CLT'; }); }
     else if (!C.incExt) P = P.filter(function (p) { return p.g === 'CLT'; });
     return P.map(function (p) {
       var r = ultimo(C, p.pk), st = r ? (r.st || 'enviado') : ((C.erros || {})[p.pk] ? 'erro' : 'nao');
@@ -26803,7 +26817,8 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       '<div class="form-grid"><div class="form-group form-full"><label>Nome da campanha</label><input id="rhcp-nome" value="Atualização digital de documentos ' + new Date().getFullYear() + '"></div>' +
       '<div class="form-group form-full"><label>Nome do documento (aparece para o funcionário)</label><input id="rhcp-docnome" value="BIN Embalagens – Atualização de documentos"></div></div>' +
       '<div style="font-weight:600;font-size:13px;margin:6px 0;">O que vai ser enviado?</div>' +
-      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="rhcp-modo" value="docs" checked onchange="rhCampModo()" style="width:auto;margin-top:2px;"> <span><strong>Documentos admissionais</strong> — gerados com os dados de cada funcionário (CLT) e enviados num PDF só</span></label>' +
+      '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="rhcp-modo" value="docs" checked onchange="rhCampModo()" style="width:auto;margin-top:2px;"> <span><strong>Documentos admissionais</strong> — gerados com os dados de cada funcionário e enviados num PDF só</span></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:0 0 6px 26px;text-transform:none;font-weight:500;"><input type="checkbox" id="rhcp-ext-docs" style="width:auto;"> Incluir colaboradores sem registro e de agência</label>' +
       '<div id="rhcp-docs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 12px;margin:0 0 10px 26px;font-size:12.5px;">' +
       M.map(function (m) { return '<label style="display:flex;gap:6px;align-items:center;text-transform:none;font-weight:500;cursor:pointer;"><input type="checkbox" class="rhcp-mod" value="' + m.k + '" style="width:auto;"> ' + (m.ic ? m.ic + ' ' : '') + esc(m.n) + '</label>'; }).join('') + '</div>' +
       '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="rhcp-modo" value="pdf" onchange="rhCampModo()" style="width:auto;margin-top:2px;"> <span><strong>Um PDF igual para todos</strong> — ex.: termo de ciência, comunicado, política</span></label>' +
@@ -26866,9 +26881,9 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
     if (igual && !confirm('Já existe a campanha “' + igual.nome + '” (criada em ' + br(igual.criada) + ') com esses mesmos documentos.\n\nPara mandar para outros funcionários, é melhor continuar nela.\n\nOK = criar outra mesmo assim · Cancelar = abrir a campanha existente')) { rhCampTrocar(igual.id); return; }
     var quem = (document.querySelector('input[name="rhcp-quem"]:checked') || {}).value, pks = quem === 'escolher' ? escolhidos() : [];
     if (quem === 'escolher' && !pks.length) { alert('Escolha pelo menos um funcionário.'); return; }
-    if (modo === 'docs' && pks.length) { var ext = pks.filter(function (k) { return k.indexOf('x:') === 0; }); if (ext.length) { if (!confirm(ext.length + ' escolhido(s) é(são) sem registro/agência e não têm Documentos Admissionais. Continuar sem eles?')) return; pks = pks.filter(function (k) { return k.indexOf('x:') !== 0; }); } }
+    if (modo === 'docs' && pks.some(function (k) { return k.indexOf('x:') === 0; }) && el('rhcp-ext-docs')) el('rhcp-ext-docs').checked = true;
     if (modo === 'pdf' && pks.some(function (k) { return k.indexOf('x:') === 0; }) && el('rhcp-ext')) el('rhcp-ext').checked = true;
-    var C = { id: nid(), pks: pks, nome: el('rhcp-nome').value.trim() || 'Atualização digital', docNome: el('rhcp-docnome').value.trim() || 'BIN Embalagens – Documentos', modo: modo, mods: mods, pdfNome: f ? f.name : '', incExt: !!(el('rhcp-ext') && el('rhcp-ext').checked), dias: Math.max(1, Math.min(30, +el('rhcp-dias').value || 7)), criada: new Date().toISOString(), avisos: {}, erros: {}, msgAviso: MSG_AVISO, msgLembrete: MSG_LEMBRETE, msgGrupo: MSG_GRUPO };
+    var C = { id: nid(), pks: pks, nome: el('rhcp-nome').value.trim() || 'Atualização digital', docNome: el('rhcp-docnome').value.trim() || 'BIN Embalagens – Documentos', modo: modo, mods: mods, pdfNome: f ? f.name : '', incExt: modo === 'docs' ? !!(el('rhcp-ext-docs') && el('rhcp-ext-docs').checked) : !!(el('rhcp-ext') && el('rhcp-ext').checked), dias: Math.max(1, Math.min(30, +el('rhcp-dias').value || 7)), criada: new Date().toISOString(), avisos: {}, erros: {}, msgAviso: MSG_AVISO, msgLembrete: MSG_LEMBRETE, msgGrupo: MSG_GRUPO };
     if (f) f.arrayBuffer().then(function (ab) { PDF_AVULSO[C.id] = ab; });
     var L = camps(); L.push(C); salvarCamps(L); ATUAL = C.id; SEL = {}; pks.forEach(function (k) { SEL[k] = true; }); render();
     t('📣 Campanha criada' + (pks.length ? ' — ' + pks.length + ' funcionário(s) já selecionado(s) para envio' : ''));
@@ -27007,9 +27022,9 @@ window.rhDeptoDe = function (p) { if (!p) return ''; var v = p.dep || ''; if (!v
       window._rhAdCaptura = function (h) { fim(); ok(h); };
       try {
         ctrAbrir(C.mods.length > 1 ? C.mods.slice() : C.mods[0]);
-        var f = (DB.g('funcionarios') || []).find(function (x) { return x.id === p.pk; });
+        var f = window.ctrPessoa ? ctrPessoa(p.pk) : null;
         if (!f) throw new Error('Funcionário não encontrado.');
-        if (f.emp) { el('ct-f-emp').value = f.emp; ctrFiltro('emp'); }
+        if (f.emp && Array.prototype.some.call(el('ct-f-emp').options, function (o) { return o.value === f.emp; })) { el('ct-f-emp').value = f.emp; ctrFiltro('emp'); } else { el('ct-f-emp').value = ''; ctrFiltro('emp'); }
         el('ct-f-func').value = f.id; ctrFunc();
         ctrGerar();
         setTimeout(function () { if (window._rhAdCaptura) { fim(); try { closeModal('modal-ctr'); } catch (e) {} err(new Error('O documento não foi gerado.')); } }, 1500);
